@@ -1,4 +1,4 @@
-package net.ryanmorrison;
+package net.ryanmorrison.chatterbox;
 
 import io.micronaut.runtime.EmbeddedApplication;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;

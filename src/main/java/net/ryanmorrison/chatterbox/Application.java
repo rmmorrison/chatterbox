@@ -1,4 +1,4 @@
-package net.ryanmorrison;
+package net.ryanmorrison.chatterbox;
 
 import io.micronaut.runtime.Micronaut;
 
