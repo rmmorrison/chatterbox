@@ -1,0 +1,6 @@
+applicationType: default
+defaultPackage: net.ryanmorrison
+testFramework: junit
+sourceLanguage: java
+buildTool: maven
+features: [ annotation-api, app-name, assertj, data, data-jpa, hibernate-validator, http-client, java, java-application, jdbc-hikari, junit, liquibase, logback, lombok, management, maven, mockito, mysql, netty-server, readme, shade, testcontainers, yaml ]
