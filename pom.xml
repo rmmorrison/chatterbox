@@ -33,6 +33,8 @@
 
     <properties>
         <packaging>jar</packaging>
+        <jda.version>4.2.0_228</jda.version>
+        <jda-utilities.version>3.0.5</jda-utilities.version>
         <jdk.version>11</jdk.version>
         <release.version>11</release.version>
         <micronaut.version>2.3.2</micronaut.version>
@@ -112,6 +114,17 @@
             <groupId>io.micronaut.beanvalidation</groupId>
             <artifactId>micronaut-hibernate-validator</artifactId>
             <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.dv8tion</groupId>
+            <artifactId>JDA</artifactId>
+            <version>${jda.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jagrosh</groupId>
+            <artifactId>jda-utilities</artifactId>
+            <version>${jda-utilities.version}</version>
+            <type>pom</type>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
