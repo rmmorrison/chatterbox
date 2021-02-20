@@ -21,5 +21,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: JAR with Dependencies
+          name: JAR with dependencies
           path: staging
