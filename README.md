@@ -1,23 +1,13 @@
+![license](https://img.shields.io/github/license/rmmorrison/chatterbox)
+![build](https://img.shields.io/github/workflow/status/rmmorrison/chatterbox/CI)
+![release](https://img.shields.io/github/v/release/rmmorrison/chatterbox?include_prereleases)
+
 # chatterbox
 
 chatterbox is a Discord bot intending to provide fun (and possibly sometimes useful) commands to a private Discord
 server in which it operates.
 
-# Building
-
-The recommended way to build this project is to use the included Maven wrapper to generate a Docker image, which can then be run
-to start the bot.
-
-On macOS or Linux, the command below will invoke Maven via a shell script, build the project and construct the Docker image using a locally
-available Docker instance:
-
-    ./mvnw package -Dpackaging=docker
-
-On Windows, the included batch file will do the same:
-
-    mvnw.bat package -Dpackaging=docker
-
-# Running
+## Running
 
 In order to run chatterbox, you first must use a Discord account to create a bot and obtain its bot token, used to authenticate to Discord's API.
 This is a mandatory requirement. To obtain a bot token:
@@ -44,7 +34,13 @@ To obtain the required user identifier:
 1. On the user you wish to consider the owner (either yourself or another user), right-click on their profile.
 1. Select "Copy ID". This copies the required value to your clipboard.
 
-Once the Docker image has been built, it can be run using environment variables set within the container to configure both
+Docker images are available from GitHub Container Registry and are automatically updated with every release. You can pull the image for a specific release with:
+
+    docker pull ghcr.io/rmmorrison/chatterbox:<version>
+
+You may also use `latest` to obtain the latest available image, but be warned that this tag may pull pre-release versions still in testing. For maximum stability, use a specific version number and increment as desired for upgrades.
+
+The Docker image can be run using environment variables set within the container to configure both
 mandatory and optional configuration properties. A table of available properties is defined below:
 
 | Environment Variable                | Description                                                                                                                                                                                                                                 | Mandatory? | Default Value                                                          |
@@ -68,3 +64,37 @@ Using a reasonable bare minimum properties to start the bot, the Docker command 
       -e DATASOURCES_DEFAULT_USERNAME=myuser
       -e DATASOURCES_DEFAULT_PASSWORD=supersecretpassword
       chatterbox:latest
+
+## Building
+
+The recommended way to build this project is to use the included Maven wrapper to generate a Docker image, which can then be run
+to start the bot.
+
+On macOS or Linux, the command below will invoke Maven via a shell script, build the project and construct the Docker image using a locally
+available Docker instance:
+
+    ./mvnw package -Dpackaging=docker
+
+On Windows, the included batch file will do the same:
+
+    mvnw.bat package -Dpackaging=docker
+
+If you wish to build a JAR and not a Docker image, use the below Maven command on macOS or Linux:
+
+    ./mvnw package
+
+On Windows:
+
+    mvnw.bat package
+
+## Contributing
+
+Contributions are welcome! The GitHub Actions workflows in this repository are fully parameterized to allow forks to set up their own CI jobs in GitHub Actions with minimal effort.
+
+You will, however, require a GitHub Personal Access Token (PAT) in order to push Docker images to GitHub Container Registry. Use [this link](https://github.com/settings/tokens) to access the Settings page for your GitHub account, generate a new token and select scopes:
+* `write:packages`
+* `delete:packages`
+
+Once the token has been created, go to the Settings page for your forked repository, select Secrets on the left-hand menu pane, and create a new repository secret called `CR_PAT` with the value being the Personal Access Token you just obtained.
+
+If you do not want to inherit any CI or release workflows, simply push a commit removing them from the `.github/workflows` directory.
