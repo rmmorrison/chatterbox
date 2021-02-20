@@ -21,15 +21,19 @@ package net.ryanmorrison.chatterbox.service;
 import io.micronaut.data.exceptions.EmptyResultException;
 import io.micronaut.data.model.Pageable;
 import io.micronaut.data.model.Slice;
+import io.micronaut.transaction.annotation.ReadOnly;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageChannel;
 import net.ryanmorrison.chatterbox.persistence.model.Shout;
+import net.ryanmorrison.chatterbox.persistence.model.ShoutHistory;
+import net.ryanmorrison.chatterbox.persistence.repository.ShoutHistoryRepository;
 import net.ryanmorrison.chatterbox.persistence.repository.ShoutRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import javax.transaction.Transactional;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -45,12 +49,32 @@ public class ShoutService {
     private static final Logger LOGGER = LoggerFactory.getLogger(ShoutService.class);
 
     private final ShoutRepository shoutRepository;
+    private final ShoutHistoryRepository shoutHistoryRepository;
 
     @Inject
-    public ShoutService(ShoutRepository shoutRepository) {
+    public ShoutService(ShoutRepository shoutRepository, ShoutHistoryRepository shoutHistoryRepository) {
         this.shoutRepository = shoutRepository;
+        this.shoutHistoryRepository = shoutHistoryRepository;
     }
 
+    @Transactional
+    @ReadOnly
+    public Optional<Message> getHistory(MessageChannel channel) {
+        try {
+            ShoutHistory channelHistory = shoutHistoryRepository.findFirstByChannelId(channel.getIdLong());
+
+            return Optional.of(
+                    channel.retrieveMessageById(channelHistory.getMessageId()).complete()
+            );
+        } catch (EmptyResultException e) {
+            LOGGER.debug("A query for shout history was made in channel {} but there is no history to display.",
+                    channel.getIdLong(), e);
+        }
+
+        return Optional.empty();
+    }
+
+    @Transactional
     public Optional<Message> save(MessageChannel channel, Message message) {
         Shout toSave = new Shout(
                 message.getIdLong(), message.getAuthor().getIdLong(), channel.getIdLong(), message.getContentDisplay()
@@ -79,6 +103,20 @@ public class ShoutService {
                 return Optional.empty();
             }
 
+            ShoutHistory channelHistory;
+            try {
+                channelHistory = shoutHistoryRepository.findFirstByChannelId(channel.getIdLong());
+                channelHistory.setMessageId(random.getIdLong());
+                LOGGER.debug("Shout history exists for channel {}, updating with new random ID {}.",
+                        message.getChannel().getIdLong(), random.getIdLong());
+                this.shoutHistoryRepository.update(channelHistory);
+            } catch (EmptyResultException e) {
+                LOGGER.debug("No shout history exists for channel {}, saving new history of random ID {}.",
+                        message.getChannel().getIdLong(), random.getIdLong(), e);
+
+                this.shoutHistoryRepository.save(new ShoutHistory(random.getIdLong(), channel.getIdLong()));
+            }
+
             return Optional.of(random);
         }
         finally {
@@ -97,6 +135,7 @@ public class ShoutService {
         }
     }
 
+    @Transactional
     public void update(Message message) {
         Shout current;
         try {
@@ -111,7 +150,11 @@ public class ShoutService {
         this.shoutRepository.update(current);
     }
 
+    @Transactional
     public void delete(long channelId, long messageId) {
         this.shoutRepository.deleteByChannelIdAndMessageId(channelId, messageId);
+        if (this.shoutHistoryRepository.countByChannelIdAndMessageId(channelId, messageId) > 0) {
+            this.shoutHistoryRepository.deleteByChannelId(channelId);
+        }
     }
 }

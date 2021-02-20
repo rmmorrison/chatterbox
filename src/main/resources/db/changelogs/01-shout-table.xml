@@ -26,7 +26,7 @@
     <changeSet author="ryan" id="01-shout-table">
         <createTable tableName="shout">
             <column name="message_id" type="bigint">
-                <constraints primaryKey="true" nullable="false"/>
+                <constraints primaryKey="true" nullable="false" unique="true"/>
             </column>
             <column name="author_id" type="bigint">
                 <constraints nullable="false"/>
@@ -36,6 +36,18 @@
             </column>
             <column name="content" type="text">
                 <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createTable tableName="shout_history">
+            <column name="id" type="int" autoIncrement="true">
+                <constraints nullable="false" primaryKey="true"/>
+            </column>
+            <column name="message_id" type="bigint">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="channel_id" type="bigint">
+                <constraints nullable="false" unique="true"/>
             </column>
         </createTable>
     </changeSet>
