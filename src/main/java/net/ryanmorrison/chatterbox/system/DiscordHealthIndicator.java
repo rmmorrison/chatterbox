@@ -27,6 +27,16 @@ import javax.inject.Singleton;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Health indicator for Micronaut to consider the application down if the Discord client isn't connected (either
+ * because it hasn't started yet, or it's been disconnected for some reason).
+ *
+ * Useful for container management; orchestrators can call the GET /health API and GET /health/readiness APIs to determine
+ * whether the container is up and ready.
+ *
+ * @author Ryan Morrison
+ * @since 1.0
+ */
 @Singleton
 public class DiscordHealthIndicator extends AbstractHealthIndicator<Map<String, Object>> {
 

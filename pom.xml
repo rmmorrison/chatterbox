@@ -22,7 +22,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>net.ryanmorrison</groupId>
     <artifactId>chatterbox</artifactId>
-    <version>0.1</version>
+    <version>1.0.0</version>
     <packaging>${packaging}</packaging>
 
     <parent>
@@ -41,6 +41,7 @@
         <micronaut.data.version>2.2.4</micronaut.data.version>
         <exec.mainClass>net.ryanmorrison.chatterbox.Application</exec.mainClass>
         <micronaut.runtime>netty</micronaut.runtime>
+        <git-commit-id.plugin.version>4.0.3</git-commit-id.plugin.version>
     </properties>
 
     <repositories>
@@ -179,6 +180,7 @@
     </dependencies>
 
     <build>
+        <finalName>${project.artifactId}-${project.version}-${git.commit.id.abbrev}</finalName>
         <plugins>
             <plugin>
                 <groupId>io.micronaut.build</groupId>
@@ -217,6 +219,23 @@
                         <arg>-Amicronaut.processing.group=net.ryanmorrison</arg>
                         <arg>-Amicronaut.processing.module=chatterbox</arg>
                     </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>pl.project13.maven</groupId>
+                <artifactId>git-commit-id-plugin</artifactId>
+                <version>${git-commit-id.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>read-git-info</id>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                        <phase>initialize</phase>
+                    </execution>
+                </executions>
+                <configuration>
+                    <generateGitPropertiesFile>false</generateGitPropertiesFile>
                 </configuration>
             </plugin>
         </plugins>
