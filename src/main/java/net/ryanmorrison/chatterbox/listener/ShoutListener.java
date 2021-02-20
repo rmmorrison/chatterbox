@@ -97,7 +97,7 @@ public class ShoutListener extends ListenerAdapter {
 
     private boolean contentMatchesShout(User author, String content) {
         if (author.isBot()) return false;
-        if (content.equals(content.toLowerCase())) return false;
+        if (!content.equals(content.toUpperCase())) return false;
         if (content.startsWith("$")) return false; // special case for currency
         if (content.startsWith("http")) return false; // special case for links
         if (content.length() <= 5) return false;
