@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Get Release Tag Version
-        run: echo "TAG_VERSION=$(jq -r '.release.tag_name' $GITHUB_EVENT_PATH | cut -c 1-)" >> $GITHUB_ENV
+        run: echo "TAG_VERSION=$(jq -r '.release.tag_name' $GITHUB_EVENT_PATH | cut -c 2-)" >> $GITHUB_ENV
       - name: Echo Release Information
         run: echo "Preparing to release $GITHUB_REPOSITORY with version $TAG_VERSION"
       - name: Checkout Repository
