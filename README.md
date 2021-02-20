@@ -9,6 +9,8 @@ server in which it operates.
 
 ## Running
 
+### With Docker (and Docker Compose)
+
 In order to run chatterbox, you first must use a Discord account to create a bot and obtain its bot token, used to authenticate to Discord's API.
 This is a mandatory requirement. To obtain a bot token:
 
@@ -63,7 +65,24 @@ Using a reasonable bare minimum properties to start the bot, the Docker command 
       -e DATASOURCES_DEFAULT_URL=jdbc:mysql://my-database:3306/chatterbox?createDatabaseIfNotExist=true
       -e DATASOURCES_DEFAULT_USERNAME=myuser
       -e DATASOURCES_DEFAULT_PASSWORD=supersecretpassword
-      chatterbox:latest
+      ghcr.io/rmmorrison/chatterbox:latest
+
+### With Kubernetes
+
+**Experimental!**
+
+This repository contains a Helm (v3) chart which can be installed into a Kubernetes cluster if deploying into Kubernetes is the intended destination for the bot.
+
+Currently, the chart is not built and present in any repository, so using the chart consists of checking out this repository, navigating into the `charts/chatterbox` directory and performing a Helm install command, like below:
+
+    helm install chatterbox . \
+      --set discord.token="<token>" \
+      --set discord.ownerId=":<owner ID>" \
+      --set database.url="<JDBC database URL>" \
+      --set database.username="<username>" \
+      --set database.password="<password>"
+
+**Note:** the colon (:) character prefixing the owner ID value is required, to workaround a Helm issue in which integer-only values beyond a certain length are always treated as int64 values and not strings, even if they are quoted.
 
 ## Building
 

@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chatterbox.fullname" . }}
+  labels:
+    {{- include "chatterbox.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "chatterbox.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "chatterbox.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: "DISCORD_TOKEN"
+              valueFrom:
+                secretKeyRef:
+                  key: discord-token
+                  name: {{ include "chatterbox.fullname" . }}
+            - name: "DISCORD_OWNERID"
+              valueFrom:
+                secretKeyRef:
+                  key: discord-owner-id
+                  name: {{ include "chatterbox.fullname" . }}
+            - name: "DISCORD_COMMANDPREFIX"
+              value: {{ .Values.commands.prefix | quote }}
+            - name: "DISCORD_ALTERNATECOMMANDPREFIX"
+              value: {{ .Values.commands.alternatePrefix | quote }}
+            - name: "DATASOURCES_DEFAULT_URL"
+              value: "{{ .Values.database.url }}"
+            - name: "DATASOURCES_DEFAULT_DRIVERCLASSNAME"
+              value: "{{ .Values.database.driverClassName }}"
+            - name: "DATASOURCES_DEFAULT_USERNAME"
+              valueFrom:
+                secretKeyRef:
+                  key: database-username
+                  name: {{ include "chatterbox.fullname" . }}
+            - name: "DATASOURCES_DEFAULT_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  key: database-password
+                  name: {{ include "chatterbox.fullname" . }}
+            - name: "DATASOURCES_DEFAULT_DIALECT"
+              value: "{{ .Values.database.dialect }}"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
