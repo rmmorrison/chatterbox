@@ -106,6 +106,16 @@ On Windows:
 
     mvnw.bat package
 
+## Additional Notes
+
+### Incompatibility with enforced primary keys on tables
+
+If you are using a managed database from a provider such as DigitalOcean, or any provider which mandates the use of the MySQL property `SQL_REQUIRE_PRIMARY_KEY`, your JDBC database URL _must_ contain:
+`&sessionVariables=SQL_REQUIRE_PRIMARY_KEY=0`. This is due to Liquibase's automatically generated changelog and lock tables not including any primary keys, which is a mandated requirement by the `SQL_REQUIRE_PRIMARY_KEY` configuration.
+The noted addition to the JDBC URL disables this requirement on a per-connection basis, which allows Liquibase to execute successfully.
+
+If your managed database provider offers a configuration setting to disable this requirement, that also can be used instead. However, not all managed service providers allow this configuration to be changed (DigitalOcean notably does not).
+
 ## Contributing
 
 Contributions are welcome! The GitHub Actions workflows in this repository are fully parameterized to allow forks to set up their own CI jobs in GitHub Actions with minimal effort.
