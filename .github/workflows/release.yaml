@@ -23,19 +23,17 @@ jobs:
       - name: Build Dockerfile
         run: ./mvnw --batch-mode mn:dockerfile -Dpackaging=docker
       - name: Read Version from POM
-        run: echo "pom_version=$(./mvnw help:evaluate -Dexpression=\"project.version\" -q -DforceStdout)" >> $GITHUB_ENV
-      - run: cd target
+        run: echo "POM_VERSION=$(./mvnw help:evaluate -Dexpression='project.version' -q -DforceStdout)" >> $GITHUB_ENV
+      - name: Move to Target Directory
+        run: cd target
       - name: Build and Push Docker Image to GitHub Packages
-        uses: docker/build-push-action@v1
+        uses: docker/build-push-action@v2
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           registry: docker.pkg.github.com
-          repository: rmmorrison/chatterbox
-          tag_with_ref: true
-          tags: |
-            rmmorrison/chatterbox:latest
-            rmmorrison/chatterbox:${{ env.pom_version }}
+          repository: ${{ github.repository }}
+          tags: ${{ github.repository }}:latest,${{ github.repository }}:${{ env.POM_VERSION }}
       - name: Save Dockerfile
         run: cd .. && cp target/Dockerfile staging
       - name: Upload Artifact
