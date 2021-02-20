@@ -1,0 +1,67 @@
+/*
+ * chatterbox - a (not so helpful) Discord bot custom written for a private server
+ * Copyright (C) 2021 Ryan Morrison
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package net.ryanmorrison.chatterbox.external.frinkiac.model;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Getter;
+
+/**
+ * Represents the "Episode" object inside Frinkiac API responses.
+ *
+ * @author Ryan Morrison
+ * @since 1.0
+ */
+public class Episode {
+
+    @JsonProperty("Id")
+    @Getter
+    private int id;
+
+    @JsonProperty("Key")
+    @Getter
+    private String key;
+
+    @JsonProperty("Season")
+    @Getter
+    private int season;
+
+    @JsonProperty("EpisodeNumber")
+    @Getter
+    private int episodeNumber;
+
+    @JsonProperty("Title")
+    @Getter
+    private String title;
+
+    @JsonProperty("Director")
+    @Getter
+    private String directors;
+
+    @JsonProperty("Writer")
+    @Getter
+    private String writers;
+
+    @JsonProperty("OriginalAirDate")
+    @Getter
+    private String originalAirDate;
+
+    @JsonProperty("WikiLink")
+    @Getter
+    private String wikiLink;
+}
