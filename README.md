@@ -2,3 +2,69 @@
 
 chatterbox is a Discord bot intending to provide fun (and possibly sometimes useful) commands to a private Discord
 server in which it operates.
+
+# Building
+
+The recommended way to build this project is to use the included Maven wrapper to generate a Docker image, which can then be run
+to start the bot.
+
+On macOS or Linux, the command below will invoke Maven via a shell script, build the project and construct the Docker image using a locally
+available Docker instance:
+
+    ./mvnw package -Dpackaging=docker
+
+On Windows, the included batch file will do the same:
+
+    mvnw.bat package -Dpackaging=docker
+
+# Running
+
+In order to run chatterbox, you first must use a Discord account to create a bot and obtain its bot token, used to authenticate to Discord's API.
+This is a mandatory requirement. To obtain a bot token:
+
+1. Visit [Discord's Developer Portal](https://discord.com/developers).
+1. Sign in using your Discord account.
+1. Click the "New Applications" button in the top right corner.
+1. Name the new application. (Note: the name given here is what the bot's nickname will be once added to your server.)
+1. Click "Bot" in the left-hand menu.
+1. Click "Add Bot" and accept the prompt that appears.
+1. Click the "Copy" button to copy the required token to your clipboard. You can also use the "Click to Reveal Token" link to reveal the token's value.
+
+You will also need to obtain Discord's internal unique identifier for the user considered the "owner" of the bot. This is presumably you, the reader,
+but can be any Discord user you wish.
+
+**NOTE:** Be careful who you consider the bot's owner. The bot may obtain administrator privilege and through that, the owner may be able to perform sensitive operations (e.g. kicking or banning users) using the bot, even if they lack the privilege themselves within the server.
+
+To obtain the required user identifier:
+
+1. Open Discord's settings in the web or desktop client.
+1. Select "Appearance" under "App Settings" in the left-hand menu pane.
+1. Under "Advanced", enable "Developer Mode".
+1. Exit the menu and return to Discord's main interface.
+1. On the user you wish to consider the owner (either yourself or another user), right-click on their profile.
+1. Select "Copy ID". This copies the required value to your clipboard.
+
+Once the Docker image has been built, it can be run using environment variables set within the container to configure both
+mandatory and optional configuration properties. A table of available properties is defined below:
+
+| Environment Variable                | Description                                                                                                                                                                                                                                 | Mandatory? | Default Value                                                          |
+|-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------|------------------------------------------------------------------------|
+| DISCORD_TOKEN                       | The token value obtained from Discord's developer console used to authenticate the bot with Discord's API.                                                                                                                                  | Yes        | N/A                                                                    |
+| DISCORD_OWNERID                     | The unique identifier of the user considered the "owner" of this instance of the bot.                                                                                                                                                       | Yes        | N/A                                                                    |
+| DISCORD_COMMANDPREFIX               | The prefix the bot will look for to trigger commands.                                                                                                                                                                                       | No         | "!"                                                                    |
+| DISCORD_ALTERNATEPREFIX             | An alternative prefix the bot will also look for to trigger commands.                                                                                                                                                                       | No         | "."                                                                    |
+| DATASOURCES_DEFAULT_URL             | The URL (in JDBC format) of the database to connect to. This must be available to the Docker container; via Docker networking, an externally accessible resource or a service (e.g. if the bot is deployed inside of a Kubernetes cluster). | No         | "jdbc:mysql://localhost:3306/chatterbox?createDatabaseIfNotExist=true" |
+| DATASOURCES_DEFAULT_DRIVERCLASSNAME | The class name of the JDBC driver used to connect to the database. If you are connecting to a MySQL/MariaDB database, this does not need to be changed.                                                                                     | No         | "com.mysql.cj.jdbc.Driver"                                             |
+| DATASOURCES_DEFAULT_USERNAME        | The username used to connect to the database server.                                                                                                                                                                                        | No         | "root"                                                                 |
+| DATASOURCES_DEFAULT_PASSWORD        | The password used to connect to the database server.                                                                                                                                                                                        | No         | ""                                                                     |
+| DATASOURCES_DEFAULT_DIALECT         | The SQL dialect to use when executing queries against the database. If you are connecting to a MySQL/MariaDB database, this does not need to be changed.                                                                                    | No         | MYSQL                                                                  |
+
+Using a reasonable bare minimum properties to start the bot, the Docker command would look like:
+
+    docker run
+      -e DISCORD_TOKEN=<insert token here>
+      -e DISCORD_OWNERID=<insert owner ID here>
+      -e DATASOURCES_DEFAULT_URL=jdbc:mysql://my-database:3306/chatterbox?createDatabaseIfNotExist=true
+      -e DATASOURCES_DEFAULT_USERNAME=myuser
+      -e DATASOURCES_DEFAULT_PASSWORD=supersecretpassword
+      chatterbox:latest
