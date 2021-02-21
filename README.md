@@ -25,7 +25,7 @@ This is a mandatory requirement. To obtain a bot token:
 You will also need to obtain Discord's internal unique identifier for the user considered the "owner" of the bot. This is presumably you, the reader,
 but can be any Discord user you wish.
 
-**NOTE:** Be careful who you consider the bot's owner. The bot may obtain administrator privilege and through that, the owner may be able to perform sensitive operations (e.g. kicking or banning users) using the bot, even if they lack the privilege themselves within the server.
+**NOTE:** Be careful who you consider the bot's owner. The bot may obtain administrator privilege and through that, the user selected may be able to perform sensitive operations (e.g. kicking or banning users) using the bot, even if they lack the privilege to do so themselves within the server.
 
 To obtain the required user identifier:
 
