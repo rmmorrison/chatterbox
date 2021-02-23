@@ -71,7 +71,7 @@ Using a reasonable bare minimum properties to start the bot, the Docker command 
 
 **Experimental!**
 
-The [rmmorrison/helm-charts]() repository contains a Helm (chart API v2) chart for chatterbox, which is automatically built and published to a Helm repository on each change.
+The [rmmorrison/helm-charts](https://github.com/rmmorrison/helm-charts) repository contains a Helm (chart API v2) chart for chatterbox, which is automatically built and published to a Helm repository on each change.
 
 This Helm chart is tested (and is how chatterbox is currently deployed for its intended purpose), but the author makes no guarantees or claims about its functionality. Namely, this chart has not been tested against Kubernetes clusters with RBAC enabled.
 
