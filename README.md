@@ -71,9 +71,13 @@ Using a reasonable bare minimum properties to start the bot, the Docker command 
 
 **Experimental!**
 
-This repository contains a Helm (v3) chart which can be installed into a Kubernetes cluster if deploying into Kubernetes is the intended destination for the bot.
+The [rmmorrison/helm-charts]() repository contains a Helm (chart API v2) chart for chatterbox, which is automatically built and published to a Helm repository on each change.
 
-Currently, the chart is not built and present in any repository, so using the chart consists of checking out this repository, navigating into the `charts/chatterbox` directory and performing a Helm install command, like below:
+This Helm chart is tested (and is how chatterbox is currently deployed for its intended purpose), but the author makes no guarantees or claims about its functionality. Namely, this chart has not been tested against Kubernetes clusters with RBAC enabled.
+
+To set up the repository in your own Helm instance, see that repository's [README file](https://github.com/rmmorrison/helm-charts/blob/master/README.md).
+
+Once the repository is set up and the latest repository data pulled (via `helm repo update`), the chart can be installed into a cluster following the example below:
 
     helm install chatterbox . \
       --set discord.token="<token>" \
