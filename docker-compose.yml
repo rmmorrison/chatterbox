@@ -1,6 +1,23 @@
-﻿version: '3.8'
+﻿##
+# This is an example docker-compose.yml showing how to deploy chatterbox with Docker Compose.
+# All dependencies (MySQL/MariaDB) are included and pre-configured to work out of the box.
+# You must supply your own Discord bot token and owner ID before attempting to use this example for yourself.
+##
+
+version: '3.8'
 
 services:
+  chatterbox:
+    image: ghcr.io/rmmorrison/chatterbox:latest
+    restart: always
+    environment:
+      DISCORD_TOKEN: <your token here>
+      DISCORD_OWNERID: <your owner ID here>
+      DATASOURCES_DEFAULT_URL: jdbc:mysql://mariadb:3306/chatterbox?createDatabaseIfNotExist=true
+      DATASOURCES_DEFAULT_USERNAME: root
+      DATASOURCES_DEFAULT_PASSWORD: kwyjibo
+    depends_on:
+      - mariadb
   mariadb:
     image: mariadb:10.5
     volumes:

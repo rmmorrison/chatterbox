@@ -9,6 +9,14 @@ server in which it operates.
 
 ## Running
 
+### Prerequisites
+
+chatterbox relies on a MySQL (or MariaDB) database at present to persist and retrieve data. The database can be deployed separately in a standalone
+format, deployed as a Docker container (backed by a persistent volume), or made available via the procurement of a managed MySQL/MariaDB instance.
+
+See the included [docker-compose.yml](https://github.com/rmmorrison/chatterbox/blob/master/docker-compose.yml) file with an example of how to deploy
+MariaDB as part of a Docker Compose setup.
+
 ### With Docker (and Docker Compose)
 
 In order to run chatterbox, you first must use a Discord account to create a bot and obtain its bot token, used to authenticate to Discord's API.
