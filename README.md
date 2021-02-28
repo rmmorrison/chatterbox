@@ -96,6 +96,34 @@ Once the repository is set up and the latest repository data pulled (via `helm r
 
 **Note:** the colon (:) character prefixing the owner ID value is required, to workaround a Helm issue in which integer-only values beyond a certain length are always treated as int64 values and not strings, even if they are quoted.
 
+## Adding the Bot to Your Server
+
+In order to use chatterbox as part of your own Discord server, it must be added via Discord's OAuth 2.0 flow. You will need:
+
+* Your bot's client ID (note: this is _not_ the same as your bot's token). It can be obtained via [Discord's Developer Portal](https://discord.com/developers/).
+* The permissions you wish to grant the bot. In order to use all functionality, you must provide:
+  * Text Permissions
+    * Send Messages
+    * Embed Links
+    * Read Message History
+    * Add Reactions
+  * Voice Permissions
+    * Connect
+    * Speak
+    * Use Voice Activity
+* Discord's OAuth 2.0 authorize endpoint (see the [Bot Authorization Flow](https://discord.com/developers/docs/topics/oauth2#bot-authorization-flow) topic in Discord's developer documentation).
+
+Permissions are provided as a bitwise integer value as part of the OAuth 2.0 authorize request. The [Discord Developer Portal](https://discord.com/developers/) contains a helpful calculator
+under your application's bot settings to create the permissions integer for you. The value of the above noted permissions is `36784192`.
+
+Once you have the necessary values, you can construct an OAuth 2.0 authorize URL to access in your browser, for example:
+
+    https://discord.com/api/oauth2/authorize?client_id=<your bot's client ID>&scope=bot&permissions=36784192
+
+Accessing this URL in your browser, assuming it has been constructed with valid values, directs you to Discord's login page. Once you are logged in, it will ask you which server you wish to add the bot to.
+
+Once you select a server and verify the requested permissions, the bot will be added to your Discord server and is available for use.
+
 ## Building
 
 The recommended way to build this project is to use the included Maven wrapper to generate a Docker image, which can then be run
