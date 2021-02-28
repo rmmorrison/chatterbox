@@ -70,6 +70,13 @@ public class TrackScheduler extends AudioEventAdapter {
         return queue.peek();
     }
 
+    /**
+     * Empties all tracks from the queue.
+     */
+    public void clear() {
+        queue.clear();
+    }
+
     @Override
     public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
         if (endReason.mayStartNext) {

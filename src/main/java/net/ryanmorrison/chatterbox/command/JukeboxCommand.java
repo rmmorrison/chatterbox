@@ -21,6 +21,7 @@ package net.ryanmorrison.chatterbox.command;
 import com.jagrosh.jdautilities.command.Command;
 import com.jagrosh.jdautilities.command.CommandEvent;
 import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
+import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
@@ -28,7 +29,10 @@ import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import net.dv8tion.jda.api.MessageBuilder;
-import net.dv8tion.jda.api.entities.*;
+import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.VoiceChannel;
 import net.ryanmorrison.chatterbox.jukebox.GuildMusicManager;
 
 import javax.inject.Singleton;
@@ -60,11 +64,17 @@ public class JukeboxCommand extends Command {
                     .append(" - plays the given URL (YouTube/Vimeo/Twitch stream) in your voice channel, or queues it " +
                             "if another track is playing.\n")
                     .append("skip", MessageBuilder.Formatting.BOLD)
-                    .append(" - skips to the next track, if it exists in the queue.\n")
+                    .append(" - skips to the next track, if it exists in the playback queue.\n")
                     .append("peek", MessageBuilder.Formatting.BOLD)
-                    .append(" - displays the next upcoming track, if it exists in the queue.\n")
+                    .append(" - displays the next upcoming track, if it exists in the playback queue.\n")
+                    .append("pause", MessageBuilder.Formatting.BOLD)
+                    .append(" - pauses the currently playing track.\n")
+                    .append("resume", MessageBuilder.Formatting.BOLD)
+                    .append(" - resumes a paused track.\n")
+                    .append("cancel", MessageBuilder.Formatting.BOLD)
+                    .append(" - stops playback of any tracks and clears all items from the playback queue.\n")
                     .append("leave", MessageBuilder.Formatting.BOLD)
-                    .append(" - tells the bot to empty its queue and leave the channel.\n\n")
+                    .append(" - clears all items from the playback queue and leave the channel.\n\n")
                     .append("You must be in a voice channel to add tracks to the jukebox or change tracks. The bot " +
                             "will join and play tracks in the voice channel you're currently in.\n\n")
                     .append("Try it! Join a voice channel and write: ")
@@ -119,6 +129,15 @@ public class JukeboxCommand extends Command {
         }
         else if (action.equalsIgnoreCase("peek")) {
             handlePeek(event);
+        }
+        else if (action.equalsIgnoreCase("pause")) {
+            handlePauseResume(event, true);
+        }
+        else if (action.equalsIgnoreCase("resume")) {
+            handlePauseResume(event, false);
+        }
+        else if (action.equalsIgnoreCase("cancel")) {
+            handleCancel(event);
         }
         else if (action.equalsIgnoreCase("leave")) {
             handleLeave(event);
@@ -207,6 +226,43 @@ public class JukeboxCommand extends Command {
         }
 
         event.replyWarning("There are no more tracks in the queue!");
+    }
+
+    private void handlePauseResume(CommandEvent event, boolean shouldPause) {
+        String action = shouldPause ? "pause" : "resume";
+
+        GuildMusicManager musicManager = getGuildAudioPlayer(event.getGuild());
+        AudioPlayer player = musicManager.getPlayer();
+        AudioTrack playingTrack = player.getPlayingTrack();
+
+        if (playingTrack == null) {
+            event.replyError("Nothing's currently playing for me to " + action + "!");
+            return;
+        }
+
+        if (shouldPause && player.isPaused()) {
+            event.replyError("Can't pause - a track is already paused.");
+        }
+        else if (!shouldPause && !player.isPaused()) {
+            event.replyError("Can't resume = a track is already playing.");
+        }
+
+        musicManager.getPlayer().setPaused(shouldPause);
+        event.getMessage().addReaction("U+1F44D").queue(); // thumbs up emoji
+    }
+
+    private void handleCancel(CommandEvent event) {
+        GuildMusicManager musicManager = getGuildAudioPlayer(event.getGuild());
+        AudioTrack playingTrack = musicManager.getPlayer().getPlayingTrack();
+
+        if (playingTrack == null) {
+            event.replyError("Nothing's currently playing for me to clear!");
+            return;
+        }
+
+        musicManager.getPlayer().destroy();
+        musicManager.getScheduler().clear();
+        event.getMessage().addReaction("U+1F44D").queue(); // thumbs up emoji
     }
 
     private void handleLeave(CommandEvent event) {
