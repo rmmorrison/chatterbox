@@ -127,7 +127,6 @@ public class JukeboxCommand extends Command {
             event.reply(new MessageBuilder()
                     .append("This isn't a valid action for the Jukebox! Try ")
                     .append(event.getClient().getPrefix())
-                    .append(" ")
                     .append(this.getName())
                     .append(" help to see a list of possible options and examples.")
                     .build());
