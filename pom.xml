@@ -33,7 +33,7 @@
 
     <properties>
         <packaging>jar</packaging>
-        <jda.version>4.2.0_228</jda.version>
+        <jda.version>4.2.0_247</jda.version>
         <jda-utilities.version>3.0.5</jda-utilities.version>
         <jdk.version>11</jdk.version>
         <lavaplayer.version>1.3.71</lavaplayer.version>
