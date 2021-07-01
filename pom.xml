@@ -42,7 +42,7 @@
         <micronaut.data.version>2.2.4</micronaut.data.version>
         <exec.mainClass>net.ryanmorrison.chatterbox.Application</exec.mainClass>
         <micronaut.runtime>netty</micronaut.runtime>
-        <git-commit-id.plugin.version>4.0.3</git-commit-id.plugin.version>
+        <git-commit-id.plugin.version>4.0.5</git-commit-id.plugin.version>
     </properties>
 
     <repositories>
