@@ -7,4 +7,10 @@ import java.util.Optional;
 public interface ShoutService {
 
     Optional<Message> save(Message message);
+
+    boolean update(Message message);
+
+    boolean delete(Message message);
+
+    boolean delete(long messageId);
 }

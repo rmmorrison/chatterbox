@@ -4,13 +4,16 @@ import lombok.extern.slf4j.Slf4j;
 import net.dv8tion.jda.api.MessageBuilder;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.events.message.MessageDeleteEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
+import net.dv8tion.jda.api.events.message.MessageUpdateEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.ryanmorrison.chatterbox.service.ShoutService;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import javax.transaction.Transactional;
 import java.util.Optional;
 
 @Component
@@ -24,6 +27,7 @@ public class ShoutListener extends ListenerAdapter {
     }
 
     @Override
+    @Transactional
     public void onMessageReceived(@NotNull MessageReceivedEvent event) {
         if (contentIsNotShout(event.getAuthor(), event.getMessage().getContentDisplay())) {
             log.debug("Received message \"{}\" in channel {} which does not match shout, ignoring.",
@@ -36,6 +40,31 @@ public class ShoutListener extends ListenerAdapter {
                 new MessageBuilder()
                         .append(message.getContentDisplay(), MessageBuilder.Formatting.BOLD)
                         .build()).queue());
+    }
+
+    @Override
+    @Transactional
+    public void onMessageUpdate(@NotNull MessageUpdateEvent event) {
+        if (contentIsNotShout(event.getAuthor(), event.getMessage().getContentDisplay())) {
+            log.debug("Received updated message \"{}\" in channel {} which does not match shout, " +
+                            "deleting original shout if it exists.",
+                    event.getMessage().getContentDisplay(), event.getChannel().getIdLong());
+
+            shoutService.delete(event.getMessage());
+            return;
+        }
+
+        log.debug("Received updated message \"{}\" in channel {} which matches shout, calling update if it exists.",
+                event.getMessage().getContentDisplay(), event.getChannel().getIdLong());
+        this.shoutService.update(event.getMessage());
+    }
+
+    @Override
+    @Transactional
+    public void onMessageDelete(@NotNull MessageDeleteEvent event) {
+        log.debug("Received deleted message with ID {} in channel {}, deleting corresponding shout if it exists.",
+                event.getMessageIdLong(), event.getChannel().getIdLong());
+        shoutService.delete(event.getMessageIdLong());
     }
 
     private boolean contentIsNotShout(User author, String content) {

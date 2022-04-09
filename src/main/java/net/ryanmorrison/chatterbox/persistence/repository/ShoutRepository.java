@@ -13,5 +13,9 @@ public interface ShoutRepository extends CrudRepository<ShoutDTO, Long> {
 
     ShoutDTO getShoutDTOByChannelIdAndContent(long channelId, String content);
 
+    ShoutDTO getShoutDTOByMessageId(long messageId);
+
     Page<ShoutDTO> findAllByChannelId(long channelId, Pageable pageable);
+
+    int deleteByMessageId(long messageId);
 }
