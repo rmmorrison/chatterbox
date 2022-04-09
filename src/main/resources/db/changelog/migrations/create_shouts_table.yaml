@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: create_shouts_table
+      author: Ryan Morrison
+      changes:
+        - createTable:
+            tableName: shouts
+            columns:
+              - column:
+                  name: message_id
+                  type: long
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    unique: true
+              - column:
+                  name: channel_id
+                  type: long
+                  constraints:
+                    nullable: false
+              - column:
+                  name: author_id
+                  type: long
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content
+                  type: text
+                  constraints:
+                    nullable: false

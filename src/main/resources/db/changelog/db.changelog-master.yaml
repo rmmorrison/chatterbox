@@ -1,4 +1,3 @@
 databaseChangeLog:
-  - changeSet:
-      id: 1
-      author: Ryan Morrison
+  - include:
+      file: db/changelog/migrations/create_shouts_table.yaml
