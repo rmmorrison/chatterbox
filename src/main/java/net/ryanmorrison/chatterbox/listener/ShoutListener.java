@@ -1,29 +1,89 @@
 package net.ryanmorrison.chatterbox.listener;
 
 import lombok.extern.slf4j.Slf4j;
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.MessageBuilder;
+import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageDeleteEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.events.message.MessageUpdateEvent;
-import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
+import net.ryanmorrison.chatterbox.framework.SlashCommandsListenerAdapter;
 import net.ryanmorrison.chatterbox.service.ShoutService;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.transaction.Transactional;
-import java.util.Optional;
+import java.awt.*;
+import java.util.*;
 
 @Component
 @Slf4j
-public class ShoutListener extends ListenerAdapter {
+public class ShoutListener extends SlashCommandsListenerAdapter {
 
+    private static final String COMMAND_NAME = "shout";
+    private static final String LAST_SUBCOMMAND_NAME = "last";
+
+    private final Random random = new Random();
     private final ShoutService shoutService;
 
     public ShoutListener(@Autowired ShoutService shoutService) {
         this.shoutService = shoutService;
+    }
+
+    @Override
+    public Collection<SlashCommandData> getSupportedCommands() {
+        Collection<SubcommandData> subcommands = new ArrayList<>();
+        subcommands.add(new SubcommandData(LAST_SUBCOMMAND_NAME, "Displays the last returned quote in this channel, if possible"));
+
+        return Collections.singleton(Commands.slash(COMMAND_NAME, "Interact with the quote database")
+                .addSubcommands(subcommands));
+    }
+
+    @Override
+    public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
+        if (event.getGuild() == null) return;
+
+        if (!event.getName().equals(COMMAND_NAME)) {
+            // this command is not for us, return
+            return;
+        }
+
+        // let Discord know we're working on it...
+        event.deferReply().queue();
+
+        shoutService.getHistory(event.getChannel()).ifPresentOrElse(message -> {
+            Member member = message.getMember();
+            String authorName = member != null ? member.getEffectiveName() : message.getAuthor().getName();
+            String iconUrl = message.getAuthor().getEffectiveAvatarUrl();
+
+            MessageEmbed embed = new EmbedBuilder()
+                    .setColor(new Color(
+                            random.nextInt(255),
+                            random.nextInt(255),
+                            random.nextInt(255)
+                    ))
+                    .setTimestamp(message.getTimeCreated())
+                    .setAuthor(authorName, null, iconUrl)
+                    .setDescription(message.getContentDisplay())
+                    .addField(
+                            "Link to Context",
+                            "https://discordapp.com/channels/" + message.getChannel().getId() + "/" + message.getChannel().getId() + "/" + message.getId(),
+                            false
+                    )
+                    .build();
+
+            event.getHook().sendMessage(new MessageBuilder()
+                    .setEmbeds(embed).build()).queue();
+        }, () -> event.getHook().sendMessage("It doesn't look like anyone has shouted in this channel yet.")
+                .setEphemeral(true).queue());
     }
 
     @Override

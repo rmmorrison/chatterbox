@@ -1,3 +1,5 @@
 databaseChangeLog:
   - include:
       file: db/changelog/migrations/create_shouts_table.yaml
+  - include:
+      file: db/changelog/migrations/create_shout_histories_table.yaml

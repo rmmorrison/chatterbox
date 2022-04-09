@@ -4,6 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageChannel;
 import net.ryanmorrison.chatterbox.persistence.model.ShoutDTO;
+import net.ryanmorrison.chatterbox.persistence.model.ShoutHistoryDTO;
+import net.ryanmorrison.chatterbox.persistence.repository.ShoutHistoryRepository;
 import net.ryanmorrison.chatterbox.persistence.repository.ShoutRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -17,9 +19,19 @@ import java.util.Optional;
 public class RepositoryBasedShoutService implements ShoutService {
 
     private final ShoutRepository shoutRepository;
+    private final ShoutHistoryRepository shoutHistoryRepository;
 
-    public RepositoryBasedShoutService(@Autowired ShoutRepository shoutRepository) {
+    public RepositoryBasedShoutService(@Autowired ShoutRepository shoutRepository, @Autowired ShoutHistoryRepository shoutHistoryRepository) {
         this.shoutRepository = shoutRepository;
+        this.shoutHistoryRepository = shoutHistoryRepository;
+    }
+
+    @Override
+    public Optional<Message> getHistory(MessageChannel channel) {
+        ShoutHistoryDTO historyDTO = shoutHistoryRepository.findShoutHistoryDTOByChannelId(channel.getIdLong());
+        if (historyDTO == null) return Optional.empty();
+
+        return Optional.ofNullable(channel.retrieveMessageById(historyDTO.getMessageId()).complete());
     }
 
     @Override
@@ -38,6 +50,23 @@ public class RepositoryBasedShoutService implements ShoutService {
                     .content(message.getContentDisplay())
                     .build());
         }
+
+        random.ifPresent(rand -> {
+            // do we have history already?
+            ShoutHistoryDTO existingHistory = shoutHistoryRepository.findShoutHistoryDTOByChannelId(message.getChannel().getIdLong());
+            if (existingHistory != null) {
+                // we do - save updated value
+                existingHistory.setMessageId(rand.getIdLong());
+                shoutHistoryRepository.save(existingHistory);
+            }
+            else {
+                // we do not - create it
+                shoutHistoryRepository.save(ShoutHistoryDTO.builder()
+                        .channelId(rand.getChannel().getIdLong())
+                        .messageId(rand.getIdLong())
+                        .build());
+            }
+        });
 
         return random;
     }
@@ -64,6 +93,7 @@ public class RepositoryBasedShoutService implements ShoutService {
 
     @Override
     public boolean delete(long messageId) {
+        shoutHistoryRepository.deleteByMessageId(messageId);
         return shoutRepository.deleteByMessageId(messageId) == 1;
     }
 

@@ -1,0 +1,21 @@
+databaseChangeLog:
+  - changeSet:
+      id: create_shout_histories_table
+      author: Ryan Morrison
+      changes:
+        - createTable:
+            tableName: shout_histories
+            columns:
+              - column:
+                  name: channel_id
+                  type: long
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    unique: true
+              - column:
+                  name: message_id
+                  type: long
+                  constraints:
+                    nullable: false
+                    unique: true
