@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: create_copypasta_table
+      author: Ryan Morrison
+      changes:
+        - createTable:
+            tableName: copypasta
+            columns:
+              - column:
+                  name: id
+                  type: int
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: channel_id
+                  type: long
+                  constraints:
+                    nullable: false
+              - column:
+                  name: trigger
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: copypasta
+                  type: text
+                  constraints:
+                    nullable: false
+          addUniqueConstraint:
+            tableName: copypasta
+            columnNames: channel_id,trigger
+            constraintName: unique_channel_id_trigger

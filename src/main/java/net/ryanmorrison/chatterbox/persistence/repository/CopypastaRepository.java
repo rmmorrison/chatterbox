@@ -1,0 +1,15 @@
+package net.ryanmorrison.chatterbox.persistence.repository;
+
+import net.ryanmorrison.chatterbox.persistence.model.CopypastaEntry;
+import org.springframework.data.repository.CrudRepository;
+
+import java.util.List;
+
+public interface CopypastaRepository extends CrudRepository<CopypastaEntry, Integer> {
+
+    List<CopypastaEntry> findAllByChannelId(long channelId);
+
+    CopypastaEntry findByChannelIdAndTrigger(long channelId, String trigger);
+
+    int deleteByChannelIdAndTrigger(long channelId, String trigger);
+}
