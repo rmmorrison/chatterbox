@@ -1,0 +1,26 @@
+services:
+  chatterbox:
+    image: rmmorrison/chatterbox:latest
+    restart: always
+    environment:
+      DISCORD_TOKEN: <insert Discord bot token here>
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres/chatterbox
+      SPRING_DATASOURCE_USERNAME: chatterbox
+      SPRING_DATASOURCE_PASSWORD: chatterbox
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:14.2
+    restart: always
+    environment:
+      POSTGRES_USER: chatterbox
+      POSTGRES_PASSWORD: chatterbox
+      POSTGRES_DB: chatterbox
+    #ports:
+      #- 5432:5432
+    volumes:
+      - postgres:/var/lib/postgresql/data
+
+volumes:
+  postgres:

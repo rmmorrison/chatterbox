@@ -8,19 +8,19 @@ databaseChangeLog:
             columns:
               - column:
                   name: message_id
-                  type: long
+                  type: bigint
                   constraints:
                     primaryKey: true
                     nullable: false
                     unique: true
               - column:
                   name: channel_id
-                  type: long
+                  type: bigint
                   constraints:
                     nullable: false
               - column:
                   name: author_id
-                  type: long
+                  type: bigint
                   constraints:
                     nullable: false
               - column:
