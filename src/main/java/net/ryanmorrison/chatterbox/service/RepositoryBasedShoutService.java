@@ -27,6 +27,11 @@ public class RepositoryBasedShoutService implements ShoutService {
     }
 
     @Override
+    public long count(MessageChannel messageChannel) {
+        return shoutRepository.countByChannelId(messageChannel.getIdLong());
+    }
+
+    @Override
     public Optional<Message> getHistory(MessageChannel channel) {
         ShoutHistoryDTO historyDTO = shoutHistoryRepository.findShoutHistoryDTOByChannelId(channel.getIdLong());
         if (historyDTO == null) return Optional.empty();

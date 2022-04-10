@@ -7,6 +7,8 @@ import java.util.Optional;
 
 public interface ShoutService {
 
+    long count(MessageChannel messageChannel);
+
     Optional<Message> getHistory(MessageChannel channel);
 
     Optional<Message> save(Message message);

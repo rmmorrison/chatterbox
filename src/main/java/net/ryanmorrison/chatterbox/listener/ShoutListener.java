@@ -30,6 +30,7 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
 
     private static final String COMMAND_NAME = "shout";
     private static final String LAST_SUBCOMMAND_NAME = "last";
+    private static final String COUNT_SUBCOMMAND_NAME = "count";
 
     private final Random random = new Random();
     private final ShoutService shoutService;
@@ -42,6 +43,7 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
     public Collection<SlashCommandData> getSupportedCommands() {
         Collection<SubcommandData> subcommands = new ArrayList<>();
         subcommands.add(new SubcommandData(LAST_SUBCOMMAND_NAME, "Displays the last returned quote in this channel, if possible"));
+        subcommands.add(new SubcommandData(COUNT_SUBCOMMAND_NAME, "Displays the number of quotes in the database for this channel"));
 
         return Collections.singleton(Commands.slash(COMMAND_NAME, "Interact with the quote database")
                 .addSubcommands(subcommands));
@@ -56,34 +58,23 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
             return;
         }
 
+        if (event.getSubcommandName() == null) {
+            event.reply("You need to provide the full command for me to execute it! :(")
+                    .setEphemeral(true)
+                    .queue();
+            return;
+        }
+
         // let Discord know we're working on it...
         event.deferReply().queue();
 
-        shoutService.getHistory(event.getChannel()).ifPresentOrElse(message -> {
-            Member member = message.getMember();
-            String authorName = member != null ? member.getEffectiveName() : message.getAuthor().getName();
-            String iconUrl = message.getAuthor().getEffectiveAvatarUrl();
-
-            MessageEmbed embed = new EmbedBuilder()
-                    .setColor(new Color(
-                            random.nextInt(255),
-                            random.nextInt(255),
-                            random.nextInt(255)
-                    ))
-                    .setTimestamp(message.getTimeCreated())
-                    .setAuthor(authorName, null, iconUrl)
-                    .setDescription(message.getContentDisplay())
-                    .addField(
-                            "Link to Context",
-                            "https://discordapp.com/channels/" + message.getChannel().getId() + "/" + message.getChannel().getId() + "/" + message.getId(),
-                            false
-                    )
-                    .build();
-
-            event.getHook().sendMessage(new MessageBuilder()
-                    .setEmbeds(embed).build()).queue();
-        }, () -> event.getHook().sendMessage("It doesn't look like anyone has shouted in this channel yet.")
-                .setEphemeral(true).queue());
+        switch (event.getSubcommandName()) {
+            case LAST_SUBCOMMAND_NAME -> handleLast(event);
+            case COUNT_SUBCOMMAND_NAME -> handleCount(event);
+            default -> event.reply("I don't support that action! :(")
+                    .setEphemeral(true)
+                    .queue();
+        }
     }
 
     @Override
@@ -125,6 +116,44 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
         log.debug("Received deleted message with ID {} in channel {}, deleting corresponding shout if it exists.",
                 event.getMessageIdLong(), event.getChannel().getIdLong());
         shoutService.delete(event.getMessageIdLong());
+    }
+
+    private void handleLast(SlashCommandInteractionEvent event) {
+        shoutService.getHistory(event.getChannel()).ifPresentOrElse(message -> {
+            Member member = message.getMember();
+            String authorName = member != null ? member.getEffectiveName() : message.getAuthor().getName();
+            String iconUrl = message.getAuthor().getEffectiveAvatarUrl();
+
+            MessageEmbed embed = new EmbedBuilder()
+                    .setColor(new Color(
+                            random.nextInt(255),
+                            random.nextInt(255),
+                            random.nextInt(255)
+                    ))
+                    .setTimestamp(message.getTimeCreated())
+                    .setAuthor(authorName, null, iconUrl)
+                    .setDescription(message.getContentDisplay())
+                    .addField(
+                            "Link to Context",
+                            "https://discordapp.com/channels/" + message.getChannel().getId() + "/" + message.getChannel().getId() + "/" + message.getId(),
+                            false
+                    )
+                    .build();
+
+            event.getHook().sendMessage(new MessageBuilder()
+                    .setEmbeds(embed).build()).queue();
+        }, () -> event.getHook().sendMessage("It doesn't look like anyone has shouted in this channel yet.")
+                .setEphemeral(true).queue());
+    }
+
+    private void handleCount(SlashCommandInteractionEvent event) {
+        long count = shoutService.count(event.getChannel());
+        String quotesPluralized = count == 1 ? "quote" : "quotes";
+
+        event.getHook().sendMessage(new MessageBuilder()
+                .append(event.getChannel()).append(" has ").append(count).append(" ")
+                .append(quotesPluralized).append(" ").append("in the database.")
+                .build()).queue();
     }
 
     private boolean contentIsNotShout(User author, String content) {
