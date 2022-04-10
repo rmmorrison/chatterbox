@@ -117,6 +117,20 @@
                 <configuration>
                     <from>
                         <image>openjdk:${java.version}</image>
+                        <platforms>
+                            <platform>
+                                <architecture>amd64</architecture>
+                                <os>linux</os>
+                            </platform>
+                            <!-- Jib can't create tar archives in multi-arch mode, so switch commenting out platforms
+                                 depending on what architecture you want to build for -->
+                            <!--
+                            <platform>
+                                <architecture>arm64</architecture>
+                                <os>linux</os>
+                            </platform>
+                            -->
+                        </platforms>
                     </from>
                     <to>
                         <image>rmmorrison/chatterbox</image>
