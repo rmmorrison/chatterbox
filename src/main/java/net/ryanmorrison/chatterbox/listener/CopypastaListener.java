@@ -140,7 +140,9 @@ public class CopypastaListener extends SlashCommandsListenerAdapter {
         EmbedBuilder builder = new EmbedBuilder()
                 .setTitle("Configured Triggers for #" + event.getChannel().getName());
         entries.forEach(entry -> builder.addField(entry.getTrigger(),
-                "Displays a message with " + entry.getCopypasta().length() + " characters", false));
+                entry.getCopypasta().length() <= 200 ? "Displays: \"" + entry.getCopypasta() + "\"" :
+                        "Displays a message with " + entry.getCopypasta().length() + " characters",
+                false));
 
         event.getHook().sendMessage(new MessageBuilder()
                 .setEmbeds(builder.build())
