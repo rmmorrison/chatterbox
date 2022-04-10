@@ -1,10 +1,13 @@
 package net.ryanmorrison.chatterbox;
 
 import lombok.extern.slf4j.Slf4j;
+import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.events.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.CommandListUpdateAction;
 import net.ryanmorrison.chatterbox.framework.SlashCommandsListenerAdapter;
 import org.jetbrains.annotations.NotNull;
@@ -12,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -33,29 +37,87 @@ public class ReadyHandler extends ListenerAdapter {
                 .flatMap(listener -> listener.getSupportedCommands().stream())
                 .toList();
 
-        if (isDebugModeEnabled()) {
-            CommandListUpdateAction combinedActions = null;
-            for (Guild guild : event.getJDA().getGuilds()) {
-                log.info("Registering {} total commands in server \"{}\" (debug mode).", combinedCommands.size(),
-                        guild.getName());
-                if (combinedActions == null) {
-                    combinedActions = guild.updateCommands().addCommands(combinedCommands.toArray(SlashCommandData[]::new));
-                } else {
-                    combinedActions.zip(guild.updateCommands().addCommands(combinedCommands.toArray(SlashCommandData[]::new)));
-                }
-            }
+        if (isDebugModeEnabled()) handleGuildLevelCommandRegistration(combinedCommands, event.getJDA().getGuilds());
+        else handleGlobalCommandRegistration(combinedCommands, event.getJDA());
+    }
 
-            if (combinedActions != null) {
-                combinedActions.queue();
-            }
-            else
-            {
-                log.warn("No guilds were discovered to register commands to (debug mode). Nothing to do.");
+    private void handleGuildLevelCommandRegistration(Collection<SlashCommandData> combinedCommands, List<Guild> guilds) {
+        List<CommandListUpdateAction> updateActions = new ArrayList<>();
+        List<RestAction<Void>> deleteActions = new ArrayList<>();
+
+        for (Guild guild : guilds) {
+            log.info("Registering {} total commands in server \"{}\" (debug mode).", combinedCommands.size(),
+                    guild.getName());
+
+            deleteActions.addAll(guild.retrieveCommands().complete().stream()
+                    .map(command -> guild.deleteCommandById(command.getId())).toList());
+            log.info("Will remove {} pre-existing commands in server \"{}\" (debug mode).", deleteActions.size(),
+                    guild.getName());
+
+            updateActions.add(guild.updateCommands().addCommands(combinedCommands.toArray(SlashCommandData[]::new)));
+        }
+
+        if (!deleteActions.isEmpty()) {
+            log.info("Executing bulk command delete operation against the Discord API (debug mode).");
+            executeBulkDeleteOperation(deleteActions);
+
+            // wait a few seconds before registering new commands to decrease the likelihood Discord will ratelimit us
+            log.info("Sleeping a short while to avoid ratelimits.");
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                log.error("Sleep between Discord REST interactions interrupted.", e);
             }
         }
-        else {
-            log.info("Registering {} commands globally.", combinedCommands.size());
-            event.getJDA().updateCommands().addCommands(combinedCommands.toArray(SlashCommandData[]::new)).queue();
+
+        if (!updateActions.isEmpty()) {
+            log.info("Executing bulk command update operation against the Discord API (debug mode).");
+            CommandListUpdateAction firstElement = updateActions.get(0);
+            updateActions.remove(firstElement);
+            RestAction<List<List<Command>>> bulkUpdateAction = firstElement.zip(firstElement, updateActions.toArray(RestAction[]::new));
+            bulkUpdateAction.complete();
+        }
+        else log.warn("No guilds were discovered to register commands to (debug mode). Nothing to do.");
+    }
+
+    private void handleGlobalCommandRegistration(Collection<SlashCommandData> combinedCommands, JDA instance) {
+        List<RestAction<Void>> deleteActions = new ArrayList<>();
+        List<Command> currentCommandList = instance.retrieveCommands().complete();
+
+        for (Command command : currentCommandList) {
+            deleteActions.add(instance.deleteCommandById(command.getId()));
+            log.debug("Prepared to remove command with ID {} from global command registry.", command.getId());
+        }
+
+        // make sure we remove any guild-level commands left over from debug sessions
+        for (Guild guild : instance.getGuilds()) {
+            deleteActions.addAll(guild.retrieveCommands().complete().stream()
+                    .map(command -> guild.deleteCommandById(command.getId())).toList());
+        }
+
+        if (!deleteActions.isEmpty()) {
+            log.info("Executing bulk command delete operation against the Discord API.");
+            executeBulkDeleteOperation(deleteActions);
+
+            // wait a few seconds before registering new commands to decrease the likelihood Discord will ratelimit us
+            log.info("Sleeping a short while to avoid ratelimits.");
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                log.error("Sleep between Discord REST interactions interrupted.", e);
+            }
+        }
+
+        log.info("Registering {} commands globally.", combinedCommands.size());
+        instance.updateCommands().addCommands(combinedCommands.toArray(SlashCommandData[]::new)).queue();
+    }
+
+    private void executeBulkDeleteOperation(List<RestAction<Void>> deleteActions) {
+        if (!deleteActions.isEmpty()) {
+            RestAction<Void> firstElement = deleteActions.get(0);
+            deleteActions.remove(firstElement);
+            RestAction<List<Void>> bulkDeleteAction = firstElement.zip(firstElement, deleteActions.toArray(RestAction[]::new));
+            bulkDeleteAction.complete(); // complete instead of queue so we know when it's done and can wait
         }
     }
 
