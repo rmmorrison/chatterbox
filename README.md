@@ -80,3 +80,7 @@ It can be started via a terminal:
 `DISCORD_TOKEN=<token> java -jar target/chatterbox-0.0.1-SNAPSHOT.jar`
 
 As with running under Docker, without explicit database configuration the bot will start using an in-memory database which is lost when the application stops. For non-test use, database configuration is **mandatory**. See the above section on Docker deployments for a reference on what environment variables are recommended.
+
+## Command Registration
+
+Slash commands by default are registered with Discord on a global level, not a per-server level. If the bot detects a debugger is attached, or the property `discord.forceGuildRegistration` (environment variable `DISCORD_FORCEGUILDREGISTRATION`) is set to `true`, then commands will be registered to each server individually. Global registration is recommended by Discord, but may take up to an hour to reflect changes in clients.

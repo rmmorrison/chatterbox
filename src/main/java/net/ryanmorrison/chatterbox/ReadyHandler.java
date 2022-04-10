@@ -12,6 +12,7 @@ import net.dv8tion.jda.api.requests.restaction.CommandListUpdateAction;
 import net.ryanmorrison.chatterbox.framework.SlashCommandsListenerAdapter;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.lang.management.ManagementFactory;
@@ -23,9 +24,12 @@ import java.util.List;
 @Slf4j
 public class ReadyHandler extends ListenerAdapter {
 
+    private final boolean forceGuildRegistration;
     private final List<ListenerAdapter> listeners;
 
-    public ReadyHandler(@Autowired List<ListenerAdapter> listeners) {
+    public ReadyHandler(@Value("${discord.forceGuildRegistration:false}") boolean forceGuildRegistration,
+                        @Autowired List<ListenerAdapter> listeners) {
+        this.forceGuildRegistration = forceGuildRegistration;
         this.listeners = listeners;
     }
 
@@ -123,6 +127,7 @@ public class ReadyHandler extends ListenerAdapter {
 
     private boolean isDebugModeEnabled() {
         // big hacks here: check if the JDWP (Java Wire Debug Protocol) agent is being used
-        return ManagementFactory.getRuntimeMXBean().getInputArguments().stream().anyMatch(s -> s.contains("jdwp"));
+        return forceGuildRegistration ||
+                ManagementFactory.getRuntimeMXBean().getInputArguments().stream().anyMatch(s -> s.contains("jdwp"));
     }
 }
