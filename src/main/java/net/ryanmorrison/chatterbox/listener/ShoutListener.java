@@ -31,6 +31,7 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
     private static final String COMMAND_NAME = "shout";
     private static final String LAST_SUBCOMMAND_NAME = "last";
     private static final String COUNT_SUBCOMMAND_NAME = "count";
+    private static final String TOP10_SUBCOMMAND_NAME = "top10";
 
     private final Random random = new Random();
     private final ShoutService shoutService;
@@ -44,6 +45,7 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
         Collection<SubcommandData> subcommands = new ArrayList<>();
         subcommands.add(new SubcommandData(LAST_SUBCOMMAND_NAME, "Displays the last returned quote in this channel, if possible"));
         subcommands.add(new SubcommandData(COUNT_SUBCOMMAND_NAME, "Displays the number of quotes in the database for this channel"));
+        subcommands.add(new SubcommandData(TOP10_SUBCOMMAND_NAME, "Displays the top 10 most active shouters in this channel"));
 
         return Collections.singleton(Commands.slash(COMMAND_NAME, "Interact with the quote database")
                 .addSubcommands(subcommands));
@@ -71,6 +73,7 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
         switch (event.getSubcommandName()) {
             case LAST_SUBCOMMAND_NAME -> handleLast(event);
             case COUNT_SUBCOMMAND_NAME -> handleCount(event);
+            case TOP10_SUBCOMMAND_NAME -> handleTop10(event);
             default -> event.reply("I don't support that action! :(")
                     .setEphemeral(true)
                     .queue();
@@ -153,6 +156,32 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
         event.getHook().sendMessage(new MessageBuilder()
                 .append(event.getChannel()).append(" has ").append(count).append(" ")
                 .append(quotesPluralized).append(" ").append("in the database.")
+                .build()).queue();
+    }
+
+    private void handleTop10(SlashCommandInteractionEvent event) {
+        Map<Member, Long> top10 = shoutService.getTop10Users(event.getChannel(), event.getGuild());
+        if (top10.isEmpty()) {
+            event.getHook().sendMessage("It doesn't look like anyone has shouted in this channel yet.")
+                    .setEphemeral(true).queue();
+            return;
+        }
+
+        EmbedBuilder builder = new EmbedBuilder()
+                .setTitle("Top 10 Loudmouths in #" + event.getChannel().getName())
+                .setDescription("Who's got the biggest chatterbox around these parts?");
+
+        int position = 1;
+        for (Map.Entry<Member, Long> entry : top10.entrySet()) {
+            String quotesPluralized = entry.getValue() == 1 ? "quote" : "quotes";
+            builder.addField("#" + position + ": " + entry.getKey().getEffectiveName(),
+                    "with " + entry.getValue() + " " + quotesPluralized,
+                    true);
+            position++;
+        }
+
+        event.getHook().sendMessage(new MessageBuilder()
+                .setEmbeds(builder.build())
                 .build()).queue();
     }
 

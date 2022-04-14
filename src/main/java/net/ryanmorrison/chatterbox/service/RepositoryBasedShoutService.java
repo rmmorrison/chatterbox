@@ -1,8 +1,11 @@
 package net.ryanmorrison.chatterbox.service;
 
 import lombok.extern.slf4j.Slf4j;
+import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageChannel;
+import net.ryanmorrison.chatterbox.persistence.dto.ShoutUserCountDTO;
 import net.ryanmorrison.chatterbox.persistence.model.Shout;
 import net.ryanmorrison.chatterbox.persistence.model.ShoutHistory;
 import net.ryanmorrison.chatterbox.persistence.repository.ShoutHistoryRepository;
@@ -12,7 +15,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -29,6 +34,13 @@ public class RepositoryBasedShoutService implements ShoutService {
     @Override
     public long count(MessageChannel messageChannel) {
         return shoutRepository.countByChannelId(messageChannel.getIdLong());
+    }
+
+    @Override
+    public Map<Member, Long> getTop10Users(MessageChannel channel, Guild guild) {
+        return shoutRepository.countByChannelIdGroupingUsers(channel.getIdLong(), PageRequest.of(0, 10)).getContent().stream()
+                .dropWhile(dto -> guild.retrieveMemberById(dto.getAuthorId()).complete() == null)
+                .collect(Collectors.toMap(dto -> guild.retrieveMemberById(dto.getAuthorId()).complete(), ShoutUserCountDTO::getCount));
     }
 
     @Override

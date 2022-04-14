@@ -26,7 +26,7 @@ public class ChatterboxConfiguration {
 
     @Bean
     public JDA jda() throws LoginException {
-        return JDABuilder.createLight(token, GatewayIntent.GUILD_MESSAGES)
+        return JDABuilder.createLight(token, GatewayIntent.GUILD_MESSAGES, GatewayIntent.GUILD_MEMBERS)
                 .addEventListeners((Object[]) listeners.toArray(ListenerAdapter[]::new))
                 .setActivity(Activity.listening("everything you say"))
                 .build();
