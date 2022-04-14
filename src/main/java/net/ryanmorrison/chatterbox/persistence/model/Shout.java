@@ -12,7 +12,7 @@ import javax.persistence.Table;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ShoutDTO {
+public class Shout {
 
     @Getter
     @Setter

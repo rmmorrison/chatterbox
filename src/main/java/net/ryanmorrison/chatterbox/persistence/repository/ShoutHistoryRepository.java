@@ -1,11 +1,11 @@
 package net.ryanmorrison.chatterbox.persistence.repository;
 
-import net.ryanmorrison.chatterbox.persistence.model.ShoutHistoryDTO;
+import net.ryanmorrison.chatterbox.persistence.model.ShoutHistory;
 import org.springframework.data.repository.CrudRepository;
 
-public interface ShoutHistoryRepository extends CrudRepository<ShoutHistoryDTO, Long> {
+public interface ShoutHistoryRepository extends CrudRepository<ShoutHistory, Long> {
 
-    ShoutHistoryDTO findShoutHistoryDTOByChannelId(long channelId);
+    ShoutHistory findShoutHistoryByChannelId(long channelId);
 
     int deleteByMessageId(long messageId);
 }

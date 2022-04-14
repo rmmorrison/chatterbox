@@ -3,8 +3,8 @@ package net.ryanmorrison.chatterbox.service;
 import lombok.extern.slf4j.Slf4j;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageChannel;
-import net.ryanmorrison.chatterbox.persistence.model.ShoutDTO;
-import net.ryanmorrison.chatterbox.persistence.model.ShoutHistoryDTO;
+import net.ryanmorrison.chatterbox.persistence.model.Shout;
+import net.ryanmorrison.chatterbox.persistence.model.ShoutHistory;
 import net.ryanmorrison.chatterbox.persistence.repository.ShoutHistoryRepository;
 import net.ryanmorrison.chatterbox.persistence.repository.ShoutRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,22 +33,22 @@ public class RepositoryBasedShoutService implements ShoutService {
 
     @Override
     public Optional<Message> getHistory(MessageChannel channel) {
-        ShoutHistoryDTO historyDTO = shoutHistoryRepository.findShoutHistoryDTOByChannelId(channel.getIdLong());
-        if (historyDTO == null) return Optional.empty();
+        ShoutHistory history = shoutHistoryRepository.findShoutHistoryByChannelId(channel.getIdLong());
+        if (history == null) return Optional.empty();
 
-        return Optional.ofNullable(channel.retrieveMessageById(historyDTO.getMessageId()).complete());
+        return Optional.ofNullable(channel.retrieveMessageById(history.getMessageId()).complete());
     }
 
     @Override
     public Optional<Message> save(Message message) {
         Optional<Message> random = getRandomMessage(message.getChannel());
 
-        ShoutDTO existing = shoutRepository.getShoutDTOByChannelIdAndContent(message.getChannel().getIdLong(),
+        Shout existing = shoutRepository.getShoutByChannelIdAndContent(message.getChannel().getIdLong(),
                 message.getContentDisplay());
         if (existing == null) {
             log.debug("Existing shout matching content \"{}\" in channel with ID {} doesn't exist, saving new.",
                     message.getContentDisplay(), message.getChannel().getIdLong());
-            shoutRepository.save(ShoutDTO.builder()
+            shoutRepository.save(Shout.builder()
                     .messageId(message.getIdLong())
                     .channelId(message.getChannel().getIdLong())
                     .authorId(message.getAuthor().getIdLong())
@@ -58,7 +58,7 @@ public class RepositoryBasedShoutService implements ShoutService {
 
         random.ifPresent(rand -> {
             // do we have history already?
-            ShoutHistoryDTO existingHistory = shoutHistoryRepository.findShoutHistoryDTOByChannelId(message.getChannel().getIdLong());
+            ShoutHistory existingHistory = shoutHistoryRepository.findShoutHistoryByChannelId(message.getChannel().getIdLong());
             if (existingHistory != null) {
                 // we do - save updated value
                 existingHistory.setMessageId(rand.getIdLong());
@@ -66,7 +66,7 @@ public class RepositoryBasedShoutService implements ShoutService {
             }
             else {
                 // we do not - create it
-                shoutHistoryRepository.save(ShoutHistoryDTO.builder()
+                shoutHistoryRepository.save(ShoutHistory.builder()
                         .channelId(rand.getChannel().getIdLong())
                         .messageId(rand.getIdLong())
                         .build());
@@ -78,7 +78,7 @@ public class RepositoryBasedShoutService implements ShoutService {
 
     @Override
     public boolean update(Message message) {
-        ShoutDTO existing = shoutRepository.getShoutDTOByMessageId(message.getIdLong());
+        Shout existing = shoutRepository.getShoutByMessageId(message.getIdLong());
         if (existing != null) {
             log.debug("Shout matching message ID {} identified in the database, updating contents.", message.getIdLong());
             existing.setContent(message.getContentDisplay());
@@ -109,7 +109,7 @@ public class RepositoryBasedShoutService implements ShoutService {
         int index = (int)(Math.random() * total);
 
         // use Spring Data's Pageable to get a single "page" at the random index
-        Page<ShoutDTO> randomPage = shoutRepository.findAllByChannelId(channel.getIdLong(), PageRequest.of(index, 1));
+        Page<Shout> randomPage = shoutRepository.findAllByChannelId(channel.getIdLong(), PageRequest.of(index, 1));
 
         // if it exists, query Discord API to load the entire message and return it
         // TODO: if Discord says it doesn't exist anymore, we should delete from the database too

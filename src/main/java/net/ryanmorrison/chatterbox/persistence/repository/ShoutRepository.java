@@ -1,21 +1,21 @@
 package net.ryanmorrison.chatterbox.persistence.repository;
 
-import net.ryanmorrison.chatterbox.persistence.model.ShoutDTO;
+import net.ryanmorrison.chatterbox.persistence.model.Shout;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface ShoutRepository extends CrudRepository<ShoutDTO, Long> {
+public interface ShoutRepository extends CrudRepository<Shout, Long> {
 
     long countByChannelId(long channelId);
 
-    ShoutDTO getShoutDTOByChannelIdAndContent(long channelId, String content);
+    Shout getShoutByChannelIdAndContent(long channelId, String content);
 
-    ShoutDTO getShoutDTOByMessageId(long messageId);
+    Shout getShoutByMessageId(long messageId);
 
-    Page<ShoutDTO> findAllByChannelId(long channelId, Pageable pageable);
+    Page<Shout> findAllByChannelId(long channelId, Pageable pageable);
 
     int deleteByMessageId(long messageId);
 }
