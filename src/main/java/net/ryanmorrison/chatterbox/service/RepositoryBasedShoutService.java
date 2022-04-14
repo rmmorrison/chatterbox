@@ -15,8 +15,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Component
@@ -38,9 +40,17 @@ public class RepositoryBasedShoutService implements ShoutService {
 
     @Override
     public Map<Member, Long> getTop10Users(MessageChannel channel, Guild guild) {
-        return shoutRepository.countByChannelIdGroupingUsers(channel.getIdLong(), PageRequest.of(0, 10)).getContent().stream()
-                .dropWhile(dto -> guild.retrieveMemberById(dto.getAuthorId()).complete() == null)
-                .collect(Collectors.toMap(dto -> guild.retrieveMemberById(dto.getAuthorId()).complete(), ShoutUserCountDTO::getCount));
+        List<ShoutUserCountDTO> dtoList = shoutRepository.countByChannelIdGroupingUsers(channel.getIdLong(), PageRequest.of(0, 10))
+                .getContent();
+        Map<Long, Member> memberList = guild.retrieveMembersByIds(dtoList.stream()
+                .map(ShoutUserCountDTO::getAuthorId)
+                .collect(Collectors.toList()))
+                .get().stream()
+                .collect(Collectors.toMap(member -> member.getUser().getIdLong(), Function.identity()));
+
+        return dtoList.stream()
+                .dropWhile(dto -> !memberList.containsKey(dto.getAuthorId()))
+                .collect(Collectors.toMap(dto -> memberList.get(dto.getAuthorId()), ShoutUserCountDTO::getCount));
     }
 
     @Override

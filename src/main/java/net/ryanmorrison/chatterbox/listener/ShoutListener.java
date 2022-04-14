@@ -73,7 +73,9 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
         switch (event.getSubcommandName()) {
             case LAST_SUBCOMMAND_NAME -> handleLast(event);
             case COUNT_SUBCOMMAND_NAME -> handleCount(event);
-            case TOP10_SUBCOMMAND_NAME -> handleTop10(event);
+            // top10 must run on a separate thread due to a blocking Discord API call; JDA doesn't allow blocking calls
+            // on gateway threads
+            case TOP10_SUBCOMMAND_NAME -> new Thread(() -> handleTop10(event)).start();
             default -> event.reply("I don't support that action! :(")
                     .setEphemeral(true)
                     .queue();
