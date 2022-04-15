@@ -4,7 +4,7 @@ services:
     restart: always
     environment:
       DISCORD_TOKEN: <insert Discord bot token here>
-      #DISCORD_FORCE_GUILD_REGISTRATION: true
+      #DISCORD_FORCEGUILDREGISTRATION: true
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres/chatterbox
       SPRING_DATASOURCE_USERNAME: chatterbox
       SPRING_DATASOURCE_PASSWORD: chatterbox
