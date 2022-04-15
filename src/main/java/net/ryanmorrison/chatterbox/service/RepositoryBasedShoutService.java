@@ -5,6 +5,7 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageChannel;
+import net.ryanmorrison.chatterbox.persistence.dto.ShoutMemberCountDTO;
 import net.ryanmorrison.chatterbox.persistence.dto.ShoutUserCountDTO;
 import net.ryanmorrison.chatterbox.persistence.model.Shout;
 import net.ryanmorrison.chatterbox.persistence.model.ShoutHistory;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,8 +41,8 @@ public class RepositoryBasedShoutService implements ShoutService {
     }
 
     @Override
-    public Map<Member, Long> getTop10Users(MessageChannel channel, Guild guild) {
-        List<ShoutUserCountDTO> dtoList = shoutRepository.countByChannelIdGroupingUsers(channel.getIdLong(), PageRequest.of(0, 10))
+    public List<ShoutMemberCountDTO> getTop10Users(MessageChannel channel, Guild guild) {
+        List<ShoutUserCountDTO> dtoList = shoutRepository.countByChannelIdGroupingUsers(channel.getIdLong(), PageRequest.of(0, 20))
                 .getContent();
         Map<Long, Member> memberList = guild.retrieveMembersByIds(dtoList.stream()
                 .map(ShoutUserCountDTO::getAuthorId)
@@ -49,8 +51,11 @@ public class RepositoryBasedShoutService implements ShoutService {
                 .collect(Collectors.toMap(member -> member.getUser().getIdLong(), Function.identity()));
 
         return dtoList.stream()
-                .dropWhile(dto -> !memberList.containsKey(dto.getAuthorId()))
-                .collect(Collectors.toMap(dto -> memberList.get(dto.getAuthorId()), ShoutUserCountDTO::getCount));
+                .filter(dto -> memberList.containsKey(dto.getAuthorId()))
+                .limit(10)
+                .map(dto -> new ShoutMemberCountDTO(memberList.get(dto.getAuthorId()), dto.getCount()))
+                .sorted(Comparator.comparingLong(ShoutMemberCountDTO::getCount).reversed())
+                .collect(Collectors.toList());
     }
 
     @Override

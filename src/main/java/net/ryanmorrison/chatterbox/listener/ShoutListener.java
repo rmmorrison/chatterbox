@@ -15,6 +15,7 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.ryanmorrison.chatterbox.framework.SlashCommandsListenerAdapter;
+import net.ryanmorrison.chatterbox.persistence.dto.ShoutMemberCountDTO;
 import net.ryanmorrison.chatterbox.service.ShoutService;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
 import javax.transaction.Transactional;
 import java.awt.*;
 import java.util.*;
+import java.util.List;
 
 @Component
 @Slf4j
@@ -162,7 +164,7 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
     }
 
     private void handleTop10(SlashCommandInteractionEvent event) {
-        Map<Member, Long> top10 = shoutService.getTop10Users(event.getChannel(), event.getGuild());
+        List<ShoutMemberCountDTO> top10 = shoutService.getTop10Users(event.getChannel(), event.getGuild());
         if (top10.isEmpty()) {
             event.getHook().sendMessage("It doesn't look like anyone has shouted in this channel yet.")
                     .setEphemeral(true).queue();
@@ -174,10 +176,10 @@ public class ShoutListener extends SlashCommandsListenerAdapter {
                 .setDescription("Who's got the biggest chatterbox around these parts?");
 
         int position = 1;
-        for (Map.Entry<Member, Long> entry : top10.entrySet()) {
-            String quotesPluralized = entry.getValue() == 1 ? "quote" : "quotes";
-            builder.addField("#" + position + ": " + entry.getKey().getEffectiveName(),
-                    "with " + entry.getValue() + " " + quotesPluralized,
+        for (ShoutMemberCountDTO value : top10) {
+            String quotesPluralized = value.getCount() == 1 ? "quote" : "quotes";
+            builder.addField("#" + position + ": " + value.getMember().getEffectiveName(),
+                    "with " + value.getCount() + " " + quotesPluralized,
                     true);
             position++;
         }
