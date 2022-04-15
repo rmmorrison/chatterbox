@@ -9,78 +9,111 @@ server in which it operates.
 
 ### Prerequisites
 
-chatterbox is primarily run in containerized form, so Docker is recommended.
+In order to add the bot to your own server, you'll need to create a new Application with Discord and obtain the bot
+token, which is the authentication credential chatterbox requires to access the Discord API. To create an Application,
+you'll need to sign into Discord's [Developer Portal](https://discord.com/developers) with a valid set of Discord
+credentials. Once signed in, follow these steps:
 
-Alternatively, chatterbox can be run via its `jar` file directly. In this mode, a Java 17 runtime (or greater) is required.
-
-You must also first use a Discord account to create a bot and obtain its bot token, used to authenticate to Discord's API.
-This is a mandatory requirement. To obtain a bot token:
-
-1. Visit [Discord's Developer Portal](https://discord.com/developers).
-2. Sign in using your Discord account.
-3. Click the "New Applications" button in the top right corner.
-4. Name the new application. (Note: the name given here is what the bot's nickname will be once added to your server.)
-5. Click "Bot" in the left-hand menu.
-6. Click "Add Bot" and accept the prompt that appears.
-7. Click the "Copy" button to copy the required token to your clipboard. You can also use the "Click to Reveal Token" link to reveal the token's value.
-
-Make sure that both of the "server members intent" and "message content intent" privileged gateway intents are enabled for your bot in the Discord Developer Portal.
-Without them, chatterbox may not operate correctly.
+1. Click the "New Applications" button in the top right corner.
+2. Name the new application. (Note: the name given here is what the bot's nickname will be once added to your server.)
+3. Click "Bot" in the left-hand menu.
+4. Click the blue "Add Bot" button beside the "Build-A-Bot" option. When prompted to add a bot to this app, select
+"Yes, do it!"
+5. Scroll down to "Privileged Gateway Intents" and enable both the "Server Members Intent" and "Message Content Intent"
+options. These options are mandatory for certain bot behaviour and chatterbox will not function correctly without them.
+6. Scroll back to the top. Click the blue "Reset Token" button. When prompted to confirm, select "Yes, do it!"
+7. (If prompted) Enter the current two-factor authentication code for your Discord account.
+8. Copy the value that appears and keep it in a safe place for now. You'll require it as a mandatory configuration
+value for chatterbox. You can click the blue "Copy" button to automatically copy the token to your clipboard.
 
 ### Run with Docker (Recommended)
 
-In order to obtain a Docker image, building the project at this time is a requirement. You will need to clone this project and use the provided Maven wrapper to build the project and generate a Docker image archive. A Java 17+ Development Kit (JDK) is required and can be obtained from [Oracle](https://www.oracle.com/java/technologies/downloads/) or another Java vendor, such as [Eclipse Temurin](https://adoptium.net/) (formerly AdoptOpenJDK).
+The build process for chatterbox can produce a Docker image and is the recommended way to run the bot, as it doesn't
+require any additional runtime dependencies (except for Docker itself or an OCI-compliant container runtime). At this
+time, pre-built Docker images are not available, and you will need to build your own. See the [Building](#building)
+section for instructions on building (including Docker images).
 
-Once you have a suitable Java Development Kit, clone this repository and execute the Maven wrapper to build the project:
+Docker images are built in compressed `.tar.gz` archive format and need to be loaded into the Docker runtime in order to
+be launched as containers. By default, these archives are available at `target/chatterbox-latest.tar.gz` after building.
+Loading them into the Docker runtime is done via the following command:
 
-`./mvnw clean package` (on Mac/Linux) or
+* `docker load --input target/chatterbox.jar`
 
-`mvnw.bat clean package` (on Windows)
+Running the Docker image with minimal required configuration (the Discord bot token) will launch the bot using an
+in-memory database. Using an in-memory database is only recommended for testing purposes, and actual deployments should
+use a separate standalone database. PostgreSQL is recommended, and a `docker-compose.yml` is included with this
+repository to demonstrate running chatterbox with an external PostgreSQL database.
 
-Once the Java project is built (and a resulting `.jar` file is placed in the auto-created `target/` directory), execute Maven a second time to build the Docker image archive:
+If you don't wish to use Compose to run the Docker image, you can start a container using Docker directly. The same
+caveats apply; an in-memory database is used unless specified otherwise and an external database is recommended. You can
+launch the bot via:
 
-`./mvnw jib:buildTar` (on Mac/Linux) or
+* `docker run -e DISCORD_TOKEN=<token> rmmorrison/chatterbox:latest`
 
-`mvnw.bat jib:buildTar` (on Windows)
+See the [Configuration](#configuration) section for more details on available configuration properties.
 
-(Note: this Docker image build process uses a method that does **not** require a Docker runtime installed and active on the system to produce images. You do not need Docker installed if you are not intending to run the Docker image on the same system you are building with.)
+### Run via JAR
 
-The Docker image will be built and stored as a TAR archive at `target/chatterbox-latest.tar` when complete.
+If you don't wish to use Docker to run chatterbox, it can be run via a JAR file directly. You will require a Java 17+
+distribution on your system in order for chatterbox to run. Building the project will produce a JAR file in the `target`
+directory, which can be started via a terminal:
 
-You can now load the resulting image archive into Docker:
+* `DISCORD_TOKEN=<token> java -jar target/chatterbox-0.0.1-SNAPSHOT.jar`
 
-`docker load < target/chatterbox-latest.tar` (on Mac/Linux) or
+Configuration is passed as environment variables to the `java` command. As with running in a Docker container, an
+in-memory database is used unless specified otherwise and an external database is recommended. See the
+[Configuration](#configuration) section for more details on available configuration properties.
 
-`docker load --input target/chatterbox-latest.tar` (on all platforms)
+# Building
 
-A `docker-compose.yml` Compose file is provided alongside this README as an example of how to run the bot via Docker Compose, including a separate standalone PostgreSQL database. You will need to edit the Compose file and, at minimum, set the `DISCORD_TOKEN` environment variable to the bot token you obtained in the Prerequisites section.
+A Java 17+ development kit (JDK) is required to build chatterbox. You can confirm whether your JDK is installed
+correctly via executing at a terminal:
 
-Alternatively, the bot can be started via Docker directly:
+* `java -version`
 
-`docker run -e DISCORD_TOKEN=<token> rmmorrison/chatterbox:latest`
+You should see version information similar to the below as a response:
 
-Additional environment variables can be set as necessary. Note that without explicit database configuration, the bot will start using an in-memory database which is lost when the application stops. For non-test use, database configuration is **mandatory**.
+```
+openjdk version "17.0.2" 2022-01-18
+OpenJDK Runtime Environment (build 17.0.2+8-86)
+OpenJDK 64-Bit Server VM (build 17.0.2+8-86, mixed mode, sharing)
+```
 
-chatterbox is built with Spring Boot using Spring Data to manage its access to the database; thus its database configuration inherits the configuration provided by Spring. You can see a full list of properties available in the [Spring Boot documentation](https://docs.spring.io/spring-boot/docs/current/reference/html/application-properties.html#appendix.application-properties.data). Note that to provide these values as environment variables to Docker, they must be converted to uppercase and the periods replaced with underscores - for example, if you wanted to configure the property `spring.datasource.url`, you will pass the environment variable `SPRING_DATASOURCE_URL` with your desired value.
+chatterbox uses the Maven build tool to execute builds and includes the Maven wrapper which enables a fully-encapsulated
+Maven build setup without requiring any build tools to be pre-installed on the host. It will obtain a compatible Maven
+version, store it alongside the project and use it to execute build actions.
 
-You will likely wish to configure:
+The first step is to clone this repository to a location of your choice. Next, open a terminal (or Command Prompt) and
+navigate to the directory you cloned this repository to. Use the Maven wrapper to instruct Maven to build the project
+and create a Docker image archive:
 
-* `SPRING_DATASOURCE_URL`: the JDBC URL to your database (e.g. `jdbc:postgres://localhost:5432/chatterbox`)
-* `SPRING_DATASOURCE_USERNAME`: the username to authenticate to your database (e.g. `chatterbox`)
-* `SPRING_DATASOURCE_PASSWORD`: the password to authenticate to your database (e.g. `chatterbox`)
+* `./mvnw clean package jib:buildTar` (Mac/Linux users)
+* `mvnw.bat clean package jib:buildTar` (Windows users)
 
-For more detailed tuning, such as managing connection pool properties, see the [Spring Boot documentation](https://docs.spring.io/spring-boot/docs/current/reference/html/application-properties.html#appendix.application-properties.data) for the properties prefixed with `spring.datasource.hikari.*`.
+Note that Docker is _not_ required to be installed or running on the host to build the Docker image. If you don't wish
+to run with Docker, you can skip the image build process by omitting `jib:buildTar` from the Maven wrapper command.
 
-### Run via JAR directly
+Maven will perform the build and hopefully output that it was successful:
 
-If you want to start the bot outside of Docker, building the project provides a "jar-with-dependencies" artifact in the `target/` directory that is an all-in-one JAR file containing everything the bot needs to run.
+```
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+```
 
-It can be started via a terminal:
+The newly built JAR will be available at `target/chatterbox-0.0.1-SNAPSHOT.jar`. If you built a Docker image archive as
+well, it will be available at `target/chatterbox-latest.tar.gz`.
 
-`DISCORD_TOKEN=<token> java -jar target/chatterbox-0.0.1-SNAPSHOT.jar`
+# Configuration
 
-As with running under Docker, without explicit database configuration the bot will start using an in-memory database which is lost when the application stops. For non-test use, database configuration is **mandatory**. See the above section on Docker deployments for a reference on what environment variables are recommended.
+The easiest way to configure chatterbox is via environment variables made available to the Java process (or Docker
+container). The below table lists required, recommended and available environment variables that can be provided:
 
-## Command Registration
-
-Slash commands by default are registered with Discord on a global level, not a per-server level. If the bot detects a debugger is attached, or the property `discord.forceGuildRegistration` (environment variable `DISCORD_FORCEGUILDREGISTRATION`) is set to `true`, then commands will be registered to each server individually. Global registration is recommended by Discord, but may take up to an hour to reflect changes in clients.
+| Environment Variable             | Required?            | Description                                                                                                                  | Example                                                     |
+|----------------------------------|----------------------|------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------|
+| `DISCORD_TOKEN`                  | Yes                  | The bot token obtained from creating a new Application on the Discord Developer Portal.                                      | OTY0Mzc3MTg1MDM5MzA2ODAy.YljwPg.EZ536TsU8AyYuRzSQcRwz1JHTl8 |
+| `DISCORD_ACTIVITY`               | No                   | A custom activity status the bot should report when connecting to Discord. Must be in the format "<activity type>:<status>". | listening:everything you say                                |
+| `DISCORD_FORCEGUILDREGISTRATION` | No                   | Configures chatterbox to register its slash commands on a per-guild level and not globally. Useful for testing or debugging. | true                                                        |
+| `SPRING_DATASOURCE_URL`          | No (but recommended) | A JDBC URL to an external database for chatterbox to use.                                                                    | jdbc:postgres://localhost:5432/chatterbox                   |
+| `SPRING_DATASOURCE_USERNAME`     | No (but recommended) | The username to authenticate to an external database with.                                                                   | chatterbox                                                  |
+| `SPRING_DATASOURCE_PASSWORD`     | No (but recommended) | The password to authenticate to an external database with.                                                                   | Xw4ptVsKeWaRPCE8KlxbWzBinTl6XMc4                            |
