@@ -41,21 +41,27 @@ public class ReadyHandler extends ListenerAdapter {
                 .flatMap(listener -> listener.getSupportedCommands().stream())
                 .toList();
 
-        if (isDebugModeEnabled()) handleGuildLevelCommandRegistration(combinedCommands, event.getJDA().getGuilds());
+        if (isDebugModeEnabled()) handleGuildLevelCommandRegistration(combinedCommands, event.getJDA());
         else handleGlobalCommandRegistration(combinedCommands, event.getJDA());
     }
 
-    private void handleGuildLevelCommandRegistration(Collection<SlashCommandData> combinedCommands, List<Guild> guilds) {
+    private void handleGuildLevelCommandRegistration(Collection<SlashCommandData> combinedCommands, JDA instance) {
         List<CommandListUpdateAction> updateActions = new ArrayList<>();
-        List<RestAction<Void>> deleteActions = new ArrayList<>();
+        List<RestAction<Void>> deleteActions = new ArrayList<>(instance.retrieveCommands().complete().stream()
+                .map(command -> instance.deleteCommandById(command.getId())).toList());
 
-        for (Guild guild : guilds) {
+        if (deleteActions.size() > 0) {
+            log.info("Will remove {} pre-existing globally registered commands (debug mode).", deleteActions.size());
+        }
+
+        for (Guild guild : instance.getGuilds()) {
             log.info("Registering {} total commands in server \"{}\" (debug mode).", combinedCommands.size(),
                     guild.getName());
 
-            deleteActions.addAll(guild.retrieveCommands().complete().stream()
+            List<Command> guildCommands = guild.retrieveCommands().complete();
+            deleteActions.addAll(guildCommands.stream()
                     .map(command -> guild.deleteCommandById(command.getId())).toList());
-            log.info("Will remove {} pre-existing commands in server \"{}\" (debug mode).", deleteActions.size(),
+            log.info("Will remove {} pre-existing commands in server \"{}\" (debug mode).", guildCommands.size(),
                     guild.getName());
 
             updateActions.add(guild.updateCommands().addCommands(combinedCommands.toArray(SlashCommandData[]::new)));
