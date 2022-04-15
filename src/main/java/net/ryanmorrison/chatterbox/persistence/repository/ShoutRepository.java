@@ -13,7 +13,7 @@ public interface ShoutRepository extends CrudRepository<Shout, Long> {
 
     long countByChannelId(long channelId);
 
-    @Query("SELECT new net.ryanmorrison.chatterbox.persistence.dto.ShoutUserCountDTO(s.authorId, COUNT(s)) FROM Shout s GROUP BY s.authorId ORDER BY COUNT(s) DESC")
+    @Query("SELECT new net.ryanmorrison.chatterbox.persistence.dto.ShoutUserCountDTO(s.authorId, COUNT(s)) FROM Shout s WHERE s.channelId = ?1 GROUP BY s.authorId ORDER BY COUNT(s) DESC")
     Page<ShoutUserCountDTO> countByChannelIdGroupingUsers(long channelId, Pageable pageable);
 
     Shout getShoutByChannelIdAndContent(long channelId, String content);
