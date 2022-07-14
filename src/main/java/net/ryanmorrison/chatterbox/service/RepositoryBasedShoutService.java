@@ -139,7 +139,6 @@ public class RepositoryBasedShoutService implements ShoutService {
         Page<Shout> randomPage = shoutRepository.findAllByChannelId(channel.getIdLong(), PageRequest.of(index, 1));
 
         // if it exists, query Discord API to load the entire message and return it
-        // TODO: if Discord says it doesn't exist anymore, we should delete from the database too
         if (randomPage.hasContent()) {
             long messageId = randomPage.getContent().get(0).getMessageId();
             Message lookup = channel.retrieveMessageById(messageId).complete();
