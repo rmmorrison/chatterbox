@@ -1,4 +1,5 @@
 const path = require('node:path')
+const logger = require('pino')()
 const { REST, Routes } = require('discord.js');
 const { walkDirectoryTree } = require('./util.js');
 const { clientId, guildId, token } = require('./config.json');
@@ -13,7 +14,7 @@ walkDirectoryTree(path.join(__dirname, 'commands'), (file) => {
         commands.push(command.data.toJSON());
     }
     else {
-        console.log(`[WARNING] The command at ${file} is missing a required "data" or "execute" property.`);
+        logger.warn(`The command at ${file} is missing a required "data" or "execute" property.`);
     }
 });
 
@@ -21,15 +22,15 @@ const rest = new REST().setToken(token);
 
 (async () => {
     try {
-        console.log(`Started refreshing ${commands.length} application (/) commands.`);
+        logger.info(`Started refreshing ${commands.length} application (/) commands.`);
 
         const data = await rest.put(
             Routes.applicationGuildCommands(clientId, guildId),
             { body: commands }
         );
 
-        console.log(`Successfully reloaded ${data.length} application (/) commands.`);
+        logger.info(`Successfully reloaded ${data.length} application (/) commands.`);
     } catch (error) {
-        console.error(error);
+        logger.error(error);
     }
 })();

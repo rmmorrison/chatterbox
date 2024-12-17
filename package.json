@@ -18,6 +18,7 @@
   "homepage": "https://github.com/rmmorrison/chatterbox#readme",
   "dependencies": {
     "discord.js": "^14.16.3",
+    "pino": "^9.5.0",
     "sequelize": "^6.37.5",
     "sqlite3": "^5.1.7"
   }

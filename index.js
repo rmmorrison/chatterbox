@@ -1,4 +1,5 @@
 const path = require('node:path');
+const logger = require('pino')()
 const Sequelize = require('sequelize');
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
 const { walkDirectoryTree } = require('./util.js')
@@ -31,7 +32,7 @@ walkDirectoryTree(path.join(__dirname, 'commands'), (file) => {
             Object.entries(moduleModels).forEach(([name, model]) => {
                 // there's probably a better way to handle duplicates but this works for now
                 if (models[name]) {
-                    console.log(`[WARNING] Duplicate model name detected: ${name}. Skipping.`);
+                    logger.warn(`Duplicate model name detected: ${name}. Skipping to avoid conflicts.`);
                 }
                 else {
                     models[name] = model;
@@ -40,7 +41,7 @@ walkDirectoryTree(path.join(__dirname, 'commands'), (file) => {
         }
     }
     else {
-        console.log(`[WARNING] The command at ${file} is missing a required "data" or "execute" property.`);
+        logger.warn(`The command at ${file} is missing a required "data" or "execute" property. Commands can not be registered without those properties.`);
     }
 });
 
@@ -48,16 +49,16 @@ client.once(Events.ClientReady, readyClient => {
     (async() => {
         try {
             await sequelize.authenticate();
-            console.log('Database connection established.');
+            logger.info('Database connection established.');
             // sync our models to the database
             // we can set { force: true } to force a sync on an existing database (for dev purposes)
             await sequelize.sync({ alter: true });
-            console.log(`Successfully synchronized ${Object.keys(models).length} models.`);
+            logger.info(`Successfully synchronized ${Object.keys(models).length} models.`);
         } catch (error) {
-            console.error('Unable to connect to the database:', error);
+            logger.error('Unable to connect to the database:', error);
         }
     })();
-    console.log(`Ready! Logged in as ${readyClient.user.tag}`)
+    logger.info(`Ready! Logged in as ${readyClient.user.tag}.`)
 });
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -65,14 +66,14 @@ client.on(Events.InteractionCreate, async interaction => {
     const command = interaction.client.commands.get(interaction.commandName);
 
     if (!command) {
-        console.error(`No command matching ${interaction.commandName} was found.`);
+        logger.error(`No command matching ${interaction.commandName} was found.`);
         return;
     }
 
     try {
         await command.execute(interaction);
     } catch (error) {
-        console.error(error);
+        logger.error('Unable to execute interaction due to an error:', error);
         if (interaction.replied || interaction.deferred) {
             await interaction.followUp({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
         }
