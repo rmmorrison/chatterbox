@@ -18,6 +18,43 @@ const sequelize = new Sequelize('chatterbox', '', '', {
     storage: 'database.sqlite',
 });
 
+function registerCommand(command) {
+    client.commands.set(command.data.name, command);
+
+    // does the command export any modules we need to register with Sequelize?
+    if ('models' in command) {
+        registerModels(command.models(sequelize));
+    }
+
+    // does the command export any events?
+    if ('events' in command) {
+        registerEvents(command.events);
+    }
+}
+
+function registerModels(list) {
+    Object.entries(list).forEach(([name, model]) => {
+        // there's probably a better way to handle duplicates but this works for now
+        if (models[name]) {
+            logger.warn(`Duplicate model name detected: ${name}. Skipping to avoid conflicts.`);
+            return;
+        }
+
+        models[name] = model;
+    });
+}
+
+function registerEvents(events) {
+    events.forEach(event => {
+        if (event.once) {
+            client.once(event.type, (...args) => event.execute(...args));
+        }
+        else {
+            client.on(event.type, (...args) => event.execute(...args));
+        }
+    });
+}
+
 // iterate over the commands/ directory to discover and auto-register commands
 walkDirectoryTree(path.join(__dirname, 'commands'), (file) => {
     if (!file.endsWith('.js')) return;
@@ -25,23 +62,23 @@ walkDirectoryTree(path.join(__dirname, 'commands'), (file) => {
     const command = require(file);
     // check that the file exports the minimum required fields
     if ('data' in command && 'execute' in command) {
-        client.commands.set(command.data.name, command);
-        // check if the command exports any Sequelize models
-        if ('models' in command) {
-            const moduleModels = command.models(sequelize);
-            Object.entries(moduleModels).forEach(([name, model]) => {
-                // there's probably a better way to handle duplicates but this works for now
-                if (models[name]) {
-                    logger.warn(`Duplicate model name detected: ${name}. Skipping to avoid conflicts.`);
-                }
-                else {
-                    models[name] = model;
-                }
-            });
-        }
+        registerCommand(command);
     }
     else {
         logger.warn(`The command at ${file} is missing a required "data" or "execute" property. Commands can not be registered without those properties.`);
+    }
+});
+
+// iterate over the events/ directory to discover and auto-register event listeners
+walkDirectoryTree(path.join(__dirname, 'events'), (file) => {
+    if (!file.endsWith('.js')) return;
+
+    const event = require(file);
+    if ('type' in event && 'execute' in event) {
+        registerEvents([event]);
+    }
+    else {
+        logger.warn(`The event at ${file} is missing a required "type" or "execute" property. Events can not be registered without these properties.`);
     }
 });
 
