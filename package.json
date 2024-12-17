@@ -1,0 +1,22 @@
+{
+  "name": "chatterbox",
+  "version": "1.0.0",
+  "description": "Lobbymen Enterprises' Discord bot",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rmmorrison/chatterbox.git"
+  },
+  "author": "Ryan Morrison",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/rmmorrison/chatterbox/issues"
+  },
+  "homepage": "https://github.com/rmmorrison/chatterbox#readme",
+  "dependencies": {
+    "discord.js": "^14.16.3"
+  }
+}
