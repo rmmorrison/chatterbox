@@ -1,17 +1,22 @@
 const path = require('node:path');
 const logger = require('pino')()
 const Sequelize = require('sequelize');
-const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
+const { Client, Collection, Events, GatewayIntentBits, MessageFlags, Partials } = require('discord.js');
 const database = require('./database.js');
 const { walkDirectoryTree } = require('./util.js')
 const { token } = require('./config.json');
 
 // create discord.js client
-const client = new Client({ intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-] });
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+    ],
+    partials: [
+        Partials.Message, // Enable partial messages
+    ],
+});
 client.commands = new Collection();
 
 function registerCommand(command) {
