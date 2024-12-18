@@ -1,3 +1,4 @@
+const logger = require('pino')();
 const fs = require('fs');
 const path = require('path');
 

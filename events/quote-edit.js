@@ -38,7 +38,15 @@ module.exports = {
 
         if (!isQuote(newMessage.content)) {
             try {
+                let id = quote.message;
                 await quote.destroy();
+                await database.models.QuoteHistory.destroy({
+                    where: {
+                        message: id
+                    }
+                });
+
+                return;
             } catch (error) {
                 logger.error(`Unable to delete quote due to an error.`, error);
             }
