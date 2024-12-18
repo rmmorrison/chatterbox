@@ -6,7 +6,11 @@ const { walkDirectoryTree } = require('./util.js')
 const { token } = require('./config.json');
 
 // create discord.js client
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({ intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+] });
 client.commands = new Collection();
 
 // create Sequelize client
@@ -47,10 +51,10 @@ function registerModels(list) {
 function registerEvents(events) {
     events.forEach(event => {
         if (event.once) {
-            client.once(event.type, (...args) => event.execute(...args));
+            client.once(event.type, (...args) => event.execute(client, ...args));
         }
         else {
-            client.on(event.type, (...args) => event.execute(...args));
+            client.on(event.type, (...args) => event.execute(client, ...args));
         }
     });
 }
@@ -108,7 +112,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     try {
-        await command.execute(interaction);
+        await command.execute(client, interaction);
     } catch (error) {
         logger.error('Unable to execute interaction due to an error:', error);
         if (interaction.replied || interaction.deferred) {
