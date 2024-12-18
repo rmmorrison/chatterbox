@@ -1,5 +1,5 @@
 const path = require('node:path')
-const logger = require('pino')()
+const logger = require('pino')();
 const { REST, Routes } = require('discord.js');
 const { walkDirectoryTree } = require('./util.js');
 const { clientId, guildId, token } = require('./config.json');

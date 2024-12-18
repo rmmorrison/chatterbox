@@ -1,5 +1,5 @@
 const path = require('node:path');
-const logger = require('pino')()
+const logger = require('pino')();
 const Sequelize = require('sequelize');
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags, Partials } = require('discord.js');
 const database = require('./database.js');
@@ -101,7 +101,7 @@ client.once(Events.ClientReady, readyClient => {
             logger.error('Unable to connect to the database:', error);
         }
     })();
-    logger.info(`Ready! Logged in as ${readyClient.user.tag}.`)
+    logger.info(`Ready! Logged in as ${readyClient.user.tag}.`);
 });
 
 client.on(Events.InteractionCreate, async interaction => {
