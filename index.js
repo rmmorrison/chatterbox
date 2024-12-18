@@ -2,6 +2,7 @@ const path = require('node:path');
 const logger = require('pino')()
 const Sequelize = require('sequelize');
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
+const database = require('./database.js');
 const { walkDirectoryTree } = require('./util.js')
 const { token } = require('./config.json');
 
@@ -13,21 +14,12 @@ const client = new Client({ intents: [
 ] });
 client.commands = new Collection();
 
-// create Sequelize client
-const models = {};
-const sequelize = new Sequelize('chatterbox', '', '', {
-    host: 'localhost',
-    dialect: 'sqlite',
-    logging: false,
-    storage: 'database.sqlite',
-});
-
 function registerCommand(command) {
     client.commands.set(command.data.name, command);
 
     // does the command export any modules we need to register with Sequelize?
     if ('models' in command) {
-        registerModels(command.models(sequelize));
+        registerModels(command.models(database.sequelize));
     }
 
     // does the command export any events?
@@ -39,12 +31,13 @@ function registerCommand(command) {
 function registerModels(list) {
     Object.entries(list).forEach(([name, model]) => {
         // there's probably a better way to handle duplicates but this works for now
-        if (models[name]) {
+        if (database.models[name]) {
             logger.warn(`Duplicate model name detected: ${name}. Skipping to avoid conflicts.`);
             return;
         }
 
-        models[name] = model;
+        database.models[name] = model;
+        logger.info(`Registering model ${name}.`);
     });
 }
 
@@ -55,6 +48,10 @@ function registerEvents(events) {
         }
         else {
             client.on(event.type, (...args) => event.execute(client, ...args));
+        }
+
+        if ('models' in event) {
+            registerModels(event.models(database.sequelize));
         }
     });
 }
@@ -89,12 +86,12 @@ walkDirectoryTree(path.join(__dirname, 'events'), (file) => {
 client.once(Events.ClientReady, readyClient => {
     (async() => {
         try {
-            await sequelize.authenticate();
+            await database.sequelize.authenticate();
             logger.info('Database connection established.');
             // sync our models to the database
             // we can set { force: true } to force a sync on an existing database (for dev purposes)
-            await sequelize.sync({ alter: true });
-            logger.info(`Successfully synchronized ${Object.keys(models).length} models.`);
+            await database.sequelize.sync({ alter: true });
+            logger.info(`Successfully synchronized ${Object.keys(database.models).length} models.`);
         } catch (error) {
             logger.error('Unable to connect to the database:', error);
         }
