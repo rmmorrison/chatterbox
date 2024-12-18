@@ -41,20 +41,30 @@ function matches(str) {
 }
 
 function create(message) {
-    try {
+    return new Promise((resolve, reject) => {
         database.models.Quote.create({
             message: message.id,
             channel: message.channel.id,
             author: message.author.id,
             content: message.content
+        }).catch((error) => {
+            // was it a non-unique error?
+            if (error.name === 'SequelizeUniqueConstraintError') {
+                if (error.fields.includes('content')) {
+                    // expected - duplicate content adds weight to randomness which we want to avoid
+                    logger.debug(`Could not add new quote '${message.content} for channel ${message.channel.id} because it already exists.`);
+                    return;
+                }
+            }
+            reject(error);
         });
-    } catch (error) {
-        logger.error('An error occurred while inserting a new quote.', error);
-    }
+
+        resolve();
+    });
 }
 
 function random(channel) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         database.models.Quote.findOne({
             where: {
                 channel: channel
@@ -62,19 +72,24 @@ function random(channel) {
             order: database.sequelize.random()
         }).then((result) => {
             resolve(result);
+        }).catch((error) => {
+            reject(error);
         });
     });
 }
 
-function history(quote) {
-    try {
+function writeHistory(quote) {
+    return new Promise((resolve, reject) => {
         database.models.QuoteHistory.create({
             message: quote.message,
             channel: quote.channel
+        }).catch((error) => {
+            reject(error);
+            logger.error('An error occurred while inserting history.', error);
         });
-    } catch (error) {
-        logger.error('An error occurred while inserting history.', error);
-    }
+
+        resolve();
+    });
 }
 
 module.exports = {
@@ -96,7 +111,8 @@ module.exports = {
             },
             content: {
                 type: DataTypes.TEXT,
-                allowNull: false
+                allowNull: false,
+                unique: true
             }
         }),
         QuoteHistory: sequelize.define('quote_history', {
@@ -117,10 +133,16 @@ module.exports = {
 
         if (!matches(message.content)) return; // ignore messages that fail the test
 
-        create(message);
+        create(message).catch((error) => {
+            logger.error(`Unable to create new quote in channel ${message.channel.id} due to an error.`, error);
+        });
         random(message.channel.id).then(quote => {
             message.reply(`**${quote.content}**`);
-            history(quote);
-        });
+            writeHistory(quote).catch((error) => {
+                logger.error(`Unable to persist quote history for channel ${message.channel.id} due to an error.`, error);
+            })
+        }).catch((error) => {
+            logger.error(`Unable to select a random quote for channel ${message.channel.id} due to an error.`, error);
+        })
     }
 }
