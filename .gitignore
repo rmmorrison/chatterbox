@@ -208,3 +208,4 @@ dist
 .pnp.*
 
 config.json
+database.sqlite
