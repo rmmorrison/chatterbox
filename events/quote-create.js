@@ -33,17 +33,17 @@ module.exports = {
     models: (sequelize) => ({
         Quote: sequelize.define('quote', {
             message: {
-                type: DataTypes.BLOB,
+                type: DataTypes.STRING,
                 primaryKey: true,
                 allowNull: false,
-                unique: true
+                unique: true,
             },
             channel: {
-                type: DataTypes.BLOB,
+                type: DataTypes.STRING,
                 allowNull: false
             },
             author: {
-                type: DataTypes.BLOB,
+                type: DataTypes.STRING,
                 allowNull: false
             },
             content: {
@@ -54,11 +54,11 @@ module.exports = {
         }),
         QuoteHistory: sequelize.define('quote_history', {
             message: {
-                type: DataTypes.BLOB,
+                type: DataTypes.STRING,
                 allowNull: false
             },
             channel: {
-                type: DataTypes.BLOB,
+                type: DataTypes.STRING,
                 allowNull: false
             }
         }),
