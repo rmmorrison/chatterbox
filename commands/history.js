@@ -24,11 +24,13 @@ function buildButtonRow(offset, count) {
 function buildHistoryEmbed(message) {
     const nickname = message.member.nickname || message.author.globalName;
     const avatarURL = message.member.displayAvatarURL({ dynamic: true });
+    const messageURL = `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`;
 
     return new EmbedBuilder()
         .setColor(0x0099FF)
+        .setTitle(`**${message.content}**`)
+        .setURL(messageURL)
         .setAuthor({ name: nickname, iconURL: avatarURL })
-        .addFields({ name: 'Content', value: `**${message.content}**`, inline: true })
         .setTimestamp(message.createdAt);
 }
 
