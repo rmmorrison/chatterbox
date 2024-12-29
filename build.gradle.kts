@@ -27,6 +27,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.hibernate.orm:hibernate-community-dialects")
     implementation("org.liquibase:liquibase-core")
+    implementation("net.dv8tion:JDA:5.2.2") {
+        exclude(module = "opus-java")
+    }
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     runtimeOnly("org.xerial:sqlite-jdbc:3.47.1.0")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
