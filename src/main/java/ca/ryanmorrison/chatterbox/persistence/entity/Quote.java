@@ -1,27 +1,37 @@
 package ca.ryanmorrison.chatterbox.persistence.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+
+import java.util.List;
 
 @Entity
-@Table(name = "quotes")
+@Table(name = "quote")
 public class Quote {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
     private long messageId;
     private long authorId;
     private long channelId;
     private String content;
+    @OneToMany(mappedBy = "quote", cascade = CascadeType.REMOVE)
+    private List<QuoteHistory> histories;
 
     protected Quote() {
     }
 
-    public Quote(long messageId, long authorId, long channelId, String content) {
+    public Quote(int id, long messageId, long authorId, long channelId, String content, List<QuoteHistory> histories) {
+        this.id = id;
         this.messageId = messageId;
         this.authorId = authorId;
         this.channelId = channelId;
         this.content = content;
+        this.histories = histories;
+    }
+
+    public int getId() {
+        return id;
     }
 
     public long getMessageId() {
@@ -38,6 +48,10 @@ public class Quote {
 
     public String getContent() {
         return content;
+    }
+
+    public List<QuoteHistory> getHistories() {
+        return histories;
     }
 
     @Override
@@ -76,7 +90,12 @@ public class Quote {
         }
 
         public Quote build() {
-            return new Quote(messageId, authorId, channelId, content);
+            Quote quote = new Quote();
+            quote.messageId = this.messageId;
+            quote.authorId = this.authorId;
+            quote.channelId = this.channelId;
+            quote.content = this.content;
+            return quote;
         }
     }
 }

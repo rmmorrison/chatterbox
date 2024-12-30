@@ -1,7 +1,10 @@
 package ca.ryanmorrison.chatterbox.listener;
 
 import ca.ryanmorrison.chatterbox.persistence.entity.Quote;
+import ca.ryanmorrison.chatterbox.persistence.entity.QuoteHistory;
+import ca.ryanmorrison.chatterbox.persistence.repository.QuoteHistoryRepository;
 import ca.ryanmorrison.chatterbox.persistence.repository.QuoteRepository;
+import jakarta.transaction.Transactional;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageDeleteEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -22,24 +25,32 @@ public class QuoteListener extends ListenerAdapter {
     private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
 
     private final QuoteRepository quoteRepository;
+    private final QuoteHistoryRepository quoteHistoryRepository;
     private final Random random = new Random();
 
-    public QuoteListener(@Autowired QuoteRepository quoteRepository) {
+    public QuoteListener(@Autowired QuoteRepository quoteRepository, @Autowired QuoteHistoryRepository quoteHistoryRepository) {
         this.quoteRepository = quoteRepository;
+        this.quoteHistoryRepository = quoteHistoryRepository;
     }
 
     @Override
+    @Transactional
     public void onMessageReceived(MessageReceivedEvent event) {
         if (event.getAuthor().isBot() || event.getAuthor().isSystem()) return;
         if (!event.isFromGuild()) return;
 
         if (!matches(event.getMessage().getContentDisplay())) return;
         save(event.getMessage());
-        findRandom(event.getChannel().getIdLong()).ifPresent(quote ->
-                event.getChannel().sendMessage(String.format("**%s**", quote.getContent())).queue());
+        findRandom(event.getChannel().getIdLong()).ifPresent(quote -> {
+            quoteHistoryRepository.save(new QuoteHistory.Builder()
+                    .setQuote(quote)
+                    .build());
+            event.getChannel().sendMessage(String.format("**%s**", quote.getContent())).queue();
+        });
     }
 
     @Override
+    @Transactional
     public void onMessageUpdate(MessageUpdateEvent event) {
         if (event.getAuthor().isBot() || event.getAuthor().isSystem()) return;
         if (!event.isFromGuild()) return;
@@ -54,10 +65,11 @@ public class QuoteListener extends ListenerAdapter {
     }
 
     @Override
+    @Transactional
     public void onMessageDelete(MessageDeleteEvent event) {
         if (!event.isFromGuild()) return;
 
-        quoteRepository.deleteById(event.getMessageIdLong());
+        quoteRepository.deleteByMessageId(event.getMessageIdLong());
     }
 
     public boolean matches(String content) {

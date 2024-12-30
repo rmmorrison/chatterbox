@@ -16,4 +16,6 @@ public interface QuoteRepository extends CrudRepository<Quote, Long> {
     int countByChannelId(long channelId);
 
     Page<Quote> findByChannelId(long channelId, Pageable pageable);
+
+    void deleteByMessageId(long messageId);
 }
