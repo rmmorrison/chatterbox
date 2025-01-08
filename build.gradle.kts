@@ -25,6 +25,7 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.hibernate.orm:hibernate-community-dialects")
     implementation("org.liquibase:liquibase-core")
     implementation("net.dv8tion:JDA:5.2.2") {

@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/create_quote_table.yaml
   - include:
       file: db/changelog/create_quote_history_table.yaml
+  - include:
+      file: db/changelog/create_trigger_table.yaml

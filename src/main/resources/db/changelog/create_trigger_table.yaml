@@ -1,0 +1,35 @@
+databaseChangeLog:
+  - changeSet:
+      id: create_trigger_table
+      author: rmmorrison
+      changes:
+        - createTable:
+            tableName: trigger
+            columns:
+              - column:
+                  name: id
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: channel_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: challenge
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: response
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created
+                  type: INTEGER
+                  constraints:
+                    nullable: false
