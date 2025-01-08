@@ -66,7 +66,7 @@ public class HistoryCommandListener extends ListenerAdapter {
     public void onButtonInteraction(ButtonInteractionEvent event) {
         if (!event.getComponentId().startsWith(buttonPrefix)) return;
 
-        event.deferReply().setEphemeral(true).queue();
+        event.deferEdit().queue();
 
         int index = Integer.parseInt(event.getComponentId().substring(buttonPrefix.length()));
         PageRequest pageRequest = PageRequest.of(index, 1);
