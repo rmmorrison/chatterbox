@@ -44,6 +44,7 @@ public class QuoteListener extends ListenerAdapter {
         findRandom(event.getChannel().getIdLong()).ifPresent(quote -> {
             quoteHistoryRepository.save(new QuoteHistory.Builder()
                     .setQuote(quote)
+                    .setChannelId(event.getChannel().getIdLong())
                     .build());
             event.getChannel().sendMessage(String.format("**%s**", quote.getContent())).queue();
         });

@@ -21,6 +21,11 @@ databaseChangeLog:
                     foreignKeyName: fk_quote_history_quote_id
                     references: quote(id)
               - column:
+                  name: channel_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
                   name: emitted
                   type: INTEGER
                   constraints:
