@@ -4,7 +4,6 @@ import ca.ryanmorrison.chatterbox.persistence.entity.Quote;
 import ca.ryanmorrison.chatterbox.persistence.entity.QuoteHistory;
 import ca.ryanmorrison.chatterbox.persistence.repository.QuoteHistoryRepository;
 import ca.ryanmorrison.chatterbox.persistence.repository.QuoteRepository;
-import jakarta.transaction.Transactional;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageDeleteEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -34,7 +33,6 @@ public class QuoteListener extends ListenerAdapter {
     }
 
     @Override
-    @Transactional
     public void onMessageReceived(MessageReceivedEvent event) {
         if (event.getAuthor().isBot() || event.getAuthor().isSystem()) return;
         if (!event.isFromGuild()) return;
@@ -51,7 +49,6 @@ public class QuoteListener extends ListenerAdapter {
     }
 
     @Override
-    @Transactional
     public void onMessageUpdate(MessageUpdateEvent event) {
         if (event.getAuthor().isBot() || event.getAuthor().isSystem()) return;
         if (!event.isFromGuild()) return;
@@ -66,7 +63,6 @@ public class QuoteListener extends ListenerAdapter {
     }
 
     @Override
-    @Transactional
     public void onMessageDelete(MessageDeleteEvent event) {
         if (!event.isFromGuild()) return;
 

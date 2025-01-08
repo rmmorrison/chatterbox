@@ -3,7 +3,6 @@ package ca.ryanmorrison.chatterbox.listener;
 import ca.ryanmorrison.chatterbox.extension.Messages;
 import ca.ryanmorrison.chatterbox.persistence.entity.Trigger;
 import ca.ryanmorrison.chatterbox.persistence.repository.TriggerRepository;
-import jakarta.transaction.Transactional;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -34,7 +33,6 @@ public class TriggerCommandListener extends ListenerAdapter {
     }
 
     @Override
-    @Transactional
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (event.getUser().isBot()) return;
         if (!event.isFromGuild()) return;
@@ -66,7 +64,6 @@ public class TriggerCommandListener extends ListenerAdapter {
     }
 
     @Override
-    @Transactional
     public void onModalInteraction(ModalInteractionEvent event) {
         if (event.getUser().isBot()) return;
         if (!event.isFromGuild()) return;
@@ -95,7 +92,6 @@ public class TriggerCommandListener extends ListenerAdapter {
     }
 
     @Override
-    @Transactional
     public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent event) {
         if (event.getUser().isBot()) return;
         if (!event.isFromGuild()) return;

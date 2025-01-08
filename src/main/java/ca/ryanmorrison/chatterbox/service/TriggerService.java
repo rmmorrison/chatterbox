@@ -2,7 +2,6 @@ package ca.ryanmorrison.chatterbox.service;
 
 import ca.ryanmorrison.chatterbox.persistence.entity.Trigger;
 import ca.ryanmorrison.chatterbox.persistence.repository.TriggerRepository;
-import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +24,6 @@ public class TriggerService {
     }
 
     @Cacheable("triggers")
-    @Transactional
     public Map<Pattern, String> getExpressions(long channelId) {
         LOGGER.debug("Populating trigger cache");
         return triggerRepository.findAllByChannelId(channelId).stream()
