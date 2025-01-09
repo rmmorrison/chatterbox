@@ -27,7 +27,7 @@ jobs:
       - name: Build with Gradle Wrapper
         run: ./gradlew build
       - name: Unpack artifacts
-        run: mkdir -p build/dependency && (cd build/dependency; jar -xf ../libs/*.jar)
+        run: mkdir -p build/dependency && (cd build/dependency; for jar in ../libs/*.jar; do jar -xf "$jar"; done)
       - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
