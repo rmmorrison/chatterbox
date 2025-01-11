@@ -1,6 +1,6 @@
 package ca.ryanmorrison.chatterbox.listener;
 
-import ca.ryanmorrison.chatterbox.extension.Messages;
+import ca.ryanmorrison.chatterbox.extension.FormattedListenerAdapter;
 import ca.ryanmorrison.chatterbox.persistence.repository.QuoteHistoryRepository;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
@@ -8,7 +8,6 @@ import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
-import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.components.ActionRow;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import org.slf4j.Logger;
@@ -20,7 +19,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
-public class HistoryCommandListener extends ListenerAdapter {
+public class HistoryCommandListener extends FormattedListenerAdapter {
 
     private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
 
@@ -41,25 +40,24 @@ public class HistoryCommandListener extends ListenerAdapter {
 
         int count = quoteHistoryRepository.countByChannelId(event.getChannel().getIdLong());
         if (count == 0) {
-            Messages.sendError(event.getHook(), "There's no history for this channel yet.").queue();
+            event.getHook().sendMessageEmbeds(buildErrorResponse("There's no history for this channel yet.")).queue();
             return;
         }
 
         quoteHistoryRepository.findFirstByChannelIdOrderByEmittedDesc(event.getChannel().getIdLong())
                 .ifPresentOrElse(quoteHistory -> {
-                    Message message = event.getChannel().retrieveMessageById(quoteHistory.getQuote().getMessageId()).complete();
-                    if (message == null) {
-                        LOGGER.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
-                        Messages.sendError(event.getHook(), "The original message could not be found.")
-                                .queue();
-                        return;
-                    }
+                    event.getChannel().retrieveMessageById(quoteHistory.getQuote().getMessageId()).queue(message -> {
+                        if (message == null) {
+                            LOGGER.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
+                            event.getHook().sendMessageEmbeds(buildErrorResponse("The original message could not be found.")).queue();
+                            return;
+                        }
 
-                    event.getHook().sendMessageEmbeds(createEmbed(message))
-                            .addActionRow(createButtons(0, count))
-                            .queue();
-                }, () -> Messages.sendError(event.getHook(), "There's no history for this channel yet.")
-                        .queue());
+                        event.getHook().sendMessageEmbeds(createEmbed(message))
+                                .addActionRow(createButtons(0, count))
+                                .queue();
+                    });
+                }, () -> event.getHook().sendMessageEmbeds(buildErrorResponse("There's no history for this channel yet.")).queue());
     }
 
     @Override
@@ -74,21 +72,21 @@ public class HistoryCommandListener extends ListenerAdapter {
         quoteHistoryRepository.findByChannelIdOrderByEmittedDesc(event.getChannelIdLong(), pageRequest)
                 .stream().findFirst().ifPresentOrElse(quoteHistory -> {
                     int count = quoteHistoryRepository.countByChannelId(event.getChannel().getIdLong());
-                    Message message = event.getChannel().retrieveMessageById(quoteHistory.getQuote().getMessageId()).complete();
-                    if (message == null) {
-                        LOGGER.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
-                        Messages.sendError(event.getHook(), "The original message could not be found.")
-                                .queue();
-                        return;
-                    }
+                    event.getChannel().retrieveMessageById(quoteHistory.getQuote().getMessageId()).queue(message -> {
+                        if (message == null) {
+                            LOGGER.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
+                            event.getHook().sendMessageEmbeds(buildErrorResponse("The original message could not be found.")).queue();
+                            return;
+                        }
 
-                    event.getHook().editOriginalEmbeds(createEmbed(message))
-                            .and(event.getHook().editOriginalComponents(ActionRow.of(createButtons(index, count))))
-                            .queue();
+                        event.getHook().editOriginalEmbeds(createEmbed(message))
+                                .and(event.getHook().editOriginalComponents(ActionRow.of(createButtons(index, count))))
+                                .queue();
+                    });
                 },
                 () -> {
                     LOGGER.error("Expected page based on index {} for channel ID {} but none was found.", index, event.getChannelId());
-                    Messages.sendError(event.getHook(), "Failed to load next page due to no result for query - possibly a message was deleted.")
+                    event.getHook().sendMessageEmbeds(buildErrorResponse("An error occurred while loading the next page - possibly a message was deleted."))
                             .queue();
                 });
     }
