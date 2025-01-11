@@ -4,8 +4,6 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 
-import java.time.Instant;
-
 public class FormattedListenerAdapter extends ListenerAdapter {
 
     protected MessageEmbed buildSuccessResponse(String message) {
@@ -20,9 +18,7 @@ public class FormattedListenerAdapter extends ListenerAdapter {
         return new EmbedBuilder()
                 .setTitle(responseType.title)
                 .setDescription(message)
-                .setFooter("This response has been automatically generated 🤖")
                 .setColor(responseType.colour)
-                .setTimestamp(Instant.now())
                 .build();
     }
 
