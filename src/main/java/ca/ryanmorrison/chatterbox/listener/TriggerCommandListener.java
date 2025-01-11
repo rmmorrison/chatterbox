@@ -4,11 +4,13 @@ import ca.ryanmorrison.chatterbox.constants.TriggerConstants;
 import ca.ryanmorrison.chatterbox.extension.FormattedListenerAdapter;
 import ca.ryanmorrison.chatterbox.persistence.entity.Trigger;
 import ca.ryanmorrison.chatterbox.persistence.repository.TriggerRepository;
+import ca.ryanmorrison.chatterbox.service.TriggerService;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
-import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
-import net.dv8tion.jda.api.interactions.commands.Command;
+import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.interactions.components.ActionRow;
+import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
+import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.interactions.components.text.TextInput;
 import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
 import net.dv8tion.jda.api.interactions.modals.Modal;
@@ -17,7 +19,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 @Component
 public class TriggerCommandListener extends FormattedListenerAdapter {
@@ -25,9 +28,11 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
     private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
 
     private final String modalPrefix = String.format("%s-", TriggerConstants.TRIGGER_COMMAND_NAME.toLowerCase());
+    private final TriggerService triggerService;
     private final TriggerRepository triggerRepository;
 
-    public TriggerCommandListener(@Autowired TriggerRepository triggerRepository) {
+    public TriggerCommandListener(@Autowired TriggerService triggerService, @Autowired TriggerRepository triggerRepository) {
+        this.triggerService = triggerService;
         this.triggerRepository = triggerRepository;
     }
 
@@ -49,18 +54,15 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
                 event.replyModal(constructAddModal()).queue();
                 break;
             case TriggerConstants.EDIT_SUBCOMMAND_NAME:
-                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getOption(TriggerConstants.CHALLENGE_OPTION_NAME).getAsString())
-                        .ifPresentOrElse(trigger -> event.replyModal(constructEditModal(trigger.getId(), trigger.getResponse())).queue(),
-                                () -> event.replyEmbeds(buildErrorResponse("The specified trigger does not exist."))
-                                        .setEphemeral(true).queue());
+                requestTrigger(TriggerConstants.EDIT_SUBCOMMAND_NAME, event);
                 break;
             case TriggerConstants.DELETE_SUBCOMMAND_NAME:
-                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getOption(TriggerConstants.CHALLENGE_OPTION_NAME).getAsString())
-                        .ifPresentOrElse(trigger -> {
-                            triggerRepository.delete(trigger);
-                            event.replyEmbeds(buildSuccessResponse("Trigger deleted successfully.")).setEphemeral(true).queue();
-                        }, () -> event.replyEmbeds(buildErrorResponse("The specified trigger does not exist.")).setEphemeral(true).queue());
+                requestTrigger(TriggerConstants.DELETE_SUBCOMMAND_NAME, event);
                 break;
+            default:
+                LOGGER.error("Received trigger command with unknown subcommand '{}'.", event.getSubcommandName());
+                event.replyEmbeds(buildErrorResponse("An error occurred while processing your request."))
+                        .setEphemeral(true).queue();
         }
     }
 
@@ -93,19 +95,40 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
     }
 
     @Override
-    public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent event) {
-        if (event.getUser().isBot()) return;
-        if (!event.isFromGuild()) return;
-        if (!event.getName().equals(TriggerConstants.TRIGGER_COMMAND_NAME)) return;
-
-        if (event.getFocusedOption().getName().equals(TriggerConstants.CHALLENGE_OPTION_NAME)) {
-            List<Command.Choice> challenges = triggerRepository.findAllByChannelId(event.getChannel().getIdLong()).stream()
-                    .filter(trigger -> trigger.getChallenge().contains(event.getFocusedOption().getValue()))
-                    .map(trigger -> new Command.Choice(trigger.getChallenge(), trigger.getChallenge()))
-                    .toList();
-
-            event.replyChoices(challenges).queue();
+    public void onStringSelectInteraction(StringSelectInteractionEvent event) {
+        switch(event.getComponentId()) {
+            case TriggerConstants.TRIGGER_COMMAND_NAME + "-" + TriggerConstants.EDIT_SUBCOMMAND_NAME:
+                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getSelectedOptions().get(0).getValue()).ifPresentOrElse(trigger -> {
+                    event.replyModal(constructEditModal(trigger.getId(), trigger.getResponse())).queue();
+                }, () -> event.replyEmbeds(buildErrorResponse("The specified trigger does not exist."))
+                        .setEphemeral(true).queue());
+                break;
+            case TriggerConstants.TRIGGER_COMMAND_NAME + "-" + TriggerConstants.DELETE_SUBCOMMAND_NAME:
+                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getSelectedOptions().get(0).getValue()).ifPresentOrElse(trigger -> {
+                    triggerRepository.delete(trigger);
+                    event.replyEmbeds(buildSuccessResponse("Trigger deleted successfully.")).queue();
+                }, () -> event.replyEmbeds(buildErrorResponse("The specified trigger does not exist."))
+                        .setEphemeral(true).queue());
+                break;
         }
+    }
+
+    private void requestTrigger(String requestType, SlashCommandInteractionEvent event) {
+        Map<Pattern, String> expressions = triggerService.getExpressions(event.getChannel().getIdLong());
+        if (expressions.isEmpty()) {
+            event.replyEmbeds(buildErrorResponse("No triggers have been set up in this channel."))
+                    .setEphemeral(true).queue();
+            return;
+        }
+
+        event.reply(String.format("⚠️ Please select the trigger you wish to %s.", requestType))
+                .addActionRow(
+                        StringSelectMenu.create(String.format("%s-%s", TriggerConstants.TRIGGER_COMMAND_NAME, requestType))
+                                .addOptions(expressions.keySet().stream()
+                                        .map(pattern -> SelectOption.of(pattern.pattern(), pattern.pattern()))
+                                        .toList())
+                                .build()
+                ).setEphemeral(true).queue();
     }
 
     private Modal constructAddModal() {

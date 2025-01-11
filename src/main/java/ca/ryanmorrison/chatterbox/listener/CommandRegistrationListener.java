@@ -77,10 +77,8 @@ public class CommandRegistrationListener extends ListenerAdapter {
                 Commands.slash(TriggerConstants.TRIGGER_COMMAND_NAME, "Manages triggers for the current channel.")
                         .addSubcommands(
                                 new SubcommandData(TriggerConstants.ADD_SUBCOMMAND_NAME, "Create a new trigger."),
-                                new SubcommandData(TriggerConstants.EDIT_SUBCOMMAND_NAME, "Edit an existing trigger.")
-                                        .addOption(OptionType.STRING, TriggerConstants.CHALLENGE_OPTION_NAME, "The trigger challenge to edit.", true, true),
+                                new SubcommandData(TriggerConstants.EDIT_SUBCOMMAND_NAME, "Edit an existing trigger."),
                                 new SubcommandData(TriggerConstants.DELETE_SUBCOMMAND_NAME, "Delete an existing trigger.")
-                                        .addOption(OptionType.STRING, TriggerConstants.CHALLENGE_OPTION_NAME, "The trigger challenge to delete.", true, true)
                         )
         );
     }
