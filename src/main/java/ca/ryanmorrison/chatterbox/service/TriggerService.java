@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.service;
 
+import ca.ryanmorrison.chatterbox.constants.TriggerConstants;
 import ca.ryanmorrison.chatterbox.persistence.entity.Trigger;
 import ca.ryanmorrison.chatterbox.persistence.repository.TriggerRepository;
 import org.slf4j.Logger;
@@ -23,9 +24,9 @@ public class TriggerService {
         this.triggerRepository = triggerRepository;
     }
 
-    @Cacheable("triggers")
+    @Cacheable(TriggerConstants.TRIGGER_CACHE_NAME)
     public Map<Pattern, String> getExpressions(long channelId) {
-        LOGGER.debug("Populating trigger cache");
+        LOGGER.debug("Populating trigger cache for channel ID {}", channelId);
         return triggerRepository.findAllByChannelId(channelId).stream()
                 .collect(Collectors.toMap(trigger -> Pattern.compile(trigger.getChallenge()), Trigger::getResponse));
     }
