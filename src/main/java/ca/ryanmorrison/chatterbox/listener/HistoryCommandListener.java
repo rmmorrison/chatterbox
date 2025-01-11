@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.listener;
 
+import ca.ryanmorrison.chatterbox.constants.QuoteConstants;
 import ca.ryanmorrison.chatterbox.extension.FormattedListenerAdapter;
 import ca.ryanmorrison.chatterbox.persistence.repository.QuoteHistoryRepository;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -23,7 +24,7 @@ public class HistoryCommandListener extends FormattedListenerAdapter {
 
     private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
 
-    private final String buttonPrefix = "history-";
+    private final String buttonPrefix = String.format("%s-", QuoteConstants.HISTORY_COMMAND_NAME);
     private final QuoteHistoryRepository quoteHistoryRepository;
 
     public HistoryCommandListener(@Autowired QuoteHistoryRepository quoteHistoryRepository) {
@@ -34,7 +35,7 @@ public class HistoryCommandListener extends FormattedListenerAdapter {
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (event.getUser().isBot()) return;
         if (!event.isFromGuild()) return;
-        if (!event.getName().equals("history")) return;
+        if (!event.getName().equals(QuoteConstants.HISTORY_COMMAND_NAME)) return;
 
         event.deferReply().setEphemeral(true).queue();
 

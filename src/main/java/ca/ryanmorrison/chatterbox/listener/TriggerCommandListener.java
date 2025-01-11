@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.listener;
 
+import ca.ryanmorrison.chatterbox.constants.TriggerConstants;
 import ca.ryanmorrison.chatterbox.extension.FormattedListenerAdapter;
 import ca.ryanmorrison.chatterbox.persistence.entity.Trigger;
 import ca.ryanmorrison.chatterbox.persistence.repository.TriggerRepository;
@@ -23,8 +24,7 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
 
     private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
 
-    private final String slashCommand = "trigger";
-    private final String modalPrefix = String.format("%s-", slashCommand);
+    private final String modalPrefix = String.format("%s-", TriggerConstants.TRIGGER_COMMAND_NAME.toLowerCase());
     private final TriggerRepository triggerRepository;
 
     public TriggerCommandListener(@Autowired TriggerRepository triggerRepository) {
@@ -35,7 +35,7 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (event.getUser().isBot()) return;
         if (!event.isFromGuild()) return;
-        if (!event.getName().equals(slashCommand)) return;
+        if (!event.getName().equals(TriggerConstants.TRIGGER_COMMAND_NAME)) return;
 
         if (event.getSubcommandName() == null) {
             LOGGER.error("Received trigger command without subcommand somehow. Discord shouldn't be allowing this.");
@@ -45,17 +45,17 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
         }
 
         switch(event.getSubcommandName()) {
-            case "add":
+            case TriggerConstants.ADD_SUBCOMMAND_NAME:
                 event.replyModal(constructAddModal()).queue();
                 break;
-            case "edit":
-                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getOption("challenge").getAsString())
+            case TriggerConstants.EDIT_SUBCOMMAND_NAME:
+                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getOption(TriggerConstants.CHALLENGE_OPTION_NAME).getAsString())
                         .ifPresentOrElse(trigger -> event.replyModal(constructEditModal(trigger.getId(), trigger.getResponse())).queue(),
                                 () -> event.replyEmbeds(buildErrorResponse("The specified trigger does not exist."))
                                         .setEphemeral(true).queue());
                 break;
-            case "delete":
-                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getOption("challenge").getAsString())
+            case TriggerConstants.DELETE_SUBCOMMAND_NAME:
+                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getOption(TriggerConstants.CHALLENGE_OPTION_NAME).getAsString())
                         .ifPresentOrElse(trigger -> {
                             triggerRepository.delete(trigger);
                             event.replyEmbeds(buildSuccessResponse("Trigger deleted successfully.")).setEphemeral(true).queue();
@@ -96,9 +96,9 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
     public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent event) {
         if (event.getUser().isBot()) return;
         if (!event.isFromGuild()) return;
-        if (!event.getName().equals(slashCommand)) return;
+        if (!event.getName().equals(TriggerConstants.TRIGGER_COMMAND_NAME)) return;
 
-        if (event.getFocusedOption().getName().equals("challenge")) {
+        if (event.getFocusedOption().getName().equals(TriggerConstants.CHALLENGE_OPTION_NAME)) {
             List<Command.Choice> challenges = triggerRepository.findAllByChannelId(event.getChannel().getIdLong()).stream()
                     .filter(trigger -> trigger.getChallenge().contains(event.getFocusedOption().getValue()))
                     .map(trigger -> new Command.Choice(trigger.getChallenge(), trigger.getChallenge()))

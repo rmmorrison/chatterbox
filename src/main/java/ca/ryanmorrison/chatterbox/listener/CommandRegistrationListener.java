@@ -1,5 +1,7 @@
 package ca.ryanmorrison.chatterbox.listener;
 
+import ca.ryanmorrison.chatterbox.constants.QuoteConstants;
+import ca.ryanmorrison.chatterbox.constants.TriggerConstants;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
@@ -71,14 +73,14 @@ public class CommandRegistrationListener extends ListenerAdapter {
 
     private List<CommandData> getCommands() {
         return List.of(
-                Commands.slash("history", "Interactively displays quote history for the current channel."),
-                Commands.slash("trigger", "Manages triggers for the current channel.")
+                Commands.slash(QuoteConstants.HISTORY_COMMAND_NAME, "Interactively displays quote history for the current channel."),
+                Commands.slash(TriggerConstants.TRIGGER_COMMAND_NAME, "Manages triggers for the current channel.")
                         .addSubcommands(
-                                new SubcommandData("add", "Create a new trigger."),
-                                new SubcommandData("edit", "Edit an existing trigger.")
-                                        .addOption(OptionType.STRING, "challenge", "The trigger challenge to edit.", true, true),
-                                new SubcommandData("delete", "Delete an existing trigger.")
-                                        .addOption(OptionType.STRING, "challenge", "The trigger challenge to delete.", true, true)
+                                new SubcommandData(TriggerConstants.ADD_SUBCOMMAND_NAME, "Create a new trigger."),
+                                new SubcommandData(TriggerConstants.EDIT_SUBCOMMAND_NAME, "Edit an existing trigger.")
+                                        .addOption(OptionType.STRING, TriggerConstants.CHALLENGE_OPTION_NAME, "The trigger challenge to edit.", true, true),
+                                new SubcommandData(TriggerConstants.DELETE_SUBCOMMAND_NAME, "Delete an existing trigger.")
+                                        .addOption(OptionType.STRING, TriggerConstants.CHALLENGE_OPTION_NAME, "The trigger challenge to delete.", true, true)
                         )
         );
     }
