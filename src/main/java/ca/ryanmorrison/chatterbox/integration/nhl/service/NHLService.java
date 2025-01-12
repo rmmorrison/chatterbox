@@ -6,7 +6,12 @@ import com.github.mizosoft.methanol.AdapterCodec;
 import com.github.mizosoft.methanol.Methanol;
 import com.github.mizosoft.methanol.MutableRequest;
 import com.github.mizosoft.methanol.adapter.jackson.JacksonAdapterFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -16,6 +21,9 @@ import java.time.LocalDate;
 @Component
 public class NHLService {
 
+    private static final String CACHE_NAME = "nhl-schedules";
+
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
     private final Methanol client;
 
     public NHLService(@Autowired ObjectMapper objectMapper) {
@@ -33,7 +41,15 @@ public class NHLService {
                 .build();
     }
 
+    @Cacheable(CACHE_NAME)
     public Schedule getCurrentWeekSchedule() throws IOException, InterruptedException {
+        log.debug("Populating NHL schedule cache");
         return client.send(MutableRequest.GET("/v1/schedule/" + LocalDate.now()), Schedule.class).body();
+    }
+
+    @CacheEvict(value = CACHE_NAME, allEntries = true)
+    @Scheduled(fixedRateString = "${cache.nhl-schedules.evict-rate:1200000}")
+    public void evictCache() {
+        log.info("Evicting NHL schedule cache");
     }
 }
