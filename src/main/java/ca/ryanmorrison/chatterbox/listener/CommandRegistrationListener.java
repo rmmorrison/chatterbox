@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.listener;
 
+import ca.ryanmorrison.chatterbox.constants.NHLConstants;
 import ca.ryanmorrison.chatterbox.constants.QuoteConstants;
 import ca.ryanmorrison.chatterbox.constants.TriggerConstants;
 import net.dv8tion.jda.api.JDA;
@@ -79,7 +80,8 @@ public class CommandRegistrationListener extends ListenerAdapter {
                                 new SubcommandData(TriggerConstants.ADD_SUBCOMMAND_NAME, "Create a new trigger."),
                                 new SubcommandData(TriggerConstants.EDIT_SUBCOMMAND_NAME, "Edit an existing trigger."),
                                 new SubcommandData(TriggerConstants.DELETE_SUBCOMMAND_NAME, "Delete an existing trigger.")
-                        )
+                        ),
+                Commands.slash(NHLConstants.SCHEDULE_COMMAND_NAME, "Displays the current day's NHL schedule.")
         );
     }
 

@@ -10,6 +10,10 @@ public class FormattedListenerAdapter extends ListenerAdapter {
         return buildResponseEmbed(ResponseType.SUCCESS, message);
     }
 
+    protected MessageEmbed buildWarningResponse(String message) {
+        return buildResponseEmbed(ResponseType.WARNING, message);
+    }
+
     protected MessageEmbed buildErrorResponse(String message) {
         return buildResponseEmbed(ResponseType.ERROR, message);
     }
@@ -24,6 +28,7 @@ public class FormattedListenerAdapter extends ListenerAdapter {
 
     protected enum ResponseType {
         SUCCESS("✅ Success", 0x00FF00),
+        WARNING("⚠️ Warning", 0xFFFF00),
         ERROR("❌ Error", 0xFF0000);
 
         private final String title;

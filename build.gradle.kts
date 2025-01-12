@@ -31,6 +31,10 @@ dependencies {
     implementation("net.dv8tion:JDA:5.2.2") {
         exclude(module = "opus-java")
     }
+    implementation("com.github.mizosoft.methanol:methanol:1.8.0")
+    implementation("com.github.mizosoft.methanol:methanol-jackson:1.8.0")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.2")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     runtimeOnly("org.xerial:sqlite-jdbc:3.47.1.0")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
