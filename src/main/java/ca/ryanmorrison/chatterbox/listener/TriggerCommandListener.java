@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 @Component
 public class TriggerCommandListener extends FormattedListenerAdapter {
 
-    private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final String modalPrefix = String.format("%s-", TriggerConstants.TRIGGER_COMMAND_NAME.toLowerCase());
     private final TriggerService triggerService;
@@ -44,7 +44,7 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
         if (!event.getName().equals(TriggerConstants.TRIGGER_COMMAND_NAME)) return;
 
         if (event.getSubcommandName() == null) {
-            LOGGER.error("Received trigger command without subcommand somehow. Discord shouldn't be allowing this.");
+            log.error("Received trigger command without subcommand somehow. Discord shouldn't be allowing this.");
             event.replyEmbeds(buildErrorResponse("An error occurred while processing your request."))
                     .setEphemeral(true).queue();
             return;
@@ -61,7 +61,7 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
                 requestTrigger(TriggerConstants.DELETE_SUBCOMMAND_NAME, event);
                 break;
             default:
-                LOGGER.error("Received trigger command with unknown subcommand '{}'.", event.getSubcommandName());
+                log.error("Received trigger command with unknown subcommand '{}'.", event.getSubcommandName());
                 event.replyEmbeds(buildErrorResponse("An error occurred while processing your request."))
                         .setEphemeral(true).queue();
         }
@@ -115,7 +115,7 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
                 }, () -> event.getHook().sendMessage(MessageCreateData.fromEmbeds(buildErrorResponse("The specified trigger does not exist."))).queue());
                 break;
             default:
-                LOGGER.error("Received string select interaction for triggers with unknown action '{}'.", action);
+                log.error("Received string select interaction for triggers with unknown action '{}'.", action);
                 event.getHook().sendMessage(MessageCreateData.fromEmbeds(buildErrorResponse("An error occurred while processing your request."))).queue();
         }
     }

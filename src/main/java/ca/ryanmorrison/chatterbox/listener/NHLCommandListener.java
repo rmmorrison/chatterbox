@@ -21,13 +21,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Component
-public class NHLListener extends FormattedListenerAdapter {
+public class NHLCommandListener extends FormattedListenerAdapter {
 
-    private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final NHLService service;
 
-    public NHLListener(@Autowired NHLService service) {
+    public NHLCommandListener(@Autowired NHLService service) {
         this.service = service;
     }
 
@@ -42,7 +42,7 @@ public class NHLListener extends FormattedListenerAdapter {
         try {
             schedule = service.getCurrentWeekSchedule();
         } catch (IOException | InterruptedException e) {
-            LOGGER.error("An error occurred while fetching the current day's NHL schedule", e);
+            log.error("An error occurred while fetching the current day's NHL schedule", e);
             event.getHook().sendMessageEmbeds(
                     buildErrorResponse("An error occurred while fetching the current day's NHL schedule.")
             ).queue();

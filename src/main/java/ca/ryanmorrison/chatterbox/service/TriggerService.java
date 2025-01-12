@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 @Component
 public class TriggerService {
 
-    private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final TriggerRepository triggerRepository;
 
@@ -26,7 +26,7 @@ public class TriggerService {
 
     @Cacheable(TriggerConstants.TRIGGER_CACHE_NAME)
     public Map<Pattern, String> getExpressions(long channelId) {
-        LOGGER.debug("Populating trigger cache for channel ID {}", channelId);
+        log.debug("Populating trigger cache for channel ID {}", channelId);
         return triggerRepository.findAllByChannelId(channelId).stream()
                 .collect(Collectors.toMap(trigger -> Pattern.compile(trigger.getChallenge()), Trigger::getResponse));
     }

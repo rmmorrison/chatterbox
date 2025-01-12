@@ -21,7 +21,7 @@ import java.util.Random;
 @Component
 public class QuoteListener extends ListenerAdapter {
 
-    private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final QuoteRepository quoteRepository;
     private final QuoteHistoryRepository quoteHistoryRepository;
@@ -57,7 +57,7 @@ public class QuoteListener extends ListenerAdapter {
                 .ifPresent(quote -> {
                     if (!matches(event.getMessage().getContentDisplay())) {
                         quoteRepository.delete(quote);
-                        LOGGER.debug("Quote deleted due to edit: {}", quote);
+                        log.debug("Quote deleted due to edit: {}", quote);
                     }
                 });
     }
@@ -70,43 +70,43 @@ public class QuoteListener extends ListenerAdapter {
     }
 
     public boolean matches(String content) {
-        LOGGER.debug("Evaluating message: {}", content);
+        log.debug("Evaluating message: {}", content);
 
         // Check if the message is greater than 5 characters in length
         if (content.length() <= 5) {
-            LOGGER.debug("Message failed: less than or equal to 5 characters");
+            log.debug("Message failed: less than or equal to 5 characters");
             return false;
         }
 
         // Remove URLs
         String noUrls = content.replaceAll("https?://\\S+\\s?", "");
-        LOGGER.debug("Message after removing URLs: {}", noUrls);
+        log.debug("Message after removing URLs: {}", noUrls);
 
         // Remove emojis
         String noEmojis = noUrls.replaceAll("[\\p{So}\\p{Cn}]", "");
-        LOGGER.debug("Message after removing emojis: {}", noEmojis);
+        log.debug("Message after removing emojis: {}", noEmojis);
 
         // Check if more than 75% of the message is alphabetical characters
         long alphaCount = noEmojis.chars().filter(Character::isLetter).count();
         if (alphaCount <= 0.75 * noEmojis.length()) {
-            LOGGER.debug("Message failed: less than 75% alphabetical characters");
+            log.debug("Message failed: less than 75% alphabetical characters");
             return false;
         }
 
         // Check if the message is in uppercase
         if (!noEmojis.equals(noEmojis.toUpperCase())) {
-            LOGGER.debug("Message failed: not in uppercase");
+            log.debug("Message failed: not in uppercase");
             return false;
         }
 
-        LOGGER.debug("Message passed all checks");
+        log.debug("Message passed all checks");
         return true;
     }
 
     private void save(Message message) {
         quoteRepository.findByChannelIdAndContent(message.getChannel().getIdLong(), message.getContentDisplay())
                 .ifPresentOrElse(
-                        quote -> LOGGER.debug("Quote already exists in channel, skipping save: {}", quote),
+                        quote -> log.debug("Quote already exists in channel, skipping save: {}", quote),
                         () -> {
                             quoteRepository.save(new Quote.Builder()
                                     .setMessageId(message.getIdLong())
@@ -114,7 +114,7 @@ public class QuoteListener extends ListenerAdapter {
                                     .setChannelId(message.getChannel().getIdLong())
                                     .setContent(message.getContentDisplay())
                                     .build());
-                            LOGGER.debug("New quote saved: {}", message.getContentDisplay());
+                            log.debug("New quote saved: {}", message.getContentDisplay());
                         }
                 );
     }
@@ -122,7 +122,7 @@ public class QuoteListener extends ListenerAdapter {
     private Optional<Quote> findRandom(long channelId) {
         final int count = quoteRepository.countByChannelId(channelId);
         if (count == 0) {
-            LOGGER.debug("No quotes found in channel: {}, nothing to return.", channelId);
+            log.debug("No quotes found in channel: {}, nothing to return.", channelId);
             return Optional.empty();
         }
 

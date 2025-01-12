@@ -22,7 +22,7 @@ import java.util.List;
 @Component
 public class HistoryCommandListener extends FormattedListenerAdapter {
 
-    private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final String buttonPrefix = String.format("%s-", QuoteConstants.HISTORY_COMMAND_NAME);
     private final QuoteHistoryRepository quoteHistoryRepository;
@@ -49,7 +49,7 @@ public class HistoryCommandListener extends FormattedListenerAdapter {
                 .ifPresentOrElse(quoteHistory -> {
                     event.getChannel().retrieveMessageById(quoteHistory.getQuote().getMessageId()).queue(message -> {
                         if (message == null) {
-                            LOGGER.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
+                            log.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
                             event.getHook().sendMessageEmbeds(buildErrorResponse("The original message could not be found.")).queue();
                             return;
                         }
@@ -75,7 +75,7 @@ public class HistoryCommandListener extends FormattedListenerAdapter {
                     int count = quoteHistoryRepository.countByChannelId(event.getChannel().getIdLong());
                     event.getChannel().retrieveMessageById(quoteHistory.getQuote().getMessageId()).queue(message -> {
                         if (message == null) {
-                            LOGGER.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
+                            log.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
                             event.getHook().sendMessageEmbeds(buildErrorResponse("The original message could not be found.")).queue();
                             return;
                         }
@@ -86,7 +86,7 @@ public class HistoryCommandListener extends FormattedListenerAdapter {
                     });
                 },
                 () -> {
-                    LOGGER.error("Expected page based on index {} for channel ID {} but none was found.", index, event.getChannelId());
+                    log.error("Expected page based on index {} for channel ID {} but none was found.", index, event.getChannelId());
                     event.getHook().sendMessageEmbeds(buildErrorResponse("An error occurred while loading the next page - possibly a message was deleted."))
                             .queue();
                 });

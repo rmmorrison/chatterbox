@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class TriggerCacheInvalidator {
 
-    private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final CacheManager cacheManager;
 
@@ -29,10 +29,10 @@ public class TriggerCacheInvalidator {
     public void invalidateCache(Trigger trigger) {
         long channelId = trigger.getChannelId();
 
-        LOGGER.debug("Trigger entity has been modified/deleted in channel ID {}, checking if cache needs invalidation", channelId);
+        log.debug("Trigger entity has been modified/deleted in channel ID {}, checking if cache needs invalidation", channelId);
         Cache channelCache = cacheManager.getCache(TriggerConstants.TRIGGER_CACHE_NAME);
         if (channelCache != null) {
-            LOGGER.debug("Invalidating trigger cache for channel ID {}", channelId);
+            log.debug("Invalidating trigger cache for channel ID {}", channelId);
             channelCache.evict(channelId);
         }
     }
