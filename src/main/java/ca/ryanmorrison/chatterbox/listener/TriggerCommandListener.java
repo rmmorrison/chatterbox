@@ -14,6 +14,7 @@ import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.interactions.components.text.TextInput;
 import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
 import net.dv8tion.jda.api.interactions.modals.Modal;
+import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -96,20 +97,26 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
 
     @Override
     public void onStringSelectInteraction(StringSelectInteractionEvent event) {
-        switch(event.getComponentId()) {
-            case TriggerConstants.TRIGGER_COMMAND_NAME + "-" + TriggerConstants.EDIT_SUBCOMMAND_NAME:
+        if (!event.getComponentId().startsWith(TriggerConstants.TRIGGER_COMMAND_NAME + "-")) return;
+
+        String action = event.getComponentId().substring((TriggerConstants.TRIGGER_COMMAND_NAME + "-").length());
+
+        switch(action) {
+            case TriggerConstants.EDIT_SUBCOMMAND_NAME:
                 triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getSelectedOptions().get(0).getValue()).ifPresentOrElse(trigger -> {
                     event.replyModal(constructEditModal(trigger.getId(), trigger.getResponse())).queue();
-                }, () -> event.replyEmbeds(buildErrorResponse("The specified trigger does not exist."))
-                        .setEphemeral(true).queue());
+                }, () -> event.replyEmbeds(buildErrorResponse("The specified trigger does not exist.")).setEphemeral(true).queue());
                 break;
-            case TriggerConstants.TRIGGER_COMMAND_NAME + "-" + TriggerConstants.DELETE_SUBCOMMAND_NAME:
+            case TriggerConstants.DELETE_SUBCOMMAND_NAME:
+                event.deferReply().setEphemeral(true).queue();
                 triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getSelectedOptions().get(0).getValue()).ifPresentOrElse(trigger -> {
                     triggerRepository.delete(trigger);
-                    event.replyEmbeds(buildSuccessResponse("Trigger deleted successfully.")).queue();
-                }, () -> event.replyEmbeds(buildErrorResponse("The specified trigger does not exist."))
-                        .setEphemeral(true).queue());
+                    event.getHook().sendMessage(MessageCreateData.fromEmbeds(buildSuccessResponse("Trigger deleted successfully."))).queue();
+                }, () -> event.getHook().sendMessage(MessageCreateData.fromEmbeds(buildErrorResponse("The specified trigger does not exist."))).queue());
                 break;
+            default:
+                LOGGER.error("Received string select interaction for triggers with unknown action '{}'.", action);
+                event.getHook().sendMessage(MessageCreateData.fromEmbeds(buildErrorResponse("An error occurred while processing your request."))).queue();
         }
     }
 
