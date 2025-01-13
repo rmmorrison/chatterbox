@@ -91,7 +91,7 @@ public class NHLCommandListener extends FormattedListenerAdapter {
                             game.awayTeam().abbreviation(), game.awayTeam().score(),
                             game.homeTeam().abbreviation(), game.homeTeam().score()), true);
 
-            String period = game.gameState().equals("FINAL") ? "Final" :
+            String period = (game.gameState().equals("FINAL") || game.gameState().equals("OFF")) ? "Final" :
                     game.periodDescriptor().periodType().equals("OT") ? "Overtime" : periodToString(game.periodDescriptor().number());
 
             builder.addField("Period", period, true);
