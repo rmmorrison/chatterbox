@@ -28,5 +28,6 @@ public record Game(long id,
                    String threeMinRecap,
                    @JsonProperty("threeMinRecapFr") String threeMinRecapFrench,
                    String condensedGame,
+                   @JsonProperty("condensedGameFr") String condensedGameFrench,
                    String gameCenterLink) {
 }
