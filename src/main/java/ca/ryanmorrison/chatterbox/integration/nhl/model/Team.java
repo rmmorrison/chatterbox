@@ -12,5 +12,6 @@ public record Team(int id,
                    String logo,
                    String darkLogo,
                    boolean awaySplitSquad,
+                   int score,
                    String radioLink) {
 }

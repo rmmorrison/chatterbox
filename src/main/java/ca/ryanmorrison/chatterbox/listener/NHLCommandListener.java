@@ -5,6 +5,7 @@ import ca.ryanmorrison.chatterbox.extension.FormattedListenerAdapter;
 import ca.ryanmorrison.chatterbox.integration.nhl.model.Game;
 import ca.ryanmorrison.chatterbox.integration.nhl.model.GameWeek;
 import ca.ryanmorrison.chatterbox.integration.nhl.model.Schedule;
+import ca.ryanmorrison.chatterbox.integration.nhl.model.TVBroadcast;
 import ca.ryanmorrison.chatterbox.integration.nhl.service.NHLService;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -71,11 +72,40 @@ public class NHLCommandListener extends FormattedListenerAdapter {
         LocalDateTime localStart = game.startTimeUTC().atZone(ZoneId.systemDefault()).toLocalDateTime();
         String startValue = DateTimeFormatter.ofPattern("h:mm a z").format(localStart.atZone(ZoneId.systemDefault()));
 
-        return new EmbedBuilder()
+        String canadianBroadcasts = game.TVBroadcasts().stream()
+                .filter(broadcast -> broadcast.countryCode().equals("CA"))
+                .map(TVBroadcast::network)
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("Not available");
+
+        EmbedBuilder builder = new EmbedBuilder()
                 .setTitle(String.format("%s at %s", game.awayTeam().abbreviation(), game.homeTeam().abbreviation()))
                 .setImage(game.homeTeam().logo())
                 .addField("Location", game.venue().defaultVenue(), true)
                 .addField("Game Start", startValue, true)
-                .build();
+                .addField("Watch On", canadianBroadcasts, true);
+
+        if (!game.gameState().equals("FUT") && !game.gameState().equals("PRE")) { // either the game is in progress or final
+            builder.addField("Score",
+                    String.format("%s %d, %s %d",
+                            game.awayTeam().abbreviation(), game.awayTeam().score(),
+                            game.homeTeam().abbreviation(), game.homeTeam().score()), true);
+
+            String period = game.gameState().equals("FINAL") ? "Final" :
+                    game.periodDescriptor().periodType().equals("OT") ? "Overtime" : periodToString(game.periodDescriptor().number());
+
+            builder.addField("Period", period, true);
+        }
+
+        return builder.build();
+    }
+
+    private String periodToString(int period) {
+        return switch (period) {
+            case 1 -> "1st";
+            case 2 -> "2nd";
+            case 3 -> "3rd";
+            default -> "OT";
+        };
     }
 }

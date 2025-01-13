@@ -22,5 +22,10 @@ public record Game(long id,
                    PeriodDescriptor periodDescriptor,
                    String ticketsLink,
                    @JsonProperty("ticketsLinkFr") String ticketsLinkFrench,
+                   GameOutcome gameOutcome,
+                   WinningGoalie winningGoalie,
+                   WinningGoalScorer winningGoalScorer,
+                   String threeMinRecap,
+                   @JsonProperty("threeMinRecapFr") String threeMinRecapFrench,
                    String gameCenterLink) {
 }
