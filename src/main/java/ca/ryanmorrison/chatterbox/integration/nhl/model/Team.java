@@ -5,9 +5,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Team(int id,
-                   CommonName commonName,
-                   PlaceName placeName,
-                   PlaceNameWithPreposition placeNameWithPreposition,
+                   DefaultReference commonName,
+                   DefaultReference placeName,
+                   DefaultReference placeNameWithPreposition,
                    @JsonProperty("abbrev") String abbreviation,
                    String logo,
                    String darkLogo,

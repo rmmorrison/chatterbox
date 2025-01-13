@@ -8,7 +8,7 @@ import java.util.List;
 public record Game(long id,
                    int season,
                    int gameType,
-                   Venue venue,
+                   DefaultReference venue,
                    boolean neutralSite,
                    Instant startTimeUTC,
                    String easternUTCOffset,
@@ -27,5 +27,6 @@ public record Game(long id,
                    WinningGoalScorer winningGoalScorer,
                    String threeMinRecap,
                    @JsonProperty("threeMinRecapFr") String threeMinRecapFrench,
+                   String condensedGame,
                    String gameCenterLink) {
 }

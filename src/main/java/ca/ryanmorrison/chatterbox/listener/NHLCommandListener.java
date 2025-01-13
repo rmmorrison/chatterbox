@@ -81,7 +81,7 @@ public class NHLCommandListener extends FormattedListenerAdapter {
         EmbedBuilder builder = new EmbedBuilder()
                 .setTitle(String.format("%s at %s", game.awayTeam().abbreviation(), game.homeTeam().abbreviation()))
                 .setImage(game.homeTeam().logo())
-                .addField("Location", game.venue().defaultVenue(), true)
+                .addField("Location", game.venue().ref(), true)
                 .addField("Game Start", startValue, true)
                 .addField("Watch On", canadianBroadcasts, true);
 
