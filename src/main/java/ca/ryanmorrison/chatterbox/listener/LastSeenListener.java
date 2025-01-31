@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -22,11 +24,14 @@ public class LastSeenListener extends FormattedListenerAdapter {
 
     private final long maxIdleTime;
 
+    private final TransactionTemplate transactionTemplate;
     private final LastSeenRepository lastSeenRepository;
 
     public LastSeenListener(@Value("${chatterbox.lastSeen.maxIdleTime:30}") long maxIdleTime,
+                            @Autowired PlatformTransactionManager platformTransactionManager,
                             @Autowired LastSeenRepository lastSeenRepository) {
         this.maxIdleTime = maxIdleTime;
+        this.transactionTemplate = new TransactionTemplate(platformTransactionManager);
         this.lastSeenRepository = lastSeenRepository;
     }
 
@@ -37,25 +42,36 @@ public class LastSeenListener extends FormattedListenerAdapter {
 
         OffsetDateTime messageTime = event.getMessage().getTimeCreated();
 
-        Optional<LastSeen> lastSeen = lastSeenRepository.findFirstByUserId(event.getAuthor().getIdLong());
-        lastSeen.ifPresentOrElse(seen -> {
-            log.debug("Found last seen entry for user {}, comparing to configured maximum", event.getAuthor().getIdLong());
+        Boolean sendWelcome = transactionTemplate.execute(status -> {
+            Optional<LastSeen> lastSeen = lastSeenRepository.findFirstByUserId(event.getAuthor().getIdLong());
+            if (lastSeen.isEmpty()) {
+                log.debug("Creating new last seen entry for user {}", event.getAuthor().getIdLong());
+                lastSeenRepository.save(new LastSeen.Builder()
+                        .setUserId(event.getAuthor().getIdLong())
+                        .setLastSeen(Instant.now())
+                        .build());
+                return false;
+            }
+
+            LastSeen seen = lastSeen.get();
+            boolean shouldWelcome = false;
+            log.debug("Found last seen entry for user {}, comparing to configured maximum ({})", event.getAuthor().getIdLong(), maxIdleTime);
             long currentIdleDays = Duration.between(seen.getLastSeen(), messageTime).toDays();
             if (currentIdleDays >= maxIdleTime) {
-                log.debug("User {} has been idle for {} days, sending welcome back message", event.getAuthor().getIdLong(), currentIdleDays);
-                event.getChannel().sendMessageFormat("**A WILD %s HAS APPEARED, WELCOME BACK!**",
-                        event.getAuthor().getAsMention(), currentIdleDays).queue();
+                log.debug("User {} has been idle for {} days, will send welcome back message", event.getAuthor().getIdLong(), currentIdleDays);
+                shouldWelcome = true;
             }
 
             log.debug("Updating last seen entry for user {}, idle time was {} days", event.getAuthor().getIdLong(), currentIdleDays);
             seen.setLastSeen(messageTime.toInstant());
             lastSeenRepository.save(seen);
-        }, () -> {
-            log.debug("Creating new last seen entry for user {}", event.getAuthor().getIdLong());
-            lastSeenRepository.save(new LastSeen.Builder()
-                .setUserId(event.getAuthor().getIdLong())
-                .setLastSeen(Instant.now())
-                .build());
+
+            return shouldWelcome;
         });
+
+        if (Boolean.TRUE.equals(sendWelcome)) {
+            event.getChannel().sendMessageFormat("**A WILD %s HAS APPEARED, WELCOME BACK!**",
+                    event.getAuthor().getAsMention(), maxIdleTime).queue();
+        }
     }
 }
