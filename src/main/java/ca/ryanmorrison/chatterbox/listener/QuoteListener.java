@@ -1,9 +1,7 @@
 package ca.ryanmorrison.chatterbox.listener;
 
 import ca.ryanmorrison.chatterbox.persistence.entity.Quote;
-import ca.ryanmorrison.chatterbox.persistence.entity.QuoteHistory;
-import ca.ryanmorrison.chatterbox.persistence.repository.QuoteHistoryRepository;
-import ca.ryanmorrison.chatterbox.persistence.repository.QuoteRepository;
+import ca.ryanmorrison.chatterbox.service.QuoteService;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageDeleteEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -12,24 +10,19 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
-import java.util.Random;
 
 @Component
 public class QuoteListener extends ListenerAdapter {
 
     private final Logger log = LoggerFactory.getLogger(this.getClass());
 
-    private final QuoteRepository quoteRepository;
-    private final QuoteHistoryRepository quoteHistoryRepository;
-    private final Random random = new Random();
+    private final QuoteService quoteService;
 
-    public QuoteListener(@Autowired QuoteRepository quoteRepository, @Autowired QuoteHistoryRepository quoteHistoryRepository) {
-        this.quoteRepository = quoteRepository;
-        this.quoteHistoryRepository = quoteHistoryRepository;
+    public QuoteListener(@Autowired QuoteService quoteService) {
+        this.quoteService = quoteService;
     }
 
     @Override
@@ -38,14 +31,15 @@ public class QuoteListener extends ListenerAdapter {
         if (!event.isFromGuild()) return;
 
         if (!matches(event.getMessage().getContentDisplay())) return;
-        save(event.getMessage());
-        findRandom(event.getChannel().getIdLong()).ifPresent(quote -> {
-            quoteHistoryRepository.save(new QuoteHistory.Builder()
-                    .setQuote(quote)
-                    .setChannelId(event.getChannel().getIdLong())
-                    .build());
-            event.getChannel().sendMessage(String.format("**%s**", quote.getContent())).queue();
-        });
+        Message message = event.getMessage();
+        Optional<Quote> randomQuote = quoteService.processQuoteAndHistory(new Quote.Builder()
+                .setMessageId(message.getIdLong())
+                .setAuthorId(message.getAuthor().getIdLong())
+                .setChannelId(message.getChannel().getIdLong())
+                .setContent(message.getContentDisplay())
+                .build());
+        randomQuote.ifPresentOrElse(quote -> event.getChannel().sendMessage(String.format("**%s**", quote.getContent())).queue(),
+                () -> log.debug("No quotes found in channel: {}, nothing to return.", event.getChannel().getIdLong()));
     }
 
     @Override
@@ -53,20 +47,18 @@ public class QuoteListener extends ListenerAdapter {
         if (event.getAuthor().isBot() || event.getAuthor().isSystem()) return;
         if (!event.isFromGuild()) return;
 
-        quoteRepository.findByMessageId(event.getMessageIdLong())
-                .ifPresent(quote -> {
-                    if (!matches(event.getMessage().getContentDisplay())) {
-                        quoteRepository.delete(quote);
-                        log.debug("Quote deleted due to edit: {}", quote);
-                    }
-                });
+        if (!matches(event.getMessage().getContentDisplay())) {
+            quoteService.deleteQuoteByMessageId(event.getMessageIdLong());
+            log.debug("Deleting quote (if exists) due to original message edit: {}", event.getMessage().getContentDisplay());
+        }
     }
 
     @Override
     public void onMessageDelete(MessageDeleteEvent event) {
         if (!event.isFromGuild()) return;
 
-        quoteRepository.deleteByMessageId(event.getMessageIdLong());
+        log.debug("Deleting quote (if exists) due to original message delete: {}", event.getMessageId());
+        quoteService.deleteQuoteByMessageId(event.getMessageIdLong());
     }
 
     public boolean matches(String content) {
@@ -101,34 +93,5 @@ public class QuoteListener extends ListenerAdapter {
 
         log.debug("Message passed all checks");
         return true;
-    }
-
-    private void save(Message message) {
-        quoteRepository.findByChannelIdAndContent(message.getChannel().getIdLong(), message.getContentDisplay())
-                .ifPresentOrElse(
-                        quote -> log.debug("Quote already exists in channel, skipping save: {}", quote),
-                        () -> {
-                            quoteRepository.save(new Quote.Builder()
-                                    .setMessageId(message.getIdLong())
-                                    .setAuthorId(message.getAuthor().getIdLong())
-                                    .setChannelId(message.getChannel().getIdLong())
-                                    .setContent(message.getContentDisplay())
-                                    .build());
-                            log.debug("New quote saved: {}", message.getContentDisplay());
-                        }
-                );
-    }
-
-    private Optional<Quote> findRandom(long channelId) {
-        final int count = quoteRepository.countByChannelId(channelId);
-        if (count == 0) {
-            log.debug("No quotes found in channel: {}, nothing to return.", channelId);
-            return Optional.empty();
-        }
-
-        final int randomIndex = random.nextInt(count);
-        PageRequest pageRequest = PageRequest.of(randomIndex, 1);
-
-        return quoteRepository.findByChannelId(channelId, pageRequest).stream().findFirst();
     }
 }

@@ -1,12 +1,16 @@
 package ca.ryanmorrison.chatterbox.listener;
 
 import ca.ryanmorrison.chatterbox.constants.QuoteConstants;
+import ca.ryanmorrison.chatterbox.exception.ResourceNotFoundException;
 import ca.ryanmorrison.chatterbox.extension.FormattedListenerAdapter;
-import ca.ryanmorrison.chatterbox.persistence.repository.QuoteHistoryRepository;
+import ca.ryanmorrison.chatterbox.extension.Page;
+import ca.ryanmorrison.chatterbox.persistence.entity.QuoteHistory;
+import ca.ryanmorrison.chatterbox.service.QuoteService;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.interactions.components.ActionRow;
@@ -14,10 +18,10 @@ import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
 
 @Component
 public class HistoryCommandListener extends FormattedListenerAdapter {
@@ -25,10 +29,10 @@ public class HistoryCommandListener extends FormattedListenerAdapter {
     private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final String buttonPrefix = String.format("%s-", QuoteConstants.HISTORY_COMMAND_NAME);
-    private final QuoteHistoryRepository quoteHistoryRepository;
+    private final QuoteService quoteService;
 
-    public HistoryCommandListener(@Autowired QuoteHistoryRepository quoteHistoryRepository) {
-        this.quoteHistoryRepository = quoteHistoryRepository;
+    public HistoryCommandListener(@Autowired QuoteService quoteService) {
+        this.quoteService = quoteService;
     }
 
     @Override
@@ -39,26 +43,23 @@ public class HistoryCommandListener extends FormattedListenerAdapter {
 
         event.deferReply().setEphemeral(true).queue();
 
-        int count = quoteHistoryRepository.countByChannelId(event.getChannel().getIdLong());
-        if (count == 0) {
+        Optional<Page<Message>> historyOptional;
+        try {
+            historyOptional = queryHistory(event.getChannel(), 0);
+        } catch (ResourceNotFoundException e) {
+            event.getHook().sendMessageEmbeds(buildErrorResponse("The original message could not be found.")).queue();
+            return;
+        }
+
+        if (historyOptional.isEmpty()) {
             event.getHook().sendMessageEmbeds(buildErrorResponse("There's no history for this channel yet.")).queue();
             return;
         }
 
-        quoteHistoryRepository.findFirstByChannelIdOrderByEmittedDesc(event.getChannel().getIdLong())
-                .ifPresentOrElse(quoteHistory -> {
-                    event.getChannel().retrieveMessageById(quoteHistory.getQuote().getMessageId()).queue(message -> {
-                        if (message == null) {
-                            log.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
-                            event.getHook().sendMessageEmbeds(buildErrorResponse("The original message could not be found.")).queue();
-                            return;
-                        }
-
-                        event.getHook().sendMessageEmbeds(createEmbed(message))
-                                .addActionRow(createButtons(0, count))
-                                .queue();
-                    });
-                }, () -> event.getHook().sendMessageEmbeds(buildErrorResponse("There's no history for this channel yet.")).queue());
+        Page<Message> historyPage = historyOptional.get();
+        event.getHook().sendMessageEmbeds(createEmbed(historyPage.getObject()))
+                .addActionRow(createButtons(0, historyPage.getCount()))
+                .queue();
     }
 
     @Override
@@ -68,28 +69,48 @@ public class HistoryCommandListener extends FormattedListenerAdapter {
         event.deferEdit().queue();
 
         int index = Integer.parseInt(event.getComponentId().substring(buttonPrefix.length()));
-        PageRequest pageRequest = PageRequest.of(index, 1);
+        Optional<Page<Message>> historyOptional;
+        try {
+            historyOptional = queryHistory(event.getChannel(), index);
+        } catch (ResourceNotFoundException e) {
+            log.error("Found history with message ID {} but could not retrieve the message.", e.getIdentifier());
+            event.getHook().sendMessageEmbeds(buildErrorResponse(e.getMessage())).queue();
+            return;
+        }
 
-        quoteHistoryRepository.findByChannelIdOrderByEmittedDesc(event.getChannelIdLong(), pageRequest)
-                .stream().findFirst().ifPresentOrElse(quoteHistory -> {
-                    int count = quoteHistoryRepository.countByChannelId(event.getChannel().getIdLong());
-                    event.getChannel().retrieveMessageById(quoteHistory.getQuote().getMessageId()).queue(message -> {
-                        if (message == null) {
-                            log.error("Found history with message ID {} but could not retrieve the message.", quoteHistory.getQuote().getMessageId());
-                            event.getHook().sendMessageEmbeds(buildErrorResponse("The original message could not be found.")).queue();
-                            return;
-                        }
+        if (historyOptional.isEmpty()) {
+            log.error("Expected page based on index {} for channel ID {} but none was found.", index, event.getChannelId());
+            event.getHook().sendMessageEmbeds(buildErrorResponse("An error occurred while loading the next page - possibly a message was deleted."))
+                    .queue();
+            return;
+        }
 
-                        event.getHook().editOriginalEmbeds(createEmbed(message))
-                                .and(event.getHook().editOriginalComponents(ActionRow.of(createButtons(index, count))))
-                                .queue();
-                    });
-                },
-                () -> {
-                    log.error("Expected page based on index {} for channel ID {} but none was found.", index, event.getChannelId());
-                    event.getHook().sendMessageEmbeds(buildErrorResponse("An error occurred while loading the next page - possibly a message was deleted."))
-                            .queue();
-                });
+        Page<Message> historyPage = historyOptional.get();
+        event.getHook().editOriginalEmbeds(createEmbed(historyPage.getObject()))
+                .and(event.getHook().editOriginalComponents(ActionRow.of(createButtons(historyPage.getIndex(), historyPage.getCount()))))
+                .queue();
+    }
+
+    private Optional<Page<Message>> queryHistory(MessageChannelUnion channel, int index) throws ResourceNotFoundException {
+        Optional<Page<QuoteHistory>> pageOptional = quoteService.findQuoteHistory(channel.getIdLong(), index);
+        if (pageOptional.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Page<QuoteHistory> historyPage = pageOptional.get();
+        QuoteHistory history = historyPage.getObject();
+
+        Message message = channel.retrieveMessageById(history.getQuote().getMessageId()).complete();
+        if (message == null) {
+            throw new ResourceNotFoundException("The original message could not be found.", "quote history", String.valueOf(history.getQuote().getMessageId()));
+        }
+
+        return Optional.of(new Page.Builder<Message>()
+                .setObject(message)
+                .setCount(historyPage.getCount())
+                .setIndex(historyPage.getIndex())
+                .build()
+        );
     }
 
     private MessageEmbed createEmbed(Message message) {

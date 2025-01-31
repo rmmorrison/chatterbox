@@ -1,9 +1,10 @@
 package ca.ryanmorrison.chatterbox.listener;
 
 import ca.ryanmorrison.chatterbox.constants.TriggerConstants;
+import ca.ryanmorrison.chatterbox.exception.DuplicateResourceException;
+import ca.ryanmorrison.chatterbox.exception.ResourceNotFoundException;
 import ca.ryanmorrison.chatterbox.extension.FormattedListenerAdapter;
 import ca.ryanmorrison.chatterbox.persistence.entity.Trigger;
-import ca.ryanmorrison.chatterbox.persistence.repository.TriggerRepository;
 import ca.ryanmorrison.chatterbox.service.TriggerService;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -30,11 +31,9 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
 
     private final String modalPrefix = String.format("%s-", TriggerConstants.TRIGGER_COMMAND_NAME.toLowerCase());
     private final TriggerService triggerService;
-    private final TriggerRepository triggerRepository;
 
-    public TriggerCommandListener(@Autowired TriggerService triggerService, @Autowired TriggerRepository triggerRepository) {
+    public TriggerCommandListener(@Autowired TriggerService triggerService) {
         this.triggerService = triggerService;
-        this.triggerRepository = triggerRepository;
     }
 
     @Override
@@ -77,21 +76,28 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
 
         String action = event.getModalId().substring(modalPrefix.length());
         if (action.equals("add")) {
-            triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getValue("challenge").getAsString()).ifPresentOrElse(trigger -> {
+            try {
+                triggerService.save(new Trigger.Builder()
+                        .channelId(event.getChannel().getIdLong())
+                        .challenge(event.getValue("challenge").getAsString())
+                        .response(event.getValue("response").getAsString())
+                        .build());
+            } catch (DuplicateResourceException e) {
                 event.getHook().sendMessageEmbeds(buildErrorResponse("A trigger with that challenge already exists.")).queue();
-            }, () -> triggerRepository.save(new Trigger.Builder()
-                    .channelId(event.getChannel().getIdLong())
-                    .challenge(event.getValue("challenge").getAsString())
-                    .response(event.getValue("response").getAsString())
-                    .build()));
+                return;
+            }
+
             event.getHook().sendMessageEmbeds(buildSuccessResponse("Trigger added successfully.")).queue();
         } else if (action.startsWith("edit-")) {
             int id = Integer.parseInt(action.substring("edit-".length()));
-            triggerRepository.findById(id).ifPresentOrElse(trigger -> {
-                trigger.setResponse(event.getValue("response").getAsString());
-                triggerRepository.save(trigger);
-                event.getHook().sendMessageEmbeds(buildSuccessResponse("Trigger edited successfully.")).queue();
-            }, () -> event.getHook().sendMessageEmbeds(buildErrorResponse("The specified trigger does not exist.")).queue());
+            try {
+                triggerService.edit(id, event.getValue("response").getAsString());
+            } catch (ResourceNotFoundException e) {
+                event.getHook().sendMessageEmbeds(buildErrorResponse("The specified trigger does not exist.")).queue();
+                return;
+            }
+
+            event.getHook().sendMessageEmbeds(buildSuccessResponse("Trigger edited successfully.")).queue();
         }
     }
 
@@ -103,16 +109,19 @@ public class TriggerCommandListener extends FormattedListenerAdapter {
 
         switch(action) {
             case TriggerConstants.EDIT_SUBCOMMAND_NAME:
-                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getSelectedOptions().get(0).getValue()).ifPresentOrElse(trigger -> {
+                triggerService.find(event.getChannel().getIdLong(), event.getSelectedOptions().get(0).getValue()).ifPresentOrElse(trigger -> {
                     event.replyModal(constructEditModal(trigger.getId(), trigger.getResponse())).queue();
                 }, () -> event.replyEmbeds(buildErrorResponse("The specified trigger does not exist.")).setEphemeral(true).queue());
                 break;
             case TriggerConstants.DELETE_SUBCOMMAND_NAME:
                 event.deferReply().setEphemeral(true).queue();
-                triggerRepository.findByChannelIdAndChallenge(event.getChannel().getIdLong(), event.getSelectedOptions().get(0).getValue()).ifPresentOrElse(trigger -> {
-                    triggerRepository.delete(trigger);
-                    event.getHook().sendMessage(MessageCreateData.fromEmbeds(buildSuccessResponse("Trigger deleted successfully."))).queue();
-                }, () -> event.getHook().sendMessage(MessageCreateData.fromEmbeds(buildErrorResponse("The specified trigger does not exist."))).queue());
+                try {
+                    triggerService.delete(event.getChannel().getIdLong(), event.getSelectedOptions().get(0).getValue());
+                } catch (ResourceNotFoundException e) {
+                    event.getHook().sendMessage(MessageCreateData.fromEmbeds(buildErrorResponse("The specified trigger does not exist."))).queue();
+                    return;
+                }
+                event.getHook().sendMessage(MessageCreateData.fromEmbeds(buildSuccessResponse("Trigger deleted successfully."))).queue();
                 break;
             default:
                 log.error("Received string select interaction for triggers with unknown action '{}'.", action);
