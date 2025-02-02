@@ -2,12 +2,14 @@ package ca.ryanmorrison.chatterbox.listener;
 
 import ca.ryanmorrison.chatterbox.constants.NHLConstants;
 import ca.ryanmorrison.chatterbox.constants.QuoteConstants;
+import ca.ryanmorrison.chatterbox.constants.RSSConstants;
 import ca.ryanmorrison.chatterbox.constants.TriggerConstants;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.Command;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
@@ -80,7 +82,13 @@ public class CommandRegistrationListener extends ListenerAdapter {
                                 new SubcommandData(TriggerConstants.EDIT_SUBCOMMAND_NAME, "Edit an existing trigger."),
                                 new SubcommandData(TriggerConstants.DELETE_SUBCOMMAND_NAME, "Delete an existing trigger.")
                         ),
-                Commands.slash(NHLConstants.SCHEDULE_COMMAND_NAME, "Displays the current day's NHL schedule.")
+                Commands.slash(NHLConstants.SCHEDULE_COMMAND_NAME, "Displays the current day's NHL schedule."),
+                Commands.slash(RSSConstants.RSS_COMMAND_NAME, "Manages RSS feeds for the current channel.")
+                        .addSubcommands(
+                                new SubcommandData(RSSConstants.ADD_SUBCOMMAND_NAME, "Add a new RSS feed.")
+                                        .addOption(OptionType.STRING, RSSConstants.FEED_URL_OPTION_NAME, "The URL of the RSS feed to add.", true),
+                                new SubcommandData(RSSConstants.DELETE_SUBCOMMAND_NAME, "Delete an existing RSS feed.")
+                        )
         );
     }
 

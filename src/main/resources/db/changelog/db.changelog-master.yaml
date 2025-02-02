@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/create_trigger_table.yaml
   - include:
       file: db/changelog/create_last_seen_table.yaml
+  - include:
+      file: db/changelog/create_rss_feed_table.yaml
