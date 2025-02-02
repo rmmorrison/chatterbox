@@ -107,7 +107,7 @@ public class FeedBatchProcessor {
                         return false;
                     })
                     .forEach(entry -> {
-                        MessageEmbed embed = embed(entry, feed.getTitle(), response.getImage());
+                        MessageEmbed embed = embed(entry, feed.getTitle(), response.getImage() != null ? response.getImage() : response.getIcon());
                         embedMap.computeIfAbsent(feed.getChannelId(), id -> new ArrayList<>()).add(embed);
                     });
             lastPublishedCache.put(feed.getId(), responseLastPublished);
