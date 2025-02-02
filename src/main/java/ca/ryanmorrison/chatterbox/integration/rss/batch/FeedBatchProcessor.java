@@ -22,6 +22,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +37,7 @@ public class FeedBatchProcessor {
     private final FeedService feedService;
     private final TransactionTemplate transactionTemplate;
 
+    private Instant lastSync;
     private final Map<Integer, Instant> lastPublishedCache = new HashMap<>();
 
     public FeedBatchProcessor(@Autowired JDA jda,
@@ -44,12 +46,14 @@ public class FeedBatchProcessor {
         this.jda = jda;
         this.feedService = feedService;
         this.transactionTemplate = new TransactionTemplate(platformTransactionManager);
+        this.lastSync = Instant.now();
     }
 
     @Scheduled(fixedDelayString = "${chatterbox.rssFeeds.updateInterval:300000}")
     public void process() {
         log.debug("Checking for updated RSS feeds");
 
+        Map<Long, List<MessageEmbed>> embedMap = new HashMap<>();
         List<Feed> feeds = feedService.get();
         feeds.forEach(feed -> {
             log.debug("Updating feed {} from channel {}", feed.getId(), feed.getChannelId());
@@ -80,12 +84,47 @@ public class FeedBatchProcessor {
                 return;
             }
 
-            log.debug("Feed {} has been updated since last check, sending messages", feed.getUrl());
+            log.debug("Feed {} has been updated since last check, creating embeds", feed.getUrl());
             response.getEntries().stream()
-                    .filter(entry -> entry.getUpdatedDate() == null) // ignore updated entries, we only care about new ones
                     .filter(entry -> entry.getPublishedDate().toInstant().isAfter(cacheValue))
-                    .forEach(entry -> emit(feed.getChannelId(), entry, response.getTitle(), response.getIcon()));
+                    .filter(entry -> {
+                        if (entry.getUpdatedDate() == null) {
+                            log.debug("Entry {} has no updated date, treating as new", entry.getTitle());
+                            return true;
+                        }
+                        // only return entries that have been created *and* updated since the last sync
+                        // otherwise, we'd emit the same entry twice
+                        if (entry.getPublishedDate().toInstant().isAfter(lastSync) && entry.getUpdatedDate().toInstant().isAfter(lastSync)) {
+                            log.debug("Entry {} has been created and updated since last sync, treating as new", entry.getTitle());
+                            return true;
+                        }
+
+                        log.debug("Entry {} has been updated since last sync, but not created, excluding from results", entry.getTitle());
+                        return false;
+                    })
+                    .forEach(entry -> {
+                        MessageEmbed embed = embed(entry, feed.getTitle(), response.getImage());
+                        embedMap.computeIfAbsent(feed.getChannelId(), id -> new ArrayList<>()).add(embed);
+                    });
             lastPublishedCache.put(feed.getId(), responseLastPublished);
+        });
+
+        lastSync = Instant.now();
+
+        if (embedMap.isEmpty()) {
+            log.debug("No RSS feed produced any new entries, nothing to do further");
+            return;
+        }
+
+        log.debug("Sending {} RSS feed messages to Discord", embedMap.size());
+        embedMap.forEach((channelId, embeds) -> {
+            TextChannel channel = jda.getTextChannelById(channelId);
+            if (channel == null) {
+                log.warn("Channel ID {} not found, unable to send RSS feed messages", channelId);
+                return;
+            }
+
+            channel.sendMessageEmbeds(embeds).queue();
         });
     }
 
@@ -110,8 +149,8 @@ public class FeedBatchProcessor {
         flushCache();
     }
 
-    private void emit(long channelId, SyndEntry entry, String feedName, SyndImage thumbnail) {
-        MessageEmbed embed = new EmbedBuilder()
+    private MessageEmbed embed(SyndEntry entry, String feedName, SyndImage thumbnail) {
+        return new EmbedBuilder()
                 .setTitle(entry.getTitle())
                 .setAuthor(feedName)
                 .setUrl(entry.getLink())
@@ -122,12 +161,5 @@ public class FeedBatchProcessor {
                         .map(SyndPerson::getName)
                         .collect(Collectors.joining(", ")))
                 .build();
-
-        TextChannel channel = jda.getTextChannelById(channelId);
-        if (channel == null) {
-            log.warn("Channel ID {} not found, unable to send RSS feed message", channelId);
-            return;
-        }
-        channel.sendMessageEmbeds(embed).queue();
     }
 }
