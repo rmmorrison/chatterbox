@@ -12,6 +12,10 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -154,12 +158,49 @@ public class FeedBatchProcessor {
                 .setTitle(entry.getTitle())
                 .setAuthor(feedName)
                 .setUrl(entry.getLink())
-                .setDescription(entry.getDescription().getValue())
+                .setDescription(extractDescription(entry.getDescription().getValue()))
                 .setTimestamp(entry.getPublishedDate().toInstant())
                 .setThumbnail(thumbnail != null ? thumbnail.getUrl() : null)
                 .setFooter(entry.getAuthors().stream()
                         .map(SyndPerson::getName)
                         .collect(Collectors.joining(", ")))
                 .build();
+    }
+
+    private String extractDescription(String description) {
+        Document document = Jsoup.parse(description);
+
+        // check for paragraph elements, if any aren't empty then return the first one which contains text
+        Elements paragraphElements = document.select("p");
+        for (Element paragraph : paragraphElements) {
+            if (!paragraph.text().isEmpty()) {
+                return truncate(paragraph.text());
+            }
+        }
+
+        //
+        // the below is a workaround for CBC News
+        //
+
+        // if document only contains one img element
+        Elements imgElements = document.select("img");
+        for (Element imgElement : imgElements) {
+            if (imgElement.hasAttr("title")) {
+                String titleText = imgElement.attr("title");
+                if (!titleText.isEmpty()) {
+                    return truncate(titleText);
+                }
+            }
+        }
+
+        //
+        // snap back to reality
+        //
+
+        return truncate(document.text());
+    }
+
+    private String truncate(String text) {
+        return text.length() > 280 ? text.substring(0, 277) + "..." : text;
     }
 }

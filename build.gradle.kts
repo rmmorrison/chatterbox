@@ -37,6 +37,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.2")
     implementation("com.rometools:rome:2.1.0")
+    implementation("org.jsoup:jsoup:1.18.3")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     runtimeOnly("org.xerial:sqlite-jdbc:3.47.1.0")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
