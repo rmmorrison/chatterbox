@@ -13,6 +13,7 @@ import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionE
 import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
 import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.validator.routines.UrlValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +31,7 @@ public class RSSFeedCommandListener extends FormattedListenerAdapter {
     private final String stringSelectId = String.format("%s-delete", RSSConstants.RSS_COMMAND_NAME);
     private final FeedService feedService;
 
-    private UrlValidator urlValidator = new UrlValidator(new String[] {"http", "https"});
+    private final UrlValidator urlValidator = new UrlValidator(new String[] {"http", "https"});
 
     public RSSFeedCommandListener(@Autowired FeedService feedService) {
         this.feedService = feedService;
@@ -67,7 +68,7 @@ public class RSSFeedCommandListener extends FormattedListenerAdapter {
                 }
 
                 try {
-                    feedService.add(event.getChannel().getIdLong(), event.getUser().getIdLong(), feed.get());
+                    feedService.add(event.getChannel().getIdLong(), event.getUser().getIdLong(), feedUrl, feed.get());
                     event.replyEmbeds(buildSuccessResponse("RSS feed added successfully.")).setEphemeral(true).queue();
                 } catch (DuplicateResourceException e) {
                     event.replyEmbeds(buildErrorResponse(e.getMessage())).setEphemeral(true).queue();
@@ -109,7 +110,8 @@ public class RSSFeedCommandListener extends FormattedListenerAdapter {
                 .addActionRow(
                         StringSelectMenu.create(stringSelectId)
                                 .addOptions(feeds.stream()
-                                        .map(feed -> SelectOption.of(feed.getTitle(), feed.getUrl()))
+                                        .map(feed ->
+                                                SelectOption.of(feed.getTitle() != null ? StringUtils.truncate(feed.getTitle(), 100) : feed.getUrl(), feed.getUrl()))
                                         .toList())
                                 .build()
                 ).setEphemeral(true).queue();

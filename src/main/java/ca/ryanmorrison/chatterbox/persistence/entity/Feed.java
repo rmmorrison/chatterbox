@@ -3,6 +3,8 @@ package ca.ryanmorrison.chatterbox.persistence.entity;
 import ca.ryanmorrison.chatterbox.persistence.RSSCacheInvalidator;
 import jakarta.persistence.*;
 
+import java.time.Instant;
+
 @Entity
 @EntityListeners(RSSCacheInvalidator.class)
 @Table(name = "rss_feed")
@@ -16,16 +18,19 @@ public class Feed {
     @Column(name = "feed_url")
     private String url;
     private String title;
+    @Column(name = "last_published")
+    private Instant lastPublished;
 
     protected Feed() {
     }
 
-    public Feed(int id, long channelId, long userId, String url, String title) {
+    public Feed(int id, long channelId, long userId, String url, String title, Instant lastPublished) {
         this.id = id;
         this.channelId = channelId;
         this.userId = userId;
         this.url = url;
         this.title = title;
+        this.lastPublished = lastPublished;
     }
 
     public int getId() {
@@ -48,6 +53,10 @@ public class Feed {
         return title;
     }
 
+    public Instant getLastPublished() {
+        return lastPublished;
+    }
+
     @Override
     public String toString() {
         return "Feed{" +
@@ -56,6 +65,7 @@ public class Feed {
                 ", userId=" + userId +
                 ", url='" + url + '\'' +
                 ", title='" + title + '\'' +
+                ", lastPublished=" + lastPublished +
                 '}';
     }
 
@@ -64,6 +74,7 @@ public class Feed {
         private long userId;
         private String url;
         private String title;
+        private Instant lastPublished;
 
         public Builder setChannelId(long channelId) {
             this.channelId = channelId;
@@ -85,12 +96,18 @@ public class Feed {
             return this;
         }
 
+        public Builder setLastPublished(Instant lastPublished) {
+            this.lastPublished = lastPublished;
+            return this;
+        }
+
         public Feed build() {
             Feed feed = new Feed();
             feed.channelId = this.channelId;
             feed.userId = this.userId;
             feed.url = this.url;
             feed.title = this.title;
+            feed.lastPublished = this.lastPublished;
             return feed;
         }
     }

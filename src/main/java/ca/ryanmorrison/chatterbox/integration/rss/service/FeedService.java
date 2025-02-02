@@ -22,6 +22,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 @Component
@@ -61,8 +62,7 @@ public class FeedService {
     }
 
     @Transactional
-    public void add(long channelId, long userId, SyndFeed feed) throws DuplicateResourceException {
-        String url = feed.getLink();
+    public void add(long channelId, long userId, String url, SyndFeed feed) throws DuplicateResourceException {
         if (feedRepository.findByChannelIdAndUrl(channelId, url).isPresent()) {
             throw new DuplicateResourceException("RSS feed already exists for this channel.", "RSSFeed", url);
         }
@@ -73,6 +73,11 @@ public class FeedService {
                 .setUrl(url)
                 .setTitle(feed.getTitle())
                 .build());
+    }
+
+    @Transactional
+    public void update(long id, Instant lastPublished) {
+        feedRepository.updateLastPublished(id, lastPublished);
     }
 
     @Transactional
