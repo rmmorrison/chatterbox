@@ -34,5 +34,5 @@ databaseChangeLog:
                   constraints:
                     nullable: false
               - column:
-                  name: last_published
+                  name: updated_at
                   type: INTEGER

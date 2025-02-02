@@ -65,13 +65,13 @@ public class FeedBatchProcessor {
             Instant responseLastPublished = response.getPublishedDate().toInstant();
             Instant cacheValue = lastPublishedCache.computeIfAbsent(feed.getId(), id -> {
                 log.debug("No previous update time found for feed {} in cache, checking entity for a previous save", feed.getUrl());
-                Instant entityLastPublished = feed.getLastPublished();
-                if (entityLastPublished == null) {
+                Instant entityLastUpdated = feed.getUpdated();
+                if (entityLastUpdated == null) {
                     log.debug("No previous update time found for feed {} in entity, using last published value from feed and updating cache", feed.getUrl());
                     return responseLastPublished;
                 } else {
                     log.debug("Found previous update time for feed {} in entity, updating cache", feed.getUrl());
-                    return entityLastPublished;
+                    return entityLastUpdated;
                 }
             });
 
@@ -82,9 +82,8 @@ public class FeedBatchProcessor {
 
             log.debug("Feed {} has been updated since last check, sending messages", feed.getUrl());
             response.getEntries().stream()
-                    .filter(entry -> entry.getPublishedDate()
-                            .toInstant()
-                            .isAfter(cacheValue))
+                    .filter(entry -> entry.getUpdatedDate() == null) // ignore updated entries, we only care about new ones
+                    .filter(entry -> entry.getPublishedDate().toInstant().isAfter(cacheValue))
                     .forEach(entry -> emit(feed.getChannelId(), entry, response.getTitle(), response.getIcon()));
             lastPublishedCache.put(feed.getId(), responseLastPublished);
         });

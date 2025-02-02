@@ -19,6 +19,6 @@ public interface FeedRepository extends CrudRepository<Feed, Long> {
     Optional<Feed> findByChannelIdAndUrl(long channelId, String url);
 
     @Modifying
-    @Query("update Feed f set f.lastPublished = :lastPublished where f.id = :id")
-    void updateLastPublished(long id, Instant lastPublished);
+    @Query("update Feed f set f.updated = :updated where f.id = :id")
+    void saveLastUpdated(long id, Instant updated);
 }

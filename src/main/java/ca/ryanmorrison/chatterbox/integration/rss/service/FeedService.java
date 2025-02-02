@@ -76,8 +76,8 @@ public class FeedService {
     }
 
     @Transactional
-    public void update(long id, Instant lastPublished) {
-        feedRepository.updateLastPublished(id, lastPublished);
+    public void update(long id, Instant updated) {
+        feedRepository.saveLastUpdated(id, updated);
     }
 
     @Transactional

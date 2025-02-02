@@ -18,19 +18,19 @@ public class Feed {
     @Column(name = "feed_url")
     private String url;
     private String title;
-    @Column(name = "last_published")
-    private Instant lastPublished;
+    @Column(name = "updated_at")
+    private Instant updated;
 
     protected Feed() {
     }
 
-    public Feed(int id, long channelId, long userId, String url, String title, Instant lastPublished) {
+    public Feed(int id, long channelId, long userId, String url, String title, Instant updated) {
         this.id = id;
         this.channelId = channelId;
         this.userId = userId;
         this.url = url;
         this.title = title;
-        this.lastPublished = lastPublished;
+        this.updated = updated;
     }
 
     public int getId() {
@@ -53,8 +53,8 @@ public class Feed {
         return title;
     }
 
-    public Instant getLastPublished() {
-        return lastPublished;
+    public Instant getUpdated() {
+        return updated;
     }
 
     @Override
@@ -65,7 +65,7 @@ public class Feed {
                 ", userId=" + userId +
                 ", url='" + url + '\'' +
                 ", title='" + title + '\'' +
-                ", lastPublished=" + lastPublished +
+                ", updated=" + updated +
                 '}';
     }
 
@@ -74,7 +74,7 @@ public class Feed {
         private long userId;
         private String url;
         private String title;
-        private Instant lastPublished;
+        private Instant updated;
 
         public Builder setChannelId(long channelId) {
             this.channelId = channelId;
@@ -96,8 +96,8 @@ public class Feed {
             return this;
         }
 
-        public Builder setLastPublished(Instant lastPublished) {
-            this.lastPublished = lastPublished;
+        public Builder setUpdated(Instant updated) {
+            this.updated = updated;
             return this;
         }
 
@@ -107,7 +107,7 @@ public class Feed {
             feed.userId = this.userId;
             feed.url = this.url;
             feed.title = this.title;
-            feed.lastPublished = this.lastPublished;
+            feed.updated = this.updated;
             return feed;
         }
     }
