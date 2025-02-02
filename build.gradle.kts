@@ -24,7 +24,9 @@ repositories {
 }
 
 dependencies {
-    implementation("commons-validator:commons-validator:1.9.0")
+    implementation("commons-validator:commons-validator:1.9.0") {
+        exclude(module = "commons-logging")
+    }
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.hibernate.orm:hibernate-community-dialects")
