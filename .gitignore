@@ -1,0 +1,16 @@
+target/
+*.class
+*.jar
+*.war
+*.iml
+.idea/
+.vscode/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite-journal
+hs_err_pid*.log
+replay_pid*.log
