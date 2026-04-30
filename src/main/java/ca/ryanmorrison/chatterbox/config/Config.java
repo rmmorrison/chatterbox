@@ -1,11 +1,9 @@
 package ca.ryanmorrison.chatterbox.config;
 
-import java.util.Optional;
-
 public record Config(
         String discordToken,
         boolean devMode,
-        Optional<DatabaseConfig> database,
+        DatabaseConfig database,
         String logLevel) {
 
     public record DatabaseConfig(String url, String user, String password) {
@@ -18,23 +16,25 @@ public record Config(
     }
 
     static Config fromEnvironment(java.util.function.Function<String, String> env) {
-        String token = env.apply("CHATTERBOX_DISCORD_TOKEN");
-        if (token == null || token.isBlank()) {
-            throw new IllegalStateException("CHATTERBOX_DISCORD_TOKEN is required.");
-        }
+        String token = required(env, "CHATTERBOX_DISCORD_TOKEN");
+        String dbUrl = required(env, "CHATTERBOX_DB_URL");
         boolean devMode = Boolean.parseBoolean(envOrDefault(env, "CHATTERBOX_DEV_MODE", "false"));
         String logLevel = envOrDefault(env, "CHATTERBOX_LOG_LEVEL", "INFO");
 
-        Optional<DatabaseConfig> db = Optional.empty();
-        String dbUrl = env.apply("CHATTERBOX_DB_URL");
-        if (dbUrl != null && !dbUrl.isBlank()) {
-            db = Optional.of(new DatabaseConfig(
-                    dbUrl,
-                    envOrDefault(env, "CHATTERBOX_DB_USER", ""),
-                    envOrDefault(env, "CHATTERBOX_DB_PASSWORD", "")));
-        }
+        var db = new DatabaseConfig(
+                dbUrl,
+                envOrDefault(env, "CHATTERBOX_DB_USER", ""),
+                envOrDefault(env, "CHATTERBOX_DB_PASSWORD", ""));
 
         return new Config(token, devMode, db, logLevel);
+    }
+
+    private static String required(java.util.function.Function<String, String> env, String key) {
+        String v = env.apply(key);
+        if (v == null || v.isBlank()) {
+            throw new IllegalStateException(key + " is required.");
+        }
+        return v;
     }
 
     private static String envOrDefault(java.util.function.Function<String, String> env, String key, String fallback) {

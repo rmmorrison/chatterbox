@@ -10,47 +10,30 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
-import java.util.Optional;
 
 /**
- * Lazy holder for the bot's shared connection pool and {@link DSLContext}.
- *
- * <p>The pool is built on first call to {@link #dsl()}, so a deployment that
- * never sets {@code CHATTERBOX_DB_URL} (or modules that never touch the DB)
- * pays no cost.
+ * Holder for the bot's shared connection pool and {@link DSLContext}. The pool
+ * is created eagerly in the constructor — the database is a mandatory part of
+ * the bot's runtime, so failures surface at startup rather than mid-request.
  */
 public final class Database implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(Database.class);
 
-    private final Optional<Config.DatabaseConfig> config;
-    private volatile HikariDataSource dataSource;
-    private volatile DSLContext dsl;
+    private final HikariDataSource dataSource;
+    private final DSLContext dsl;
 
-    public Database(Optional<Config.DatabaseConfig> config) {
-        this.config = config;
+    public Database(Config.DatabaseConfig config) {
+        this.dataSource = buildPool(config);
+        this.dsl = DSL.using(dataSource, dialectFor(config));
+        log.info("Database initialised: {}", redact(config.url()));
     }
 
-    public boolean isConfigured() {
-        return config.isPresent();
-    }
-
-    /** Synchronous lazy init; cheap to call repeatedly once initialized. */
-    public synchronized DSLContext dsl() {
-        if (dsl != null) return dsl;
-        var cfg = config.orElseThrow(() -> new IllegalStateException(
-                "Database access requested but CHATTERBOX_DB_URL is not set."));
-        this.dataSource = buildPool(cfg);
-        this.dsl = DSL.using(dataSource, dialectFor(cfg));
-        log.info("Database initialised: {}", redact(cfg.url()));
+    public DSLContext dsl() {
         return dsl;
     }
 
-    /** Returns the underlying {@link DataSource}, initialising if needed. */
-    public synchronized DataSource dataSource() {
-        if (dataSource == null) {
-            dsl(); // triggers init
-        }
+    public DataSource dataSource() {
         return dataSource;
     }
 
@@ -78,11 +61,7 @@ public final class Database implements AutoCloseable {
     }
 
     @Override
-    public synchronized void close() {
-        if (dataSource != null) {
-            dataSource.close();
-            dataSource = null;
-            dsl = null;
-        }
+    public void close() {
+        dataSource.close();
     }
 }

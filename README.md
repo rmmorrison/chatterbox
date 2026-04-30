@@ -19,10 +19,10 @@ deployment.
 | Variable                   | Required | Default | Purpose |
 |----------------------------|----------|---------|---------|
 | `CHATTERBOX_DISCORD_TOKEN` | yes      | —       | Bot token. |
+| `CHATTERBOX_DB_URL`        | yes      | —       | JDBC URL. `jdbc:postgresql:...` or `jdbc:sqlite:...`. |
+| `CHATTERBOX_DB_USER`       | no       | —       | DB user (Postgres). Unused for SQLite. |
+| `CHATTERBOX_DB_PASSWORD`   | no       | —       | DB password (Postgres). Unused for SQLite. |
 | `CHATTERBOX_DEV_MODE`      | no       | `false` | When `true`, slash commands register per-guild for instant updates. When `false`, they register globally. The opposite scope is cleared on each startup, so switching modes never leaves duplicates. |
-| `CHATTERBOX_DB_URL`        | no       | —       | JDBC URL. Setting this enables the database. `jdbc:postgresql:...` or `jdbc:sqlite:...`. |
-| `CHATTERBOX_DB_USER`       | no       | —       | DB user (Postgres). |
-| `CHATTERBOX_DB_PASSWORD`   | no       | —       | DB password (Postgres). |
 | `CHATTERBOX_LOG_LEVEL`     | no       | `INFO`  | Root logger level. |
 
 ## Building
@@ -101,10 +101,14 @@ flipping `CHATTERBOX_DEV_MODE`.
 
 ### Database
 
-Modules opt into the database by:
+The database is part of the bot's runtime: the connection pool is initialised
+at startup and `ModuleContext.database()` is always available. Whether a
+module uses it is up to the module.
 
-1. Declaring migration locations from `migrationLocations()`.
-2. Resolving a `DSLContext` lazily via `ctx.database()`.
+A module that needs persistence:
+
+1. Declares its migration locations from `migrationLocations()`.
+2. Resolves a `DSLContext` from `ctx.database()` (no `Optional`).
 
 Migrations from every module are merged into a single Flyway run with one
 shared `flyway_schema_history` table. To avoid version collisions, use
@@ -118,8 +122,7 @@ src/main/resources/db/migration/
 ```
 
 The dialect is selected from the JDBC URL (`postgresql` → `POSTGRES`,
-`sqlite` → `SQLITE`). The connection pool (HikariCP) is initialised lazily on
-first use.
+`sqlite` → `SQLITE`).
 
 ### Logging
 

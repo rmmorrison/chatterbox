@@ -12,16 +12,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConfigTest {
 
     @Test
-    void defaultsAreApplied() {
-        Config cfg = Config.fromEnvironment(Map.of("CHATTERBOX_DISCORD_TOKEN", "abc")::get);
+    void minimalRequiredEnvIsAccepted() {
+        Config cfg = Config.fromEnvironment(Map.of(
+                "CHATTERBOX_DISCORD_TOKEN", "abc",
+                "CHATTERBOX_DB_URL", "jdbc:sqlite:./chatterbox.db"
+        )::get);
         assertEquals("abc", cfg.discordToken());
         assertFalse(cfg.devMode());
         assertEquals("INFO", cfg.logLevel());
-        assertTrue(cfg.database().isEmpty());
+        assertTrue(cfg.database().isSqlite());
+        assertEquals("", cfg.database().user());
     }
 
     @Test
-    void devModeAndDbConfigAreParsed() {
+    void devModeAndPostgresConfigAreParsed() {
         Config cfg = Config.fromEnvironment(Map.of(
                 "CHATTERBOX_DISCORD_TOKEN", "tok",
                 "CHATTERBOX_DEV_MODE", "true",
@@ -30,14 +34,24 @@ class ConfigTest {
                 "CHATTERBOX_DB_PASSWORD", "p"
         )::get);
         assertTrue(cfg.devMode());
-        assertTrue(cfg.database().isPresent());
-        assertEquals("u", cfg.database().get().user());
-        assertTrue(cfg.database().get().isPostgres());
+        assertTrue(cfg.database().isPostgres());
+        assertEquals("u", cfg.database().user());
+        assertEquals("p", cfg.database().password());
     }
 
     @Test
     void missingTokenThrows() {
         assertThrows(IllegalStateException.class,
-                () -> Config.fromEnvironment(Map.<String, String>of()::get));
+                () -> Config.fromEnvironment(Map.of(
+                        "CHATTERBOX_DB_URL", "jdbc:sqlite:./x.db"
+                )::get));
+    }
+
+    @Test
+    void missingDbUrlThrows() {
+        assertThrows(IllegalStateException.class,
+                () -> Config.fromEnvironment(Map.of(
+                        "CHATTERBOX_DISCORD_TOKEN", "abc"
+                )::get));
     }
 }

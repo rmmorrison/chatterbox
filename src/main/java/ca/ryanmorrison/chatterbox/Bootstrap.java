@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -35,13 +34,16 @@ public final class Bootstrap {
         SLF4JBridgeHandler.install();
 
         Config config = Config.fromEnvironment();
-        log.info("Starting Chatterbox (devMode={}, db={})",
-                config.devMode(), config.database().isPresent() ? "configured" : "disabled");
+        log.info("Starting Chatterbox (devMode={})", config.devMode());
 
         List<Module> modules = ModuleRegistry.discover();
 
         Database database = new Database(config.database());
-        runMigrationsIfNeeded(modules, database, config);
+
+        var migrationLocations = modules.stream()
+                .flatMap(m -> m.migrationLocations().stream())
+                .toList();
+        Migrations.run(database.dataSource(), migrationLocations);
 
         Set<GatewayIntent> intents = new HashSet<>();
         EnumSet<CacheFlag> cacheFlags = EnumSet.noneOf(CacheFlag.class);
@@ -72,7 +74,7 @@ public final class Bootstrap {
 
         commandSync.syncAll(jda);
 
-        ModuleContext ctx = new ContextImpl(jda, config, database);
+        ModuleContext ctx = new ContextImpl(jda, config, database.dsl());
         for (Module m : modules) {
             try {
                 m.onStart(ctx);
@@ -83,18 +85,6 @@ public final class Bootstrap {
         }
 
         installShutdownHook(jda, modules, database);
-    }
-
-    private static void runMigrationsIfNeeded(List<Module> modules, Database database, Config config) {
-        var locations = modules.stream()
-                .flatMap(m -> m.migrationLocations().stream())
-                .toList();
-        if (locations.isEmpty()) return;
-        if (!database.isConfigured()) {
-            throw new IllegalStateException(
-                    "Modules declared migrations (" + locations + ") but CHATTERBOX_DB_URL is not set.");
-        }
-        Migrations.run(database.dataSource(), locations);
     }
 
     private static void installShutdownHook(JDA jda, List<Module> modules, Database database) {
@@ -115,11 +105,7 @@ public final class Bootstrap {
         }, "chatterbox-shutdown"));
     }
 
-    private record ContextImpl(JDA jda, Config config, Database db) implements ModuleContext {
-        @Override public Optional<DSLContext> database() {
-            return db.isConfigured() ? Optional.of(db.dsl()) : Optional.empty();
-        }
-    }
+    private record ContextImpl(JDA jda, Config config, DSLContext database) implements ModuleContext {}
 
     private Bootstrap() {}
 }

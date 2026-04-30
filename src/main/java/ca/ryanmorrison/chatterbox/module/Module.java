@@ -17,7 +17,7 @@ import java.util.Set;
  *
  * <p>Every hook is optional. A module that only adds a slash command overrides
  * just {@link #slashCommands()}; one that only listens to events overrides just
- * {@link #listeners()}; one that needs a database overrides
+ * {@link #listeners()}; one that needs persistence declares its
  * {@link #migrationLocations()} and pulls a {@code DSLContext} from
  * {@link ModuleContext#database()}.
  */
