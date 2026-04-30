@@ -164,3 +164,16 @@ for the classifier rules.
 
 Requires the **`MESSAGE_CONTENT`** privileged intent — enable it on the bot's
 application page in the Discord Developer Portal.
+
+#### `/shout-history`
+
+Each successful emission is recorded against the channel. Users can run the
+ephemeral, guild-only `/shout-history` slash command to browse the bot's
+emissions for the current channel, paginating with **← Older** / **Newer →**
+buttons. The embed shows the original author's server display name, the time
+the shout was first written, and a position indicator (e.g. `Entry 2 of 17`).
+
+History rows are tied to their underlying shout via an FK with
+`ON DELETE CASCADE`, so any path that removes a shout (delete, edit-disqualifies,
+edit-collision, bulk delete) automatically removes the corresponding history
+entries.

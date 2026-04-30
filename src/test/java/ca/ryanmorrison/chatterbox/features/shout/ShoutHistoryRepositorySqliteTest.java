@@ -15,18 +15,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Optional;
 
 import static ca.ryanmorrison.chatterbox.db.generated.Tables.SHOUTS;
+import static ca.ryanmorrison.chatterbox.db.generated.Tables.SHOUT_HISTORY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Sanity check that the SQLite migration matches the Postgres one closely
- * enough that {@link ShoutRepository} works against either dialect using the
- * Postgres-generated jOOQ classes.
+ * Verifies that the SQLite migration includes the FK with cascade and that
+ * Hikari's connection-init {@code PRAGMA foreign_keys = ON} actually applies
+ * — without it, SQLite silently ignores the constraint.
  */
-class ShoutRepositorySqliteTest {
+class ShoutHistoryRepositorySqliteTest {
 
     private static final OffsetDateTime AUTHORED_AT =
             OffsetDateTime.of(2026, 4, 30, 12, 0, 0, 0, ZoneOffset.UTC);
@@ -35,7 +35,8 @@ class ShoutRepositorySqliteTest {
     private Path dbFile;
     private HikariDataSource dataSource;
     private DSLContext dsl;
-    private ShoutRepository repo;
+    private ShoutRepository shouts;
+    private ShoutHistoryRepository history;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -55,7 +56,8 @@ class ShoutRepositorySqliteTest {
                 .migrate();
 
         dsl = DSL.using(dataSource, SQLDialect.SQLITE, new Settings().withRenderSchema(false));
-        repo = new ShoutRepository(dsl);
+        shouts = new ShoutRepository(dsl);
+        history = new ShoutHistoryRepository(dsl);
     }
 
     @AfterEach
@@ -64,25 +66,26 @@ class ShoutRepositorySqliteTest {
         if (dbFile != null) Files.deleteIfExists(dbFile);
     }
 
-    @Test
-    void insertAndFetchAgainstSqlite() {
-        repo.tryInsert(1L, 100L, "HELLO WORLD", AUTHOR, AUTHORED_AT);
-        assertEquals(Optional.of("HELLO WORLD"), repo.findContentByMessageId(100L));
+    private long shout(long channelId, long messageId, String content) {
+        shouts.tryInsert(channelId, messageId, content, AUTHOR, AUTHORED_AT);
+        return dsl.select(SHOUTS.ID).from(SHOUTS).where(SHOUTS.MESSAGE_ID.eq(messageId)).fetchOne(SHOUTS.ID);
     }
 
     @Test
-    void duplicateInsertIsIgnoredAgainstSqlite() {
-        repo.tryInsert(1L, 100L, "HELLO WORLD", AUTHOR, AUTHORED_AT);
-        repo.tryInsert(1L, 101L, "HELLO WORLD", AUTHOR, AUTHORED_AT);
-        assertEquals(1, dsl.fetchCount(SHOUTS));
+    void recordAndFindLatestAgainstSqlite() {
+        long s1 = shout(1L, 100L, "HELLO WORLD AGAIN");
+        history.record(1L, s1);
+        assertTrue(history.findLatest(1L).isPresent());
+        assertEquals("HELLO WORLD AGAIN", history.findLatest(1L).orElseThrow().content());
     }
 
     @Test
-    void updateCollisionDeletesOriginalAgainstSqlite() {
-        repo.tryInsert(1L, 100L, "ORIGINAL CONTENT HERE", AUTHOR, AUTHORED_AT);
-        repo.tryInsert(1L, 101L, "EXISTING TWIN HERE", AUTHOR, AUTHORED_AT);
-        repo.updateOrDeleteOnCollision(1L, 100L, "EXISTING TWIN HERE");
-        assertTrue(repo.findContentByMessageId(100L).isEmpty());
-        assertEquals(Optional.of("EXISTING TWIN HERE"), repo.findContentByMessageId(101L));
+    void deleteCascadesAgainstSqlite() {
+        long s1 = shout(1L, 100L, "DOOMED SHOUT FOREVER");
+        history.record(1L, s1);
+        assertEquals(1, dsl.fetchCount(SHOUT_HISTORY));
+        shouts.deleteByMessageId(100L);
+        assertEquals(0, dsl.fetchCount(SHOUT_HISTORY),
+                "FK cascade should remove history rows when the shout is deleted");
     }
 }

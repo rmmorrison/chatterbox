@@ -3,6 +3,7 @@ package ca.ryanmorrison.chatterbox.features.shout;
 import org.jooq.DSLContext;
 import org.jooq.impl.DSL;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,10 +29,12 @@ final class ShoutRepository {
      * Inserts a shout, ignoring the row if {@code (channel_id, content)} is
      * already present in this channel.
      */
-    void tryInsert(long channelId, long messageId, String content) {
+    void tryInsert(long channelId, long messageId, String content,
+                   long authorId, OffsetDateTime authoredAt) {
         dsl.insertInto(SHOUTS)
-                .columns(SHOUTS.CHANNEL_ID, SHOUTS.MESSAGE_ID, SHOUTS.CONTENT)
-                .values(channelId, messageId, content)
+                .columns(SHOUTS.CHANNEL_ID, SHOUTS.MESSAGE_ID, SHOUTS.CONTENT,
+                         SHOUTS.AUTHOR_ID, SHOUTS.AUTHORED_AT)
+                .values(channelId, messageId, content, authorId, authoredAt)
                 .onDuplicateKeyIgnore()
                 .execute();
     }
@@ -76,15 +79,23 @@ final class ShoutRepository {
 
     /**
      * Picks a random shout from the channel that isn't the message we just
-     * received, or empty if no peer exists.
+     * received, or empty if no peer exists. Returns the full {@link Peer}
+     * payload so the caller can record an emission against it without a
+     * second round trip.
      */
-    Optional<String> randomPeer(long channelId, long excludeMessageId) {
-        return dsl.select(SHOUTS.CONTENT)
+    Optional<Peer> randomPeer(long channelId, long excludeMessageId) {
+        var record = dsl.select(SHOUTS.ID, SHOUTS.CONTENT, SHOUTS.AUTHOR_ID, SHOUTS.AUTHORED_AT)
                 .from(SHOUTS)
                 .where(SHOUTS.CHANNEL_ID.eq(channelId))
                 .and(SHOUTS.MESSAGE_ID.ne(excludeMessageId))
                 .orderBy(DSL.rand())
                 .limit(1)
-                .fetchOptional(SHOUTS.CONTENT);
+                .fetchOne();
+        if (record == null) return Optional.empty();
+        return Optional.of(new Peer(
+                record.get(SHOUTS.ID),
+                record.get(SHOUTS.CONTENT),
+                record.get(SHOUTS.AUTHOR_ID),
+                record.get(SHOUTS.AUTHORED_AT)));
     }
 }

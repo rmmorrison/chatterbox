@@ -53,6 +53,9 @@ public final class Database implements AutoCloseable {
         if (cfg.isSqlite()) {
             // SQLite serialises writes; one connection is the safe default.
             hc.setMaximumPoolSize(1);
+            // SQLite has foreign keys disabled per-connection by default;
+            // re-enable on every Hikari-issued connection so ON DELETE CASCADE works.
+            hc.setConnectionInitSql("PRAGMA foreign_keys = ON");
         }
         return new HikariDataSource(hc);
     }

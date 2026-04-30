@@ -7,6 +7,7 @@ package ca.ryanmorrison.chatterbox.db.generated.tables;
 import ca.ryanmorrison.chatterbox.db.generated.Indexes;
 import ca.ryanmorrison.chatterbox.db.generated.Keys;
 import ca.ryanmorrison.chatterbox.db.generated.Public;
+import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory.ShoutHistoryPath;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.ShoutsRecord;
 
 import java.time.OffsetDateTime;
@@ -16,10 +17,14 @@ import java.util.List;
 
 import org.jooq.Condition;
 import org.jooq.Field;
+import org.jooq.ForeignKey;
 import org.jooq.Index;
+import org.jooq.InverseForeignKey;
 import org.jooq.Name;
+import org.jooq.Path;
 import org.jooq.PlainSQL;
 import org.jooq.QueryPart;
+import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
 import org.jooq.Stringly;
@@ -80,6 +85,16 @@ public class Shouts extends TableImpl<ShoutsRecord> {
      */
     public final TableField<ShoutsRecord, OffsetDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false).defaultValue(DSL.field(DSL.raw("now()"), SQLDataType.TIMESTAMPWITHTIMEZONE)), this, "");
 
+    /**
+     * The column <code>public.shouts.author_id</code>.
+     */
+    public final TableField<ShoutsRecord, Long> AUTHOR_ID = createField(DSL.name("author_id"), SQLDataType.BIGINT.nullable(false), this, "");
+
+    /**
+     * The column <code>public.shouts.authored_at</code>.
+     */
+    public final TableField<ShoutsRecord, OffsetDateTime> AUTHORED_AT = createField(DSL.name("authored_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false), this, "");
+
     private Shouts(Name alias, Table<ShoutsRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }
@@ -109,6 +124,39 @@ public class Shouts extends TableImpl<ShoutsRecord> {
         this(DSL.name("shouts"), null);
     }
 
+    public <O extends Record> Shouts(Table<O> path, ForeignKey<O, ShoutsRecord> childPath, InverseForeignKey<O, ShoutsRecord> parentPath) {
+        super(path, childPath, parentPath, SHOUTS);
+    }
+
+    /**
+     * A subtype implementing {@link Path} for simplified path-based joins.
+     */
+    public static class ShoutsPath extends Shouts implements Path<ShoutsRecord> {
+
+        private static final long serialVersionUID = 1L;
+        public <O extends Record> ShoutsPath(Table<O> path, ForeignKey<O, ShoutsRecord> childPath, InverseForeignKey<O, ShoutsRecord> parentPath) {
+            super(path, childPath, parentPath);
+        }
+        private ShoutsPath(Name alias, Table<ShoutsRecord> aliased) {
+            super(alias, aliased);
+        }
+
+        @Override
+        public ShoutsPath as(String alias) {
+            return new ShoutsPath(DSL.name(alias), this);
+        }
+
+        @Override
+        public ShoutsPath as(Name alias) {
+            return new ShoutsPath(alias, this);
+        }
+
+        @Override
+        public ShoutsPath as(Table<?> alias) {
+            return new ShoutsPath(alias.getQualifiedName(), this);
+        }
+    }
+
     @Override
     public Schema getSchema() {
         return aliased() ? null : Public.PUBLIC;
@@ -127,6 +175,19 @@ public class Shouts extends TableImpl<ShoutsRecord> {
     @Override
     public List<UniqueKey<ShoutsRecord>> getUniqueKeys() {
         return Arrays.asList(Keys.SHOUTS_MESSAGE_ID_KEY);
+    }
+
+    private transient ShoutHistoryPath _shoutHistory;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>public.shout_history</code> table
+     */
+    public ShoutHistoryPath shoutHistory() {
+        if (_shoutHistory == null)
+            _shoutHistory = new ShoutHistoryPath(this, null, Keys.SHOUT_HISTORY__SHOUT_HISTORY_SHOUT_ID_FKEY.getInverseKey());
+
+        return _shoutHistory;
     }
 
     @Override

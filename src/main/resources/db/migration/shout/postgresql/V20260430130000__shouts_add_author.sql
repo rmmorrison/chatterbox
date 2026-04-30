@@ -1,0 +1,2 @@
+ALTER TABLE shouts ADD COLUMN author_id   BIGINT      NOT NULL;
+ALTER TABLE shouts ADD COLUMN authored_at TIMESTAMPTZ NOT NULL;

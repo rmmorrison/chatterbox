@@ -4,6 +4,7 @@
 package ca.ryanmorrison.chatterbox.db.generated;
 
 
+import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 
 
@@ -12,6 +13,11 @@ import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
  */
 @SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class Tables {
+
+    /**
+     * The table <code>public.shout_history</code>.
+     */
+    public static final ShoutHistory SHOUT_HISTORY = ShoutHistory.SHOUT_HISTORY;
 
     /**
      * The table <code>public.shouts</code>.

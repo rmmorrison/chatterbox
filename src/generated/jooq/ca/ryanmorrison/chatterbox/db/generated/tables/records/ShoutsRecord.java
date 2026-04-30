@@ -90,6 +90,34 @@ public class ShoutsRecord extends UpdatableRecordImpl<ShoutsRecord> {
         return (OffsetDateTime) get(4);
     }
 
+    /**
+     * Setter for <code>public.shouts.author_id</code>.
+     */
+    public void setAuthorId(Long value) {
+        set(5, value);
+    }
+
+    /**
+     * Getter for <code>public.shouts.author_id</code>.
+     */
+    public Long getAuthorId() {
+        return (Long) get(5);
+    }
+
+    /**
+     * Setter for <code>public.shouts.authored_at</code>.
+     */
+    public void setAuthoredAt(OffsetDateTime value) {
+        set(6, value);
+    }
+
+    /**
+     * Getter for <code>public.shouts.authored_at</code>.
+     */
+    public OffsetDateTime getAuthoredAt() {
+        return (OffsetDateTime) get(6);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -113,7 +141,7 @@ public class ShoutsRecord extends UpdatableRecordImpl<ShoutsRecord> {
     /**
      * Create a detached, initialised ShoutsRecord
      */
-    public ShoutsRecord(Long id, Long channelId, Long messageId, String content, OffsetDateTime createdAt) {
+    public ShoutsRecord(Long id, Long channelId, Long messageId, String content, OffsetDateTime createdAt, Long authorId, OffsetDateTime authoredAt) {
         super(Shouts.SHOUTS);
 
         setId(id);
@@ -121,6 +149,8 @@ public class ShoutsRecord extends UpdatableRecordImpl<ShoutsRecord> {
         setMessageId(messageId);
         setContent(content);
         setCreatedAt(createdAt);
+        setAuthorId(authorId);
+        setAuthoredAt(authoredAt);
         resetTouchedOnNotNull();
     }
 }

@@ -4,6 +4,7 @@
 package ca.ryanmorrison.chatterbox.db.generated;
 
 
+import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 
 import java.util.Arrays;
@@ -29,6 +30,11 @@ public class Public extends SchemaImpl {
     public static final Public PUBLIC = new Public();
 
     /**
+     * The table <code>public.shout_history</code>.
+     */
+    public final ShoutHistory SHOUT_HISTORY = ShoutHistory.SHOUT_HISTORY;
+
+    /**
      * The table <code>public.shouts</code>.
      */
     public final Shouts SHOUTS = Shouts.SHOUTS;
@@ -49,6 +55,7 @@ public class Public extends SchemaImpl {
     @Override
     public final List<Table<?>> getTables() {
         return Arrays.asList(
+            ShoutHistory.SHOUT_HISTORY,
             Shouts.SHOUTS
         );
     }
