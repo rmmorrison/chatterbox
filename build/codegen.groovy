@@ -23,10 +23,19 @@ if (!migrationsRoot.exists()) {
     return
 }
 
+// Mirrors Migrations.java: each module ships its migrations under
+// db/migration/<module>/postgresql/ (and /sqlite/). For codegen we only run
+// the postgresql variants.
 def locations = []
-migrationsRoot.eachDir { dir -> locations << "filesystem:${dir.absolutePath}".toString() }
+migrationsRoot.eachDir { moduleDir ->
+    def pgDir = new File(moduleDir, "postgresql")
+    if (pgDir.isDirectory()) {
+        locations << "filesystem:${pgDir.absolutePath}".toString()
+    }
+}
 if (locations.isEmpty()) {
-    locations << "filesystem:${migrationsRoot.absolutePath}".toString()
+    log.warn("No postgresql migration directories under ${migrationsRoot}; nothing to generate.")
+    return
 }
 
 def pg = new PostgreSQLContainer("postgres:17-alpine")
@@ -62,7 +71,8 @@ try {
                             .withFluentSetters(false))
                     .withTarget(new Target()
                             .withPackageName("ca.ryanmorrison.chatterbox.db.generated")
-                            .withDirectory("${project.build.directory}/generated-sources/jooq".toString())))
+                            .withDirectory("${project.basedir}/src/generated/jooq".toString())
+                            .withClean(true)))
 
     GenerationTool.generate(configuration)
     log.info("jOOQ codegen complete.")

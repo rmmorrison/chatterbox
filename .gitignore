@@ -3,6 +3,10 @@ target/
 *.jar
 *.war
 *.iml
+
+# Generated jOOQ sources are committed under src/generated/jooq;
+# regenerate with `mvn -Pcodegen generate-sources` after migration changes.
+
 .idea/
 .vscode/
 .DS_Store
