@@ -33,7 +33,9 @@ CREATE TABLE legacy.shout_histories (
 );
 
 -- 2. Load the data-only dump produced by pg_dump on the old server.
-\i legacy_dump.sql
+--    \ir resolves relative to the location of this script, so legacy_dump.sql
+--    just needs to sit next to migrate.sql.
+\ir legacy_dump.sql
 
 -- pg_dump's preamble sets search_path='' and client_min_messages=warning;
 -- restore both so the rest of this script behaves normally.
@@ -42,10 +44,12 @@ SET client_min_messages TO notice;
 
 -- 3. copypasta -> auto_replies.
 --    description is NOT NULL on the new schema; the old table had no equivalent,
---    so we use an empty string. created_by is the operator-supplied bot owner ID.
+--    so we seed it with the trigger pattern itself - that gives editors something
+--    to recognize the rule by until someone writes a real description.
+--    created_by is the operator-supplied bot owner ID.
 
 INSERT INTO public.auto_replies (channel_id, pattern, response, description, created_by)
-SELECT channel_id, trigger, copypasta, '', 169128347874492417
+SELECT channel_id, trigger, copypasta, trigger, 169128347874492417
 FROM legacy.copypasta
 ON CONFLICT (channel_id, pattern) DO NOTHING;
 
