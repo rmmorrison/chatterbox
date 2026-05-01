@@ -89,23 +89,36 @@ profile so it only runs when explicitly enabled.
 
 ### Generate the rclone token
 
-Run this once from any host that can run Docker and reach a browser. The
-`-p 53682:53682` flag is required so the OAuth callback URL rclone prints
-(`http://127.0.0.1:53682/auth?...`) reaches the container:
+rclone's OAuth flow needs a browser to reach `http://127.0.0.1:53682/` on
+the host running rclone. On a headless VPS, the trick is to tunnel that
+port back to your workstation over SSH so your local browser can reach the
+container running remotely.
+
+**1. From your workstation**, open an SSH session to the VPS that forwards
+the rclone callback port:
+
+```sh
+ssh -L 53682:localhost:53682 you@your-vps
+```
+
+Leave that session open for the rest of the flow.
+
+**2. Inside that SSH session**, run rclone in Docker on the VPS:
 
 ```sh
 docker run --rm -it -p 53682:53682 rclone/rclone:1.68 \
   authorize "dropbox" "<app key>" "<app secret>"
 ```
 
-Open the printed URL in a browser, complete the Dropbox prompt, and rclone
-will print a JSON object on stdout — that is the value for `DROPBOX_TOKEN`.
-rclone refreshes the access token automatically, so this only needs to be
-done once per app.
+**3. Copy the URL it prints** (looks like
+`https://www.dropbox.com/oauth2/authorize?...&redirect_uri=http://localhost:53682/`)
+and paste it into the browser **on your workstation**. Approve the Dropbox
+prompt; the redirect to `localhost:53682` travels through the SSH tunnel
+and is caught by the container on the VPS.
 
-If the host running Docker is headless (no local browser), run the command
-above on a workstation where Docker can open a port locally; the resulting
-JSON token is portable and can be pasted into the server's `.env`.
+rclone then prints a JSON object on stdout — that is the value for
+`DROPBOX_TOKEN`. Paste it into `.env` on the VPS. rclone refreshes the
+access token automatically, so this only needs to be done once per app.
 
 ### Configure and run
 
