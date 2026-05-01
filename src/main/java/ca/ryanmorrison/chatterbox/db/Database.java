@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
+import org.jooq.conf.Settings;
 import org.jooq.impl.DSL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +23,12 @@ public final class Database implements AutoCloseable {
 
     private final HikariDataSource dataSource;
     private final DSLContext dsl;
+    private final SQLDialect dialect;
 
     public Database(Config.DatabaseConfig config) {
         this.dataSource = buildPool(config);
-        this.dsl = DSL.using(dataSource, dialectFor(config));
+        this.dialect = dialectFor(config);
+        this.dsl = DSL.using(dataSource, dialect, settingsFor(dialect));
         log.info("Database initialised: {}", redact(config.url()));
     }
 
@@ -37,6 +40,10 @@ public final class Database implements AutoCloseable {
         return dataSource;
     }
 
+    public SQLDialect dialect() {
+        return dialect;
+    }
+
     private static HikariDataSource buildPool(Config.DatabaseConfig cfg) {
         var hc = new HikariConfig();
         hc.setJdbcUrl(cfg.url());
@@ -46,8 +53,21 @@ public final class Database implements AutoCloseable {
         if (cfg.isSqlite()) {
             // SQLite serialises writes; one connection is the safe default.
             hc.setMaximumPoolSize(1);
+            // SQLite has foreign keys disabled per-connection by default;
+            // re-enable on every Hikari-issued connection so ON DELETE CASCADE works.
+            hc.setConnectionInitSql("PRAGMA foreign_keys = ON");
         }
         return new HikariDataSource(hc);
+    }
+
+    /**
+     * SQLite has no schemas, but the generated jOOQ classes are produced
+     * against Postgres and embed a {@code public} schema reference. Disabling
+     * schema rendering lets the same generated classes work against both
+     * dialects.
+     */
+    private static Settings settingsFor(SQLDialect dialect) {
+        return new Settings().withRenderSchema(dialect == SQLDialect.POSTGRES);
     }
 
     private static SQLDialect dialectFor(Config.DatabaseConfig cfg) {

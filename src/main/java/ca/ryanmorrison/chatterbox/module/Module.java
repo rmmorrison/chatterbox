@@ -16,10 +16,10 @@ import java.util.Set;
  * the FQCN in {@code META-INF/services/ca.ryanmorrison.chatterbox.module.Module}.
  *
  * <p>Every hook is optional. A module that only adds a slash command overrides
- * just {@link #slashCommands()}; one that only listens to events overrides just
- * {@link #listeners()}; one that needs persistence declares its
- * {@link #migrationLocations()} and pulls a {@code DSLContext} from
- * {@link ModuleContext#database()}.
+ * just {@link #slashCommands(InitContext)}; one that only listens to events
+ * overrides just {@link #listeners(InitContext)}; one that needs persistence
+ * declares its {@link #migrationLocations()} and pulls a {@code DSLContext}
+ * from {@link InitContext#database()}.
  */
 public interface Module {
 
@@ -39,30 +39,42 @@ public interface Module {
 
     /**
      * Slash commands the module contributes. Returned data is registered either
-     * globally or per-guild depending on {@code CHATTERBOX_DEV_MODE}.
+     * globally or per-guild depending on {@code CHATTERBOX_DEV_MODE}. The
+     * {@link InitContext} provides the database and config so command builders
+     * can use bot-wide resources directly.
      */
-    default List<SlashCommandData> slashCommands() { return List.of(); }
+    default List<SlashCommandData> slashCommands(InitContext ctx) { return List.of(); }
 
     /**
-     * Event listeners to attach to JDA. Listeners are added before JDA's
-     * {@code build()} so they observe startup events too.
+     * Event listeners to attach to JDA. Called before JDA is built, so the
+     * returned listeners are visible to startup events too. The
+     * {@link InitContext} gives modules access to the database and config so
+     * listeners can be constructed fully-wired.
      */
-    default List<EventListener> listeners() { return List.of(); }
+    default List<EventListener> listeners(InitContext ctx) { return List.of(); }
 
     /**
-     * Classpath locations (relative to {@code src/main/resources}) holding
-     * Flyway migrations. Bootstrap aggregates these across modules and runs
-     * Flyway once over the union. Skip if the module does not use the database.
+     * Base classpath locations (relative to {@code src/main/resources}) holding
+     * Flyway migrations. Each base is resolved to a dialect-specific subfolder
+     * ({@code postgresql/} or {@code sqlite/}) at runtime. Skip if the module
+     * does not use the database.
      *
-     * <p>Use timestamp-based version numbers (e.g. {@code V20260430120000__init.sql})
-     * to avoid collisions across modules.
+     * <p>Layout, for a base of {@code db/migration/<module>}:
+     * <pre>
+     *   db/migration/&lt;module&gt;/postgresql/V20260430120000__init.sql
+     *   db/migration/&lt;module&gt;/sqlite/V20260430120000__init.sql
+     * </pre>
+     *
+     * <p>Use timestamp-based version numbers to avoid collisions across modules.
      */
     default List<String> migrationLocations() { return List.of(); }
 
     /**
      * Invoked after JDA is fully ready ({@link ReadyEvent} fired) and after
-     * slash commands have been synced. Modules that need a {@code DSLContext}
-     * obtain it lazily via {@link ModuleContext#database()}.
+     * slash commands have been synced. Use this for post-ready actions that
+     * need a live {@link net.dv8tion.jda.api.JDA} reference (e.g. inspecting
+     * the bot's guild membership). Database wiring belongs in
+     * {@link #listeners(InitContext)} / {@link #slashCommands(InitContext)}.
      */
     default void onStart(ModuleContext ctx) {}
 

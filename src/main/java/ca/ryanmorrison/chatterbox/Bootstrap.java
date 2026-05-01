@@ -4,6 +4,7 @@ import ca.ryanmorrison.chatterbox.commands.CommandSync;
 import ca.ryanmorrison.chatterbox.config.Config;
 import ca.ryanmorrison.chatterbox.db.Database;
 import ca.ryanmorrison.chatterbox.db.Migrations;
+import ca.ryanmorrison.chatterbox.module.InitContext;
 import ca.ryanmorrison.chatterbox.module.Module;
 import ca.ryanmorrison.chatterbox.module.ModuleContext;
 import ca.ryanmorrison.chatterbox.module.ModuleRegistry;
@@ -43,7 +44,9 @@ public final class Bootstrap {
         var migrationLocations = modules.stream()
                 .flatMap(m -> m.migrationLocations().stream())
                 .toList();
-        Migrations.run(database.dataSource(), migrationLocations);
+        Migrations.run(database.dataSource(), migrationLocations, database.dialect());
+
+        InitContext initCtx = new InitContextImpl(config, database.dsl());
 
         Set<GatewayIntent> intents = new HashSet<>();
         EnumSet<CacheFlag> cacheFlags = EnumSet.noneOf(CacheFlag.class);
@@ -53,8 +56,8 @@ public final class Bootstrap {
         for (Module m : modules) {
             intents.addAll(m.intents());
             cacheFlags.addAll(m.cacheFlags());
-            commands.addAll(m.slashCommands());
-            listeners.addAll(m.listeners());
+            commands.addAll(m.slashCommands(initCtx));
+            listeners.addAll(m.listeners(initCtx));
         }
         log.info("Aggregated {} intent(s), {} command(s), {} listener(s) across {} module(s).",
                 intents.size(), commands.size(), listeners.size(), modules.size());
@@ -74,7 +77,7 @@ public final class Bootstrap {
 
         commandSync.syncAll(jda);
 
-        ModuleContext ctx = new ContextImpl(jda, config, database.dsl());
+        ModuleContext ctx = new ModuleContextImpl(jda, config, database.dsl());
         for (Module m : modules) {
             try {
                 m.onStart(ctx);
@@ -105,7 +108,8 @@ public final class Bootstrap {
         }, "chatterbox-shutdown"));
     }
 
-    private record ContextImpl(JDA jda, Config config, DSLContext database) implements ModuleContext {}
+    private record InitContextImpl(Config config, DSLContext database) implements InitContext {}
+    private record ModuleContextImpl(JDA jda, Config config, DSLContext database) implements ModuleContext {}
 
     private Bootstrap() {}
 }
