@@ -15,6 +15,7 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 20
     steps:
       - name: Check out repository
@@ -48,14 +49,14 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Copy image to VPS
+      - name: Copy image and compose file to VPS
         env:
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          scp -i ~/.ssh/id_ed25519 chatterbox.tar.gz \
-            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/chatterbox.tar.gz"
+          scp -i ~/.ssh/id_ed25519 chatterbox.tar.gz docker-compose.yml \
+            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
 
       - name: Load image and restart container
         env:
