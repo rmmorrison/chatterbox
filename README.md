@@ -89,16 +89,23 @@ profile so it only runs when explicitly enabled.
 
 ### Generate the rclone token
 
-Run this once on any workstation that has rclone installed (a browser opens
-for the OAuth handshake):
+Run this once from any host that can run Docker and reach a browser. The
+`-p 53682:53682` flag is required so the OAuth callback URL rclone prints
+(`http://127.0.0.1:53682/auth?...`) reaches the container:
 
 ```sh
-rclone authorize "dropbox" "<app key>" "<app secret>"
+docker run --rm -it -p 53682:53682 rclone/rclone:1.68 \
+  authorize "dropbox" "<app key>" "<app secret>"
 ```
 
-It prints a JSON object — that is the value for `DROPBOX_TOKEN`. rclone
-refreshes the access token automatically, so this only needs to be done once
-per app.
+Open the printed URL in a browser, complete the Dropbox prompt, and rclone
+will print a JSON object on stdout — that is the value for `DROPBOX_TOKEN`.
+rclone refreshes the access token automatically, so this only needs to be
+done once per app.
+
+If the host running Docker is headless (no local browser), run the command
+above on a workstation where Docker can open a port locally; the resulting
+JSON token is portable and can be pasted into the server's `.env`.
 
 ### Configure and run
 
