@@ -110,11 +110,16 @@ docker run --rm -it -p 53682:53682 rclone/rclone:1.68 \
   authorize "dropbox" "<app key>" "<app secret>"
 ```
 
-**3. Copy the URL it prints** (looks like
-`https://www.dropbox.com/oauth2/authorize?...&redirect_uri=http://localhost:53682/`)
-and paste it into the browser **on your workstation**. Approve the Dropbox
-prompt; the redirect to `localhost:53682` travels through the SSH tunnel
-and is caught by the container on the VPS.
+**3. Copy the URL it prints** — it looks like
+`http://127.0.0.1:53682/auth?state=...` and is served by rclone itself
+(you can ignore the `Failed to open browser automatically (xdg-open ...)`
+warning above it; that's just rclone trying to launch a browser inside the
+container). Paste that URL into the browser **on your workstation**.
+
+The request travels through the SSH tunnel into the container, rclone's
+helper page redirects your browser out to Dropbox's real OAuth screen,
+you approve there, and Dropbox redirects back to `localhost:53682` —
+which also rides the tunnel back to the container.
 
 rclone then prints a JSON object on stdout — that is the value for
 `DROPBOX_TOKEN`. Paste it into `.env` on the VPS. rclone refreshes the
