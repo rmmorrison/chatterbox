@@ -55,6 +55,46 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  backup-sync:
+    profiles: ["dropbox-sync"]
+    image: rclone/rclone:1.68
+    restart: unless-stopped
+    depends_on:
+      - postgres-backup
+    environment:
+      RCLONE_CONFIG_DROPBOX_TYPE: dropbox
+      RCLONE_CONFIG_DROPBOX_CLIENT_ID: ${DROPBOX_CLIENT_ID:-}
+      RCLONE_CONFIG_DROPBOX_CLIENT_SECRET: ${DROPBOX_CLIENT_SECRET:-}
+      RCLONE_CONFIG_DROPBOX_TOKEN: ${DROPBOX_TOKEN:-}
+    volumes:
+      - postgres-backups:/backups:ro
+    networks:
+      - internal
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - |
+        if [ -z "$$RCLONE_CONFIG_DROPBOX_CLIENT_ID" ] || [ -z "$$RCLONE_CONFIG_DROPBOX_CLIENT_SECRET" ] || [ -z "$$RCLONE_CONFIG_DROPBOX_TOKEN" ]; then
+          echo "[backup-sync] DROPBOX_CLIENT_ID, DROPBOX_CLIENT_SECRET, and DROPBOX_TOKEN must all be set; see README." >&2
+          exit 1
+        fi
+        while true; do
+          echo "[backup-sync] starting sync at $$(date -Iseconds)"
+          rclone sync /backups "dropbox:${DROPBOX_REMOTE_PATH:-chatterbox-backups}" \
+            --transfers=2 --tpslimit=8 --log-level INFO \
+            || echo "[backup-sync] sync failed with exit $$?"
+          sleep ${BACKUP_SYNC_INTERVAL:-3600}
+        done
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   chatterbox:
     image: chatterbox:latest
     restart: unless-stopped

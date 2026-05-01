@@ -66,6 +66,61 @@ docker run --rm \
   chatterbox
 ```
 
+## Dropbox backup sync
+
+The `backup-sync` service in `docker-compose.yml` mirrors the local
+`postgres-backups` volume to a Dropbox App folder using
+[rclone](https://rclone.org/). It is gated behind the `dropbox-sync` Compose
+profile so it only runs when explicitly enabled.
+
+### One-time Dropbox app setup
+
+1. Go to https://www.dropbox.com/developers/apps and **Create app**:
+   - API: **Scoped access**
+   - Type: **App folder** (limits rclone to `Apps/<your-app-name>/`)
+   - Name: anything unique, e.g. `chatterbox-backups`
+2. On the new app's **Permissions** tab, enable:
+   - `files.content.write`
+   - `files.content.read`
+   - `files.metadata.write`
+   - `files.metadata.read`
+   Click **Submit** to save.
+3. On the **Settings** tab, copy the **App key** and **App secret**.
+
+### Generate the rclone token
+
+Run this once on any workstation that has rclone installed (a browser opens
+for the OAuth handshake):
+
+```sh
+rclone authorize "dropbox" "<app key>" "<app secret>"
+```
+
+It prints a JSON object — that is the value for `DROPBOX_TOKEN`. rclone
+refreshes the access token automatically, so this only needs to be done once
+per app.
+
+### Configure and run
+
+Fill in the four `DROPBOX_*` values in `.env`, then start the profile:
+
+```sh
+docker compose --profile dropbox-sync up -d
+```
+
+The sidecar mounts `postgres-backups` read-only, runs `rclone sync` every
+`BACKUP_SYNC_INTERVAL` seconds (default 3600), and mirrors deletions —
+which means the existing `BACKUP_KEEP_*` retention propagates to Dropbox
+automatically and keeps you under the 2 GB free-tier limit.
+
+| Variable               | Required | Default               | Purpose |
+|------------------------|----------|-----------------------|---------|
+| `DROPBOX_CLIENT_ID`    | yes      | —                     | App key from the Dropbox app settings page. |
+| `DROPBOX_CLIENT_SECRET`| yes      | —                     | App secret from the Dropbox app settings page. |
+| `DROPBOX_TOKEN`        | yes      | —                     | OAuth token JSON produced by `rclone authorize`. |
+| `DROPBOX_REMOTE_PATH`  | no       | `chatterbox-backups`  | Folder inside the app folder to sync into. |
+| `BACKUP_SYNC_INTERVAL` | no       | `3600`                | Seconds between sync runs. |
+
 ## Architecture
 
 ### Module SPI
