@@ -198,3 +198,51 @@ non-moderator's in the same channel.
 
 The permission is re-checked on every interaction (slash and button), so
 losing the role mid-pagination immediately removes the moderation buttons.
+
+### Autoreply
+
+Channel-scoped automated replies. Moderators (Manage Messages) configure
+regex → response rules with `/autoreply add|edit|delete`; the listener
+scans incoming guild messages and, on the first matching rule, posts that
+rule's response.
+
+Schema: each rule stores its `pattern`, `response`, `description`, plus
+audit columns for the original creator + creation time and (when edited)
+the editor + edit time. Patterns are unique per `(channel_id, pattern)`.
+
+#### Subcommands
+
+- **`/autoreply add`** opens a modal with three fields: pattern (single
+  line), description (single line), response (multi-line). All three are
+  validated server-side: the pattern must compile, none may be blank, and
+  each has a length cap. If the submitted pattern already exists in the
+  channel, the user is prompted with **Override** / **Cancel** buttons —
+  Override rewrites the existing row's response and description.
+- **`/autoreply edit`** lists existing rules in an ephemeral string-select
+  menu (capped at 25 most-recently-touched, per Discord). Selecting a
+  rule opens an edit modal pre-filled with its current pattern,
+  description, and response.
+- **`/autoreply delete`** lists rules in the same way; selecting one
+  shows a confirmation prompt with **Delete** / **Cancel** buttons.
+
+#### Match semantics
+
+When a guild message arrives, rules for the channel are tried in
+insertion order (lowest id first); the first rule whose regex finds a
+match in the message wins, and its response is posted as a plain message.
+Subsequent rules are not evaluated. The bot ignores messages from other
+bots and itself, and DMs.
+
+#### ReDoS protection
+
+Every match runs against a `WatchdogCharSequence` that caps a single
+match attempt at ~100ms. If a moderator configures a catastrophically
+backtracking pattern, evaluation aborts, the rule is skipped (with a
+warning logged), and the next rule is tried. This is cheap mitigation,
+not a hard guarantee — sufficient for a Manage-Messages-only feature.
+
+#### Permissions
+
+`MESSAGE_MANAGE` in the channel is required for every interaction
+(slash, modal, select, button). Permissions are re-checked on every
+event, so losing the role mid-flow denies further actions immediately.

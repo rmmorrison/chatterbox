@@ -4,6 +4,7 @@
 package ca.ryanmorrison.chatterbox.db.generated;
 
 
+import ca.ryanmorrison.chatterbox.db.generated.tables.AutoReplies;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 
@@ -23,6 +24,8 @@ public class Indexes {
     // INDEX definitions
     // -------------------------------------------------------------------------
 
+    public static final Index AUTO_REPLIES_CHANNEL_IDX = Internal.createIndex(DSL.name("auto_replies_channel_idx"), AutoReplies.AUTO_REPLIES, new OrderField[] { AutoReplies.AUTO_REPLIES.CHANNEL_ID }, false);
+    public static final Index AUTO_REPLIES_CHANNEL_PATTERN_UNIQ = Internal.createIndex(DSL.name("auto_replies_channel_pattern_uniq"), AutoReplies.AUTO_REPLIES, new OrderField[] { AutoReplies.AUTO_REPLIES.CHANNEL_ID, AutoReplies.AUTO_REPLIES.PATTERN }, true);
     public static final Index SHOUT_HISTORY_CHANNEL_ID_IDX = Internal.createIndex(DSL.name("shout_history_channel_id_idx"), ShoutHistory.SHOUT_HISTORY, new OrderField[] { ShoutHistory.SHOUT_HISTORY.CHANNEL_ID, ShoutHistory.SHOUT_HISTORY.ID.desc() }, false);
     public static final Index SHOUT_HISTORY_SHOUT_ID_IDX = Internal.createIndex(DSL.name("shout_history_shout_id_idx"), ShoutHistory.SHOUT_HISTORY, new OrderField[] { ShoutHistory.SHOUT_HISTORY.SHOUT_ID }, false);
     public static final Index SHOUTS_ACTIVE_IDX = Internal.createIndex(DSL.name("shouts_active_idx"), Shouts.SHOUTS, new OrderField[] { Shouts.SHOUTS.CHANNEL_ID }, false);
