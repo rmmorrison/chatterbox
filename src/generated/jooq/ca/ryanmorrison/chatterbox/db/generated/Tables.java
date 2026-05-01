@@ -4,6 +4,7 @@
 package ca.ryanmorrison.chatterbox.db.generated;
 
 
+import ca.ryanmorrison.chatterbox.db.generated.tables.AutoReplies;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 
@@ -13,6 +14,11 @@ import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
  */
 @SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class Tables {
+
+    /**
+     * The table <code>public.auto_replies</code>.
+     */
+    public static final AutoReplies AUTO_REPLIES = AutoReplies.AUTO_REPLIES;
 
     /**
      * The table <code>public.shout_history</code>.

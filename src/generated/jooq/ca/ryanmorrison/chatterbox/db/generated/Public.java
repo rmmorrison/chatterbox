@@ -4,6 +4,7 @@
 package ca.ryanmorrison.chatterbox.db.generated;
 
 
+import ca.ryanmorrison.chatterbox.db.generated.tables.AutoReplies;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 
@@ -28,6 +29,11 @@ public class Public extends SchemaImpl {
      * The reference instance of <code>public</code>
      */
     public static final Public PUBLIC = new Public();
+
+    /**
+     * The table <code>public.auto_replies</code>.
+     */
+    public final AutoReplies AUTO_REPLIES = AutoReplies.AUTO_REPLIES;
 
     /**
      * The table <code>public.shout_history</code>.
@@ -55,6 +61,7 @@ public class Public extends SchemaImpl {
     @Override
     public final List<Table<?>> getTables() {
         return Arrays.asList(
+            AutoReplies.AUTO_REPLIES,
             ShoutHistory.SHOUT_HISTORY,
             Shouts.SHOUTS
         );
