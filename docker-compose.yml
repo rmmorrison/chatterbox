@@ -57,7 +57,7 @@ services:
 
   backup-sync:
     profiles: ["dropbox-sync"]
-    image: rclone/rclone:1.68
+    image: rclone/rclone:1.74
     restart: unless-stopped
     depends_on:
       - postgres-backup

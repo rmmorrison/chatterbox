@@ -94,8 +94,8 @@ the host running rclone. On a headless VPS, the trick is to tunnel that
 port back to your workstation over SSH so your local browser can reach the
 container running remotely.
 
-**1. From your workstation**, open an SSH session to the VPS that forwards
-the rclone callback port:
+**1. From your workstation** (macOS or Linux — same syntax), open an SSH
+session to the VPS that forwards the rclone callback port:
 
 ```sh
 ssh -L 53682:localhost:53682 you@your-vps
@@ -103,12 +103,22 @@ ssh -L 53682:localhost:53682 you@your-vps
 
 Leave that session open for the rest of the flow.
 
-**2. Inside that SSH session**, run rclone in Docker on the VPS:
+**2. Inside that SSH session**, run rclone in Docker on the VPS using
+`--network host`:
 
 ```sh
-docker run --rm -it -p 53682:53682 rclone/rclone:1.68 \
+docker run --rm -it --network host rclone/rclone:1.74 \
   authorize "dropbox" "<app key>" "<app secret>"
 ```
+
+> **Why `--network host` and not `-p 53682:53682`?** rclone binds its OAuth
+> callback server to `127.0.0.1:53682`, which on a containerised process
+> means the container's own loopback — unreachable from the outside. Docker's
+> `-p` flag forwards into the container's external interface, not its
+> loopback, so the SSH tunnel ends up hitting a closed port (Safari shows
+> "the connection was unexpectedly closed"). `--network host` makes the
+> container share the VPS host's network namespace, so rclone's `127.0.0.1`
+> *is* the VPS's `127.0.0.1` — exactly what `ssh -L` forwards into.
 
 **3. Copy the URL it prints** — it looks like
 `http://127.0.0.1:53682/auth?state=...` and is served by rclone itself
