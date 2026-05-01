@@ -13,8 +13,8 @@ RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -q -DskipTests package
 FROM eclipse-temurin:25-jre
 WORKDIR /app
 
-RUN groupadd --system --gid 1000 chatterbox \
- && useradd  --system --uid 1000 --gid 1000 --no-create-home chatterbox
+RUN groupadd --system --gid 10001 chatterbox \
+ && useradd  --system --uid 10001 --gid 10001 --no-create-home chatterbox
 
 COPY --from=build /src/target/chatterbox.jar /app/chatterbox.jar
 
