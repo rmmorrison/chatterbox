@@ -35,25 +35,33 @@ final class ShoutHistoryView {
     /**
      * Builds the embed.
      *
-     * @param deleterDisplayName  ignored unless {@code entry.deletion()} is
-     *                            present; required when present.
+     * <p>{@code authorReference} and {@code deleterReference} are rendered
+     * verbatim into the embed: typically a {@code <@id>} mention when the
+     * member still exists, or a plain-text fallback string otherwise.
+     *
+     * @param deleterReference  ignored unless {@code entry.deletion()} is
+     *                          present; required when present.
      */
     static MessageEmbed embed(HistoryEntry entry,
-                              String authorDisplayName,
-                              String deleterDisplayName,
+                              long guildId,
+                              long channelId,
+                              String authorReference,
+                              String deleterReference,
                               ShoutHistoryRepository.Position pos) {
         long ts = entry.authoredAt().toEpochSecond();
+        String jumpUrl = "https://discord.com/channels/" + guildId + "/" + channelId + "/" + entry.messageId();
         var builder = new EmbedBuilder()
                 .setTitle("Shout history")
                 .setDescription(entry.content())
-                .addField("Author", authorDisplayName, true)
+                .addField("Author", authorReference, true)
                 .addField("Originally written", "<t:" + ts + ":F>", true)
+                .addField("Source", "[Jump to message](" + jumpUrl + ")", true)
                 .setFooter("Entry " + pos.rank() + " of " + pos.total());
 
         if (entry.deletion().isPresent()) {
             builder.setColor(DELETED_COLOR);
-            if (deleterDisplayName != null) {
-                builder.addField("Deleted by", deleterDisplayName, true);
+            if (deleterReference != null) {
+                builder.addField("Deleted by", deleterReference, true);
             }
         }
         return builder.build();

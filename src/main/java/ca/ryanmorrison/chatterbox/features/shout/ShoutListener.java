@@ -47,7 +47,7 @@ final class ShoutListener extends ListenerAdapter {
         }
 
         shouts.randomPeer(channelId, messageId).ifPresent(peer ->
-                event.getChannel().sendMessage(peer.content()).queue(
+                event.getChannel().sendMessage("**" + peer.content() + "**").queue(
                         sent -> recordHistory(channelId, peer.shoutId()),
                         err -> log.warn("Failed to send shout reply: {}", err.toString())));
     }

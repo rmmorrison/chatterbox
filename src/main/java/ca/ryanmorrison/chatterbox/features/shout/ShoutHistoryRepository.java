@@ -97,6 +97,7 @@ final class ShoutHistoryRepository {
         Record record = dsl.select(
                         SHOUT_HISTORY.ID,
                         SHOUT_HISTORY.SHOUT_ID,
+                        SHOUTS.MESSAGE_ID,
                         SHOUTS.CONTENT,
                         SHOUTS.AUTHOR_ID,
                         SHOUTS.AUTHORED_AT,
@@ -119,6 +120,7 @@ final class ShoutHistoryRepository {
         return Optional.of(new HistoryEntry(
                 record.get(SHOUT_HISTORY.ID),
                 record.get(SHOUT_HISTORY.SHOUT_ID),
+                record.get(SHOUTS.MESSAGE_ID),
                 record.get(SHOUTS.CONTENT),
                 record.get(SHOUTS.AUTHOR_ID),
                 record.get(SHOUTS.AUTHORED_AT),
