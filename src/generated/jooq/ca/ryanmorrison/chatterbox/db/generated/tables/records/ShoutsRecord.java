@@ -118,6 +118,34 @@ public class ShoutsRecord extends UpdatableRecordImpl<ShoutsRecord> {
         return (OffsetDateTime) get(6);
     }
 
+    /**
+     * Setter for <code>public.shouts.deleted_at</code>.
+     */
+    public void setDeletedAt(OffsetDateTime value) {
+        set(7, value);
+    }
+
+    /**
+     * Getter for <code>public.shouts.deleted_at</code>.
+     */
+    public OffsetDateTime getDeletedAt() {
+        return (OffsetDateTime) get(7);
+    }
+
+    /**
+     * Setter for <code>public.shouts.deleted_by</code>.
+     */
+    public void setDeletedBy(Long value) {
+        set(8, value);
+    }
+
+    /**
+     * Getter for <code>public.shouts.deleted_by</code>.
+     */
+    public Long getDeletedBy() {
+        return (Long) get(8);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -141,7 +169,7 @@ public class ShoutsRecord extends UpdatableRecordImpl<ShoutsRecord> {
     /**
      * Create a detached, initialised ShoutsRecord
      */
-    public ShoutsRecord(Long id, Long channelId, Long messageId, String content, OffsetDateTime createdAt, Long authorId, OffsetDateTime authoredAt) {
+    public ShoutsRecord(Long id, Long channelId, Long messageId, String content, OffsetDateTime createdAt, Long authorId, OffsetDateTime authoredAt, OffsetDateTime deletedAt, Long deletedBy) {
         super(Shouts.SHOUTS);
 
         setId(id);
@@ -151,6 +179,8 @@ public class ShoutsRecord extends UpdatableRecordImpl<ShoutsRecord> {
         setCreatedAt(createdAt);
         setAuthorId(authorId);
         setAuthoredAt(authoredAt);
+        setDeletedAt(deletedAt);
+        setDeletedBy(deletedBy);
         resetTouchedOnNotNull();
     }
 }

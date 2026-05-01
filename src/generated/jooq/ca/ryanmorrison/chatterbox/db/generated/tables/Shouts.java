@@ -95,6 +95,16 @@ public class Shouts extends TableImpl<ShoutsRecord> {
      */
     public final TableField<ShoutsRecord, OffsetDateTime> AUTHORED_AT = createField(DSL.name("authored_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false), this, "");
 
+    /**
+     * The column <code>public.shouts.deleted_at</code>.
+     */
+    public final TableField<ShoutsRecord, OffsetDateTime> DELETED_AT = createField(DSL.name("deleted_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6), this, "");
+
+    /**
+     * The column <code>public.shouts.deleted_by</code>.
+     */
+    public final TableField<ShoutsRecord, Long> DELETED_BY = createField(DSL.name("deleted_by"), SQLDataType.BIGINT, this, "");
+
     private Shouts(Name alias, Table<ShoutsRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }
@@ -164,7 +174,7 @@ public class Shouts extends TableImpl<ShoutsRecord> {
 
     @Override
     public List<Index> getIndexes() {
-        return Arrays.asList(Indexes.SHOUTS_CHANNEL_CONTENT_UNIQ, Indexes.SHOUTS_CHANNEL_IDX);
+        return Arrays.asList(Indexes.SHOUTS_ACTIVE_IDX, Indexes.SHOUTS_CHANNEL_CONTENT_UNIQ, Indexes.SHOUTS_CHANNEL_IDX);
     }
 
     @Override

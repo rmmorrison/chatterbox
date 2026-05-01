@@ -177,3 +177,24 @@ History rows are tied to their underlying shout via an FK with
 `ON DELETE CASCADE`, so any path that removes a shout (delete, edit-disqualifies,
 edit-collision, bulk delete) automatically removes the corresponding history
 entries.
+
+#### Moderation (Manage Messages)
+
+Users with the **Manage Messages** permission in a channel see an additional
+**Delete** button while paginating that channel's history. Clicking it
+soft-deletes the shout — the row stays in the database with a `deleted_at`
+timestamp and the moderator's user id stamped into `deleted_by`. Soft-deleted
+shouts:
+
+- never appear in random peer selection, regardless of viewer.
+- are filtered out of history for non-moderators.
+- remain visible to moderators with a red-tinted embed and a `Deleted by` field.
+
+For moderators viewing a deleted entry the button slot becomes **Restore**
+(green); clicking it clears both `deleted_at` and `deleted_by`, returning the
+shout to circulation. The position indicator reflects what the viewer can
+see, so a moderator's `Entry X of N` may have a larger `N` than a
+non-moderator's in the same channel.
+
+The permission is re-checked on every interaction (slash and button), so
+losing the role mid-pagination immediately removes the moderation buttons.

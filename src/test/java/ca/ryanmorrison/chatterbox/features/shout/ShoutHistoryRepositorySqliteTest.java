@@ -19,6 +19,7 @@ import java.time.ZoneOffset;
 import static ca.ryanmorrison.chatterbox.db.generated.Tables.SHOUTS;
 import static ca.ryanmorrison.chatterbox.db.generated.Tables.SHOUT_HISTORY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -31,6 +32,9 @@ class ShoutHistoryRepositorySqliteTest {
     private static final OffsetDateTime AUTHORED_AT =
             OffsetDateTime.of(2026, 4, 30, 12, 0, 0, 0, ZoneOffset.UTC);
     private static final long AUTHOR = 7777L;
+    private static final long MODERATOR = 9999L;
+    private static final boolean MOD = true;
+    private static final boolean NON_MOD = false;
 
     private Path dbFile;
     private HikariDataSource dataSource;
@@ -75,8 +79,8 @@ class ShoutHistoryRepositorySqliteTest {
     void recordAndFindLatestAgainstSqlite() {
         long s1 = shout(1L, 100L, "HELLO WORLD AGAIN");
         history.record(1L, s1);
-        assertTrue(history.findLatest(1L).isPresent());
-        assertEquals("HELLO WORLD AGAIN", history.findLatest(1L).orElseThrow().content());
+        assertTrue(history.findLatest(1L, NON_MOD).isPresent());
+        assertEquals("HELLO WORLD AGAIN", history.findLatest(1L, NON_MOD).orElseThrow().content());
     }
 
     @Test
@@ -87,5 +91,30 @@ class ShoutHistoryRepositorySqliteTest {
         shouts.deleteByMessageId(100L);
         assertEquals(0, dsl.fetchCount(SHOUT_HISTORY),
                 "FK cascade should remove history rows when the shout is deleted");
+    }
+
+    @Test
+    void softDeleteHidesFromNonModeratorAndExposesToModeratorAgainstSqlite() {
+        long s = shout(1L, 100L, "FLAGGED SHOUT HERE");
+        history.record(1L, s);
+        shouts.softDelete(s, MODERATOR);
+
+        assertFalse(history.findLatest(1L, NON_MOD).isPresent(),
+                "non-moderator should not see deleted entries");
+        HistoryEntry modView = history.findLatest(1L, MOD).orElseThrow();
+        assertTrue(modView.deletion().isPresent());
+        assertEquals(MODERATOR, modView.deletion().orElseThrow().deletedBy());
+    }
+
+    @Test
+    void restoreClearsFlagAgainstSqlite() {
+        long s = shout(1L, 100L, "TEMPORARILY HIDDEN SHOUT");
+        history.record(1L, s);
+        shouts.softDelete(s, MODERATOR);
+        shouts.restore(s);
+
+        HistoryEntry entry = history.findLatest(1L, NON_MOD).orElseThrow();
+        assertTrue(entry.deletion().isEmpty(),
+                "deletion metadata should clear after restore");
     }
 }

@@ -42,7 +42,7 @@ public final class ShoutModule implements Module {
         var history = new ShoutHistoryRepository(ctx.database());
         return List.of(
                 new ShoutListener(new ShoutDetector(), shouts, history),
-                new ShoutHistoryHandler(history));
+                new ShoutHistoryHandler(shouts, history));
     }
 
     @Override

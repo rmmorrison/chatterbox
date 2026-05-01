@@ -25,6 +25,7 @@ public class Indexes {
 
     public static final Index SHOUT_HISTORY_CHANNEL_ID_IDX = Internal.createIndex(DSL.name("shout_history_channel_id_idx"), ShoutHistory.SHOUT_HISTORY, new OrderField[] { ShoutHistory.SHOUT_HISTORY.CHANNEL_ID, ShoutHistory.SHOUT_HISTORY.ID.desc() }, false);
     public static final Index SHOUT_HISTORY_SHOUT_ID_IDX = Internal.createIndex(DSL.name("shout_history_shout_id_idx"), ShoutHistory.SHOUT_HISTORY, new OrderField[] { ShoutHistory.SHOUT_HISTORY.SHOUT_ID }, false);
+    public static final Index SHOUTS_ACTIVE_IDX = Internal.createIndex(DSL.name("shouts_active_idx"), Shouts.SHOUTS, new OrderField[] { Shouts.SHOUTS.CHANNEL_ID }, false);
     public static final Index SHOUTS_CHANNEL_CONTENT_UNIQ = Internal.createIndex(DSL.name("shouts_channel_content_uniq"), Shouts.SHOUTS, new OrderField[] { Shouts.SHOUTS.CHANNEL_ID, Shouts.SHOUTS.CONTENT }, true);
     public static final Index SHOUTS_CHANNEL_IDX = Internal.createIndex(DSL.name("shouts_channel_idx"), Shouts.SHOUTS, new OrderField[] { Shouts.SHOUTS.CHANNEL_ID }, false);
 }

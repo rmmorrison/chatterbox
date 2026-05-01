@@ -4,6 +4,7 @@ import org.jooq.DSLContext;
 import org.jooq.impl.DSL;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,12 @@ import static ca.ryanmorrison.chatterbox.db.generated.Tables.SHOUTS;
  * on the {@code (channel_id, content)} unique constraint plus a transaction,
  * not application-level locking. Two simultaneous shouts with identical
  * content in the same channel are race-safe.
+ *
+ * <p>Soft deletion: rows with {@code deleted_at IS NOT NULL} are excluded from
+ * {@link #randomPeer} entirely (regardless of viewer) and from non-moderator
+ * history queries. {@link #softDelete} is idempotent — once a shout is marked
+ * deleted, a second click does not overwrite the original deleter or
+ * timestamp.
  */
 final class ShoutRepository {
 
@@ -78,16 +85,15 @@ final class ShoutRepository {
     }
 
     /**
-     * Picks a random shout from the channel that isn't the message we just
-     * received, or empty if no peer exists. Returns the full {@link Peer}
-     * payload so the caller can record an emission against it without a
-     * second round trip.
+     * Picks a random non-deleted shout from the channel that isn't the message
+     * we just received, or empty if no peer exists.
      */
     Optional<Peer> randomPeer(long channelId, long excludeMessageId) {
         var record = dsl.select(SHOUTS.ID, SHOUTS.CONTENT, SHOUTS.AUTHOR_ID, SHOUTS.AUTHORED_AT)
                 .from(SHOUTS)
                 .where(SHOUTS.CHANNEL_ID.eq(channelId))
                 .and(SHOUTS.MESSAGE_ID.ne(excludeMessageId))
+                .and(SHOUTS.DELETED_AT.isNull())
                 .orderBy(DSL.rand())
                 .limit(1)
                 .fetchOne();
@@ -97,5 +103,28 @@ final class ShoutRepository {
                 record.get(SHOUTS.CONTENT),
                 record.get(SHOUTS.AUTHOR_ID),
                 record.get(SHOUTS.AUTHORED_AT)));
+    }
+
+    /**
+     * Marks the shout as soft-deleted. No-op when the shout is already
+     * deleted, so the original deleter and timestamp are preserved on a
+     * fast-clicker race.
+     */
+    void softDelete(long shoutId, long deletedBy) {
+        dsl.update(SHOUTS)
+                .set(SHOUTS.DELETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
+                .set(SHOUTS.DELETED_BY, deletedBy)
+                .where(SHOUTS.ID.eq(shoutId))
+                .and(SHOUTS.DELETED_AT.isNull())
+                .execute();
+    }
+
+    /** Clears the soft-delete flag and the deleter user ID. */
+    void restore(long shoutId) {
+        dsl.update(SHOUTS)
+                .setNull(SHOUTS.DELETED_AT)
+                .setNull(SHOUTS.DELETED_BY)
+                .where(SHOUTS.ID.eq(shoutId))
+                .execute();
     }
 }
