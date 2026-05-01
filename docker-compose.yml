@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chatterbox}
+      POSTGRES_USER: ${POSTGRES_USER:-chatterbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chatterbox} -d ${POSTGRES_DB:-chatterbox}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:18-alpine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-chatterbox}
+      POSTGRES_USER: ${POSTGRES_USER:-chatterbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      SCHEDULE: ${BACKUP_SCHEDULE:-@daily}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
+      BACKUP_KEEP_WEEKS: ${BACKUP_KEEP_WEEKS:-4}
+      BACKUP_KEEP_MONTHS: ${BACKUP_KEEP_MONTHS:-0}
+    volumes:
+      - postgres-backups:/backups
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  chatterbox:
+    image: chatterbox:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CHATTERBOX_DISCORD_TOKEN: ${CHATTERBOX_DISCORD_TOKEN:?CHATTERBOX_DISCORD_TOKEN must be set}
+      CHATTERBOX_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-chatterbox}
+      CHATTERBOX_DB_USER: ${POSTGRES_USER:-chatterbox}
+      CHATTERBOX_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      CHATTERBOX_DEV_MODE: ${CHATTERBOX_DEV_MODE:-false}
+      CHATTERBOX_LOG_LEVEL: ${CHATTERBOX_LOG_LEVEL:-INFO}
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75.0
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  postgres-backups:
