@@ -70,6 +70,6 @@ jobs:
           cd "$1"
           gunzip -c chatterbox.tar.gz | docker image load
           rm chatterbox.tar.gz
-          docker compose up -d --force-recreate chatterbox
+          docker compose up -d
           docker image prune -f
           REMOTE
