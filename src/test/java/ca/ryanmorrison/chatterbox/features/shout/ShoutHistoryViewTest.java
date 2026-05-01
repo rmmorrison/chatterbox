@@ -23,46 +23,67 @@ class ShoutHistoryViewTest {
     private static final OffsetDateTime DELETED_AT =
             OffsetDateTime.of(2026, 4, 30, 13, 0, 0, 0, ZoneOffset.UTC);
     private static final long EPOCH = AUTHORED_AT.toEpochSecond();
+    private static final long GUILD = 1111L;
+    private static final long CHANNEL = 2222L;
+    private static final long MESSAGE = 3333L;
+    private static final long AUTHOR = 7777L;
     private static final long DELETER = 9999L;
 
     private static HistoryEntry active(long id) {
-        return new HistoryEntry(id, 700L + id, "WHY ARE WE STILL HERE", 7777L, AUTHORED_AT, Optional.empty());
+        return new HistoryEntry(id, 700L + id, MESSAGE + id, "WHY ARE WE STILL HERE", AUTHOR, AUTHORED_AT,
+                Optional.empty());
     }
 
     private static HistoryEntry deleted(long id) {
-        return new HistoryEntry(id, 700L + id, "WHY ARE WE STILL HERE", 7777L, AUTHORED_AT,
+        return new HistoryEntry(id, 700L + id, MESSAGE + id, "WHY ARE WE STILL HERE", AUTHOR, AUTHORED_AT,
                 Optional.of(new HistoryEntry.Deletion(DELETER, DELETED_AT)));
     }
 
     @Test
-    void embedIncludesContentAuthorTimestampAndPosition() {
+    void embedIncludesContentAuthorTimestampSourceAndPosition() {
+        HistoryEntry entry = active(42L);
         MessageEmbed embed = ShoutHistoryView.embed(
-                active(42L), "Alice", null, new ShoutHistoryRepository.Position(2, 5));
+                entry, GUILD, CHANNEL, "<@" + AUTHOR + ">", null,
+                new ShoutHistoryRepository.Position(2, 5));
 
         assertEquals("Shout history", embed.getTitle());
         assertEquals("WHY ARE WE STILL HERE", embed.getDescription());
         assertEquals("Entry 2 of 5", embed.getFooter().getText());
         assertNull(embed.getColor(), "active entries don't have a color override");
 
+        String expectedJump = "https://discord.com/channels/" + GUILD + "/" + CHANNEL + "/" + entry.messageId();
+
         var fields = embed.getFields();
-        assertEquals(2, fields.size());
+        assertEquals(3, fields.size());
         assertEquals("Author", fields.get(0).getName());
-        assertEquals("Alice", fields.get(0).getValue());
+        assertEquals("<@" + AUTHOR + ">", fields.get(0).getValue());
         assertEquals("Originally written", fields.get(1).getName());
         assertEquals("<t:" + EPOCH + ":F>", fields.get(1).getValue());
+        assertEquals("Source", fields.get(2).getName());
+        assertEquals("[Jump to message](" + expectedJump + ")", fields.get(2).getValue());
+    }
+
+    @Test
+    void embedAuthorFallsBackToPlainTextWhenMemberIsGone() {
+        MessageEmbed embed = ShoutHistoryView.embed(
+                active(42L), GUILD, CHANNEL, "Former member", null,
+                new ShoutHistoryRepository.Position(1, 1));
+
+        assertEquals("Former member", embed.getFields().get(0).getValue());
     }
 
     @Test
     void deletedEntryGetsRedColorAndDeletedByField() {
         MessageEmbed embed = ShoutHistoryView.embed(
-                deleted(42L), "Alice", "Mod Bob", new ShoutHistoryRepository.Position(2, 5));
+                deleted(42L), GUILD, CHANNEL, "<@" + AUTHOR + ">", "<@" + DELETER + ">",
+                new ShoutHistoryRepository.Position(2, 5));
 
         assertEquals(new Color(0xED, 0x42, 0x45).getRGB(), embed.getColor().getRGB());
 
         var fields = embed.getFields();
-        assertEquals(3, fields.size());
-        assertEquals("Deleted by", fields.get(2).getName());
-        assertEquals("Mod Bob", fields.get(2).getValue());
+        assertEquals(4, fields.size());
+        assertEquals("Deleted by", fields.get(3).getName());
+        assertEquals("<@" + DELETER + ">", fields.get(3).getValue());
     }
 
     @Test

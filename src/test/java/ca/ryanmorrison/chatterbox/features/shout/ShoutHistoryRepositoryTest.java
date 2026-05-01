@@ -88,6 +88,7 @@ class ShoutHistoryRepositoryTest {
         assertTrue(latest.isPresent());
         assertEquals("FIRST SHOUT IN CHANNEL", latest.get().content());
         assertEquals(s1, latest.get().shoutId());
+        assertEquals(100L, latest.get().messageId());
         assertEquals(AUTHOR, latest.get().authorId());
         assertTrue(latest.get().deletion().isEmpty());
     }

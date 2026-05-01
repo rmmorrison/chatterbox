@@ -33,7 +33,7 @@ import java.util.concurrent.CompletionException;
 final class ShoutHistoryHandler extends ListenerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(ShoutHistoryHandler.class);
-    private static final String UNKNOWN_AUTHOR = "Former member";
+    private static final String UNKNOWN_MEMBER = "Former member";
 
     private final ShoutRepository shouts;
     private final ShoutHistoryRepository history;
@@ -153,7 +153,7 @@ final class ShoutHistoryHandler extends ListenerAdapter {
         var newer = history.findNewer(channelId, entry.historyId(), canModerate);
         var pos = history.position(channelId, entry.historyId(), canModerate);
 
-        buildEmbed(guild, entry, pos).thenAccept(embed ->
+        buildEmbed(guild, channelId, entry, pos).thenAccept(embed ->
                 event.replyEmbeds(embed)
                         .setEphemeral(true)
                         .setComponents(ShoutHistoryView.components(entry, older, newer, canModerate))
@@ -166,25 +166,26 @@ final class ShoutHistoryHandler extends ListenerAdapter {
         var newer = history.findNewer(channelId, entry.historyId(), canModerate);
         var pos = history.position(channelId, entry.historyId(), canModerate);
 
-        buildEmbed(guild, entry, pos).thenAccept(embed ->
+        buildEmbed(guild, channelId, entry, pos).thenAccept(embed ->
                 event.editMessageEmbeds(embed)
                         .setComponents(ShoutHistoryView.components(entry, older, newer, canModerate))
                         .queue());
     }
 
     /**
-     * Resolves author and (if soft-deleted) deleter member names in parallel,
-     * then assembles the embed. Returns a future so the caller can chain a
-     * {@code reply} or {@code editMessage} when ready.
+     * Resolves author and (if soft-deleted) deleter member references in
+     * parallel, then assembles the embed. Returns a future so the caller can
+     * chain a {@code reply} or {@code editMessage} when ready.
      */
-    private CompletableFuture<MessageEmbed> buildEmbed(Guild guild, HistoryEntry entry,
+    private CompletableFuture<MessageEmbed> buildEmbed(Guild guild, long channelId, HistoryEntry entry,
                                                        ShoutHistoryRepository.Position pos) {
-        CompletableFuture<String> author = resolveDisplayName(guild, entry.authorId());
+        CompletableFuture<String> author = resolveMember(guild, entry.authorId());
         CompletableFuture<String> deleter = entry.deletion()
-                .map(d -> resolveDisplayName(guild, d.deletedBy()))
+                .map(d -> resolveMember(guild, d.deletedBy()))
                 .orElse(CompletableFuture.completedFuture(null));
         return author.thenCombine(deleter,
-                (authorName, deleterName) -> ShoutHistoryView.embed(entry, authorName, deleterName, pos));
+                (authorRef, deleterRef) -> ShoutHistoryView.embed(
+                        entry, guild.getIdLong(), channelId, authorRef, deleterRef, pos));
     }
 
     private static long parseCursor(String customId) {
@@ -196,18 +197,24 @@ final class ShoutHistoryHandler extends ListenerAdapter {
         return member.hasPermission(channel, Permission.MESSAGE_MANAGE);
     }
 
-    private static CompletableFuture<String> resolveDisplayName(Guild guild, long userId) {
+    /**
+     * Returns a Discord user mention ({@code <@id>}) when the member still
+     * exists in the guild, or the {@link #UNKNOWN_MEMBER} fallback otherwise.
+     * Mentions in embed fields render as the user's name without producing a
+     * notification, which is the desired UX here.
+     */
+    private static CompletableFuture<String> resolveMember(Guild guild, long userId) {
         return guild.retrieveMemberById(userId).submit()
-                .thenApply(Member::getEffectiveName)
+                .thenApply(Member::getAsMention)
                 .exceptionally(throwable -> {
                     Throwable cause = (throwable instanceof CompletionException ce) ? ce.getCause() : throwable;
                     if (cause instanceof ErrorResponseException ere
                             && ere.getErrorResponse() == ErrorResponse.UNKNOWN_MEMBER) {
-                        return UNKNOWN_AUTHOR;
+                        return UNKNOWN_MEMBER;
                     }
                     log.warn("Failed to resolve member {} in guild {}: {}",
                             userId, guild.getId(), cause.toString());
-                    return UNKNOWN_AUTHOR;
+                    return UNKNOWN_MEMBER;
                 });
     }
 }

@@ -11,6 +11,8 @@ import java.util.Optional;
  *                    pagination cursor.
  * @param shoutId     primary key in {@code shouts}; used by moderation
  *                    actions (delete / restore).
+ * @param messageId   Discord message ID of the original shout; used to
+ *                    build a jump link to the source message.
  * @param content     the shout text the bot emitted.
  * @param authorId    Discord user ID of the original author.
  * @param authoredAt  when the original message was first written.
@@ -21,6 +23,7 @@ import java.util.Optional;
 record HistoryEntry(
         long historyId,
         long shoutId,
+        long messageId,
         String content,
         long authorId,
         OffsetDateTime authoredAt,
