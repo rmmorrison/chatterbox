@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NhlEmbedBuilderTest {
 
     private static Game game(String away, String home, String state, Instant start, int awayScore, int homeScore) {
-        return new Game(1L, start, state, new Team(away, awayScore), new Team(home, homeScore));
+        return new Game(1L, null, start, state, new Team(away, awayScore), new Team(home, homeScore));
     }
 
     @Test

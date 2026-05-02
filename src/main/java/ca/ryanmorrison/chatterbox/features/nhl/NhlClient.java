@@ -1,6 +1,9 @@
 package ca.ryanmorrison.chatterbox.features.nhl;
 
+import ca.ryanmorrison.chatterbox.features.nhl.dto.Game;
+import ca.ryanmorrison.chatterbox.features.nhl.dto.GameDay;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.ScheduleResponse;
+import ca.ryanmorrison.chatterbox.features.nhl.dto.TeamWeekResponse;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -11,7 +14,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Fetches schedule data from {@code api-web.nhle.com}.
@@ -51,11 +59,13 @@ final class NhlClient {
 
     /** League-wide schedule for the seven-day window starting today. */
     ScheduleResponse leagueWeek() throws NhlException {
-        return get("/v1/schedule/now");
+        return get("/v1/schedule/now", ScheduleResponse.class);
     }
 
     /**
-     * Per-team schedule for the seven-day window starting today.
+     * Per-team schedule for the seven-day window starting today. The
+     * underlying response is a flat games list, which we group by
+     * {@code gameDate} so callers can treat both endpoints uniformly.
      *
      * @param teamAbbrev three-letter abbreviation (case-insensitive); the API
      *                   wants upper-case in the path
@@ -65,10 +75,36 @@ final class NhlClient {
             throw new NhlException("A team abbreviation is required.");
         }
         String upper = teamAbbrev.trim().toUpperCase(Locale.ROOT);
-        return get("/v1/club-schedule/" + upper + "/week/now");
+        TeamWeekResponse raw = get("/v1/club-schedule/" + upper + "/week/now",
+                TeamWeekResponse.class);
+        return groupByDate(raw.games());
     }
 
-    private ScheduleResponse get(String path) throws NhlException {
+    /**
+     * Buckets a flat games list into {@link GameDay}s in date order, falling
+     * back to the start-time-derived UTC date when {@code gameDate} is absent.
+     * Games with no usable date sort to the end under a {@code null}-keyed
+     * bucket so they're still rendered.
+     */
+    private static ScheduleResponse groupByDate(List<Game> games) {
+        Map<LocalDate, List<Game>> byDate = new LinkedHashMap<>();
+        for (Game g : games) {
+            LocalDate date = g.gameDate();
+            byDate.computeIfAbsent(date, k -> new ArrayList<>()).add(g);
+        }
+        List<GameDay> days = new ArrayList<>(byDate.size());
+        byDate.entrySet().stream()
+                .sorted((a, b) -> {
+                    if (a.getKey() == null && b.getKey() == null) return 0;
+                    if (a.getKey() == null) return 1;
+                    if (b.getKey() == null) return -1;
+                    return a.getKey().compareTo(b.getKey());
+                })
+                .forEach(e -> days.add(new GameDay(e.getKey(), e.getValue())));
+        return new ScheduleResponse(days);
+    }
+
+    private <T> T get(String path, Class<T> type) throws NhlException {
         URI uri;
         try {
             uri = URI.create(baseUrl + path);
@@ -106,7 +142,7 @@ final class NhlClient {
             throw new NhlException("The NHL API response was too large.");
         }
         try {
-            return mapper.readValue(body, ScheduleResponse.class);
+            return mapper.readValue(body, type);
         } catch (IOException e) {
             throw new NhlException("The NHL API returned an unexpected response.");
         }

@@ -97,11 +97,65 @@ class NhlClientTest {
         assertEquals("TOR", first.homeTeam().abbrev());
     }
 
+    private static final String TEAM_SAMPLE = """
+            {
+              "previousStartDate": "2026-04-25",
+              "clubTimezone": "US/Eastern",
+              "games": [
+                {
+                  "id": 2025030221,
+                  "gameDate": "2026-05-02",
+                  "startTimeUTC": "2026-05-03T00:00:00Z",
+                  "gameState": "FUT",
+                  "awayTeam": { "abbrev": "PHI", "score": 0 },
+                  "homeTeam": { "abbrev": "CAR", "score": 0 }
+                },
+                {
+                  "id": 2025030222,
+                  "gameDate": "2026-05-04",
+                  "startTimeUTC": "2026-05-04T23:00:00Z",
+                  "gameState": "FUT",
+                  "awayTeam": { "abbrev": "PHI", "score": 0 },
+                  "homeTeam": { "abbrev": "CAR", "score": 0 }
+                }
+              ]
+            }
+            """;
+
     @Test
-    void teamWeekUppercasesAbbreviationInPath() throws Exception {
-        serve("/v1/club-schedule/TOR/week/now", 200, SAMPLE);
-        ScheduleResponse resp = client.teamWeek("tor");
+    void teamWeekUppercasesAbbreviationAndGroupsGamesByDate() throws Exception {
+        serve("/v1/club-schedule/PHI/week/now", 200, TEAM_SAMPLE);
+        ScheduleResponse resp = client.teamWeek("phi");
+
+        // Two games on different dates → two GameDay buckets in chronological order.
         assertEquals(2, resp.gameWeek().size());
+        GameDay day1 = resp.gameWeek().get(0);
+        assertEquals(LocalDate.of(2026, 5, 2), day1.date());
+        assertEquals(1, day1.games().size());
+        assertEquals("PHI", day1.games().get(0).awayTeam().abbrev());
+        assertEquals("CAR", day1.games().get(0).homeTeam().abbrev());
+
+        GameDay day2 = resp.gameWeek().get(1);
+        assertEquals(LocalDate.of(2026, 5, 4), day2.date());
+        assertEquals(1, day2.games().size());
+    }
+
+    @Test
+    void teamWeekGroupsMultipleGamesOnSameDate() throws Exception {
+        String body = """
+                {
+                  "games": [
+                    { "id": 1, "gameDate": "2026-05-02", "startTimeUTC": "2026-05-02T22:00:00Z",
+                      "gameState": "FUT", "awayTeam": { "abbrev": "PHI" }, "homeTeam": { "abbrev": "CAR" } },
+                    { "id": 2, "gameDate": "2026-05-02", "startTimeUTC": "2026-05-03T00:00:00Z",
+                      "gameState": "FUT", "awayTeam": { "abbrev": "PHI" }, "homeTeam": { "abbrev": "CAR" } }
+                  ]
+                }
+                """;
+        serve("/v1/club-schedule/PHI/week/now", 200, body);
+        ScheduleResponse resp = client.teamWeek("PHI");
+        assertEquals(1, resp.gameWeek().size());
+        assertEquals(2, resp.gameWeek().get(0).games().size());
     }
 
     @Test
