@@ -375,11 +375,14 @@ channel. If more than one item is new, the embed footer shows
 a stale marker (e.g. one that has aged out of the feed window) from
 replaying the entire archive.
 
-The embed contains the article title (linked to the article URL),
-author when present, a thumbnail (media:thumbnail / image enclosure /
-first `<img>` tag, in that order), and a plain-text preview built from
-the description or content body — HTML stripped via jsoup, whitespace
-collapsed, truncated to 400 chars with an ellipsis.
+The embed leads with the feed title (in the embed's author slot, so a
+channel aggregating multiple feeds is easy to scan), followed by the
+article title linked to the article URL, a thumbnail (media:thumbnail
+/ image enclosure / first `<img>` tag, in that order), and a
+plain-text preview built from the description or content body — HTML
+stripped via jsoup, whitespace collapsed, truncated to 400 chars with
+an ellipsis. The footer carries the article author when present and
+the `+N more items` tail when applicable.
 
 Fetch failures (network errors, HTTP non-2xx, oversized bodies,
 unparseable XML) are logged at error level and skip the post; the

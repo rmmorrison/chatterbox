@@ -40,36 +40,59 @@ class RssPublisherTest {
     }
 
     @Test
-    void embedHasLinkedTitleAuthorAndCleanedDescription() {
+    void embedHasFeedTitleAtTopLinkedTitleAuthorInFooterAndCleanedDescription() {
         var entry = entry("Article Title",
                 "https://example.com/articles/1",
                 "<p>Hello <b>world</b>! &amp; goodbye.</p>",
                 "Jane Doe");
         MessageEmbed embed = RssPublisher.buildEmbed(testFeed(), entry, 1);
 
+        assertNotNull(embed.getAuthor());
+        assertEquals("Test Feed", embed.getAuthor().getName(),
+                "feed title should occupy the embed's author slot");
         assertEquals("Article Title", embed.getTitle());
         assertEquals("https://example.com/articles/1", embed.getUrl());
-        assertNotNull(embed.getAuthor());
-        assertEquals("Jane Doe", embed.getAuthor().getName());
         assertEquals("Hello world! & goodbye.", embed.getDescription());
-        assertEquals("Test Feed", embed.getFooter().getText());
+        assertNotNull(embed.getFooter());
+        assertEquals("Jane Doe", embed.getFooter().getText(),
+                "article author should now be in the footer");
     }
 
     @Test
-    void footerShowsExtraCount() {
+    void footerShowsAuthorAndExtraCountWhenBothPresent() {
+        var entry = entry("t", "https://x", "<p>p</p>", "Jane Doe");
+        MessageEmbed embed = RssPublisher.buildEmbed(testFeed(), entry, 3);
+        String footer = embed.getFooter().getText();
+        assertTrue(footer.contains("Jane Doe"), () -> "got: " + footer);
+        assertTrue(footer.contains("+2 more items"), () -> "got: " + footer);
+    }
+
+    @Test
+    void footerShowsOnlyExtraCountWhenAuthorMissing() {
         var entry = entry("t", "https://x", "<p>p</p>", null);
         MessageEmbed embed = RssPublisher.buildEmbed(testFeed(), entry, 3);
-        assertTrue(embed.getFooter().getText().contains("+2 more items"),
-                () -> "got: " + embed.getFooter().getText());
+        assertEquals("+2 more items", embed.getFooter().getText());
+    }
+
+    @Test
+    void footerShowsOnlyAuthorWhenSingleNewItem() {
+        var entry = entry("t", "https://x", "<p>p</p>", "Jane Doe");
+        MessageEmbed embed = RssPublisher.buildEmbed(testFeed(), entry, 1);
+        assertEquals("Jane Doe", embed.getFooter().getText());
+    }
+
+    @Test
+    void footerOmittedWhenNeitherAuthorNorExtra() {
+        var entry = entry("t", "https://x", "<p>p</p>", null);
+        MessageEmbed embed = RssPublisher.buildEmbed(testFeed(), entry, 1);
+        assertNull(embed.getFooter());
     }
 
     @Test
     void singleExtraIsSingular() {
         var entry = entry("t", "https://x", "<p>p</p>", null);
         MessageEmbed embed = RssPublisher.buildEmbed(testFeed(), entry, 2);
-        assertTrue(embed.getFooter().getText().contains("+1 more item"),
-                () -> "got: " + embed.getFooter().getText());
-        assertTrue(!embed.getFooter().getText().contains("items"));
+        assertEquals("+1 more item", embed.getFooter().getText());
     }
 
     @Test

@@ -41,11 +41,14 @@ final class RssPublisher {
     static MessageEmbed buildEmbed(Feed feed, SyndEntry latest, int newCount) {
         EmbedBuilder eb = new EmbedBuilder().setColor(EMBED_COLOR);
 
+        // Feed title sits in the embed's author slot so it's the first thing
+        // a reader sees — useful when a channel aggregates multiple feeds.
+        eb.setAuthor(truncate(feed.title(), MessageEmbed.AUTHOR_MAX_LENGTH));
+
         String title = stringOrFallback(latest.getTitle(), "(untitled)");
         String link = latest.getLink();
         eb.setTitle(truncate(title, MessageEmbed.TITLE_MAX_LENGTH), nullIfBlank(link));
 
-        authorName(latest).ifPresent(eb::setAuthor);
         thumbnail(latest).ifPresent(eb::setThumbnail);
 
         String preview = preview(latest);
@@ -58,14 +61,25 @@ final class RssPublisher {
             eb.setTimestamp(published);
         }
 
-        String footer = feed.title();
-        int extra = newCount - 1;
-        if (extra > 0) {
-            footer += "  ·  +" + extra + " more " + (extra == 1 ? "item" : "items");
+        // Footer carries the article author (when known) and the "+N more"
+        // tail. Either, both, or neither may be present.
+        String footer = buildFooter(authorName(latest), newCount);
+        if (!footer.isEmpty()) {
+            eb.setFooter(truncate(footer, MessageEmbed.TEXT_MAX_LENGTH));
         }
-        eb.setFooter(truncate(footer, MessageEmbed.TEXT_MAX_LENGTH));
 
         return eb.build();
+    }
+
+    private static String buildFooter(Optional<String> author, int newCount) {
+        StringBuilder sb = new StringBuilder();
+        author.ifPresent(sb::append);
+        int extra = newCount - 1;
+        if (extra > 0) {
+            if (sb.length() > 0) sb.append("  ·  ");
+            sb.append("+").append(extra).append(" more ").append(extra == 1 ? "item" : "items");
+        }
+        return sb.toString();
     }
 
     // ---- helpers ----
