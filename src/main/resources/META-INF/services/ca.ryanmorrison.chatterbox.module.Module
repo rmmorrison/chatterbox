@@ -1,3 +1,4 @@
 ca.ryanmorrison.chatterbox.features.ping.PingModule
 ca.ryanmorrison.chatterbox.features.shout.ShoutModule
 ca.ryanmorrison.chatterbox.features.autoreply.AutoReplyModule
+ca.ryanmorrison.chatterbox.features.rss.RssModule

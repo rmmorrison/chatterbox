@@ -5,6 +5,7 @@ package ca.ryanmorrison.chatterbox.db.generated;
 
 
 import ca.ryanmorrison.chatterbox.db.generated.tables.AutoReplies;
+import ca.ryanmorrison.chatterbox.db.generated.tables.RssFeeds;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 
@@ -19,6 +20,11 @@ public class Tables {
      * The table <code>public.auto_replies</code>.
      */
     public static final AutoReplies AUTO_REPLIES = AutoReplies.AUTO_REPLIES;
+
+    /**
+     * The table <code>public.rss_feeds</code>.
+     */
+    public static final RssFeeds RSS_FEEDS = RssFeeds.RSS_FEEDS;
 
     /**
      * The table <code>public.shout_history</code>.
