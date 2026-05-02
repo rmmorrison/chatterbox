@@ -11,6 +11,7 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
 
 import java.awt.Color;
 import java.time.OffsetDateTime;
@@ -43,9 +44,9 @@ final class RssPublisher {
 
         // Feed title sits in the embed's author slot so it's the first thing
         // a reader sees — useful when a channel aggregates multiple feeds.
-        eb.setAuthor(truncate(feed.title(), MessageEmbed.AUTHOR_MAX_LENGTH));
+        eb.setAuthor(truncate(decodeEntities(feed.title()), MessageEmbed.AUTHOR_MAX_LENGTH));
 
-        String title = stringOrFallback(latest.getTitle(), "(untitled)");
+        String title = stringOrFallback(decodeEntities(latest.getTitle()), "(untitled)");
         String link = latest.getLink();
         eb.setTitle(truncate(title, MessageEmbed.TITLE_MAX_LENGTH), nullIfBlank(link));
 
@@ -86,13 +87,13 @@ final class RssPublisher {
 
     private static Optional<String> authorName(SyndEntry entry) {
         if (entry.getAuthor() != null && !entry.getAuthor().isBlank()) {
-            return Optional.of(truncate(entry.getAuthor().trim(), MessageEmbed.AUTHOR_MAX_LENGTH));
+            return Optional.of(truncate(decodeEntities(entry.getAuthor()).trim(), MessageEmbed.AUTHOR_MAX_LENGTH));
         }
         List<SyndPerson> authors = entry.getAuthors();
         if (authors != null) {
             for (SyndPerson p : authors) {
                 if (p.getName() != null && !p.getName().isBlank()) {
-                    return Optional.of(truncate(p.getName().trim(), MessageEmbed.AUTHOR_MAX_LENGTH));
+                    return Optional.of(truncate(decodeEntities(p.getName()).trim(), MessageEmbed.AUTHOR_MAX_LENGTH));
                 }
             }
         }
@@ -211,6 +212,17 @@ final class RssPublisher {
 
     private static String stringOrFallback(String value, String fallback) {
         return (value == null || value.isBlank()) ? fallback : value.trim();
+    }
+
+    /**
+     * Decodes HTML entities (e.g. {@code &#8217;} → {@code '}, {@code &amp;} →
+     * {@code &}) without stripping or interpreting tags. Rome hands back title
+     * and author fields verbatim, so feeds that escape punctuation reach us
+     * with raw entities still in place.
+     */
+    private static String decodeEntities(String value) {
+        if (value == null) return null;
+        return Parser.unescapeEntities(value, false);
     }
 
     private static String nullIfBlank(String s) {

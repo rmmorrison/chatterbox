@@ -59,6 +59,30 @@ class RssPublisherTest {
     }
 
     @Test
+    void titleAndAuthorEntitiesAreDecoded() {
+        var entry = entry("Meta&#8217;s historic loss in court could cost a lot more than $375 million",
+                "https://example.com/articles/1",
+                "<p>body</p>",
+                "Jane &amp; John");
+        MessageEmbed embed = RssPublisher.buildEmbed(testFeed(), entry, 1);
+        assertEquals("Meta’s historic loss in court could cost a lot more than $375 million",
+                embed.getTitle());
+        assertNotNull(embed.getFooter());
+        assertEquals("Jane & John", embed.getFooter().getText());
+    }
+
+    @Test
+    void feedTitleEntitiesAreDecodedInAuthorSlot() {
+        Feed feed = new Feed(1L, 100L, 200L, "https://example.com/feed",
+                "Ben &amp; Jerry&#8217;s Blog",
+                7L, 60, Optional.empty(), Optional.empty(), Optional.empty(),
+                OffsetDateTime.now(ZoneOffset.UTC));
+        var entry = entry("t", "https://x", "<p>p</p>", null);
+        MessageEmbed embed = RssPublisher.buildEmbed(feed, entry, 1);
+        assertEquals("Ben & Jerry’s Blog", embed.getAuthor().getName());
+    }
+
+    @Test
     void footerShowsAuthorAndExtraCountWhenBothPresent() {
         var entry = entry("t", "https://x", "<p>p</p>", "Jane Doe");
         MessageEmbed embed = RssPublisher.buildEmbed(testFeed(), entry, 3);
