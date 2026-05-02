@@ -4,6 +4,7 @@ import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndFeed;
 import com.rometools.rome.io.FeedException;
 import com.rometools.rome.io.SyndFeedInput;
+import org.jsoup.parser.Parser;
 import org.xml.sax.InputSource;
 
 import java.io.ByteArrayInputStream;
@@ -67,7 +68,8 @@ final class RssFetcher {
     Validated validate(String rawUrl) throws FetchException {
         String normalised = normaliseUrl(rawUrl);
         SyndFeed feed = parse(load(normalised));
-        String title = feed.getTitle() == null ? "" : feed.getTitle().trim();
+        String rawTitle = feed.getTitle() == null ? "" : feed.getTitle();
+        String title = Parser.unescapeEntities(rawTitle, false).trim();
         if (title.isEmpty()) {
             throw new FetchException("The feed parsed successfully but has no title.");
         }
