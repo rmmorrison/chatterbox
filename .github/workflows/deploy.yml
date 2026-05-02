@@ -3,6 +3,11 @@ name: Build and Deploy
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
   workflow_dispatch:
 
 permissions:
