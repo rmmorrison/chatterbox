@@ -20,6 +20,7 @@ public record Game(
         @JsonProperty("startTimeUTC") Instant startTimeUtc,
         String gameState,
         Team awayTeam,
-        Team homeTeam) {
+        Team homeTeam,
+        SeriesStatus seriesStatus) {
 }
 

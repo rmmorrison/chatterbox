@@ -3,6 +3,7 @@ package ca.ryanmorrison.chatterbox.features.nhl;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.Game;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.GameDay;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.ScheduleResponse;
+import ca.ryanmorrison.chatterbox.features.nhl.dto.SeriesStatus;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.Team;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NhlEmbedBuilderTest {
 
     private static Game game(String away, String home, String state, Instant start, int awayScore, int homeScore) {
-        return new Game(1L, null, start, state, new Team(away, awayScore), new Team(home, homeScore));
+        return game(away, home, state, start, awayScore, homeScore, null);
+    }
+
+    private static Game game(String away, String home, String state, Instant start,
+                             int awayScore, int homeScore, SeriesStatus series) {
+        return new Game(1L, null, start, state,
+                new Team(away, awayScore), new Team(home, homeScore), series);
     }
 
     @Test
@@ -90,6 +97,57 @@ class NhlEmbedBuilderTest {
                 new GameDay(LocalDate.of(2026, 5, 2), List.of()),
                 new GameDay(LocalDate.of(2026, 5, 3), List.of())));
         assertNull(NhlEmbedBuilder.build(resp, null));
+    }
+
+    @Test
+    void seriesStatusAddsLeaderSubLine() {
+        SeriesStatus series = new SeriesStatus("2nd Round", "CAR", 3, "PHI", 2);
+        ScheduleResponse resp = new ScheduleResponse(List.of(
+                new GameDay(LocalDate.of(2026, 5, 2), List.of(
+                        game("PHI", "CAR", "FUT", Instant.parse("2026-05-02T23:00:00Z"),
+                                0, 0, series)))));
+
+        MessageEmbed embed = NhlEmbedBuilder.build(resp, null);
+        String value = embed.getFields().get(0).getValue();
+        assertTrue(value.contains("PHI at CAR"), () -> "got: " + value);
+        assertTrue(value.contains("*2nd Round · CAR leads 3-2*"), () -> "got: " + value);
+    }
+
+    @Test
+    void seriesStatusReportsTiedScores() {
+        SeriesStatus series = new SeriesStatus("2nd Round", "CAR", 0, "PHI", 0);
+        ScheduleResponse resp = new ScheduleResponse(List.of(
+                new GameDay(LocalDate.of(2026, 5, 2), List.of(
+                        game("PHI", "CAR", "FUT", Instant.parse("2026-05-02T23:00:00Z"),
+                                0, 0, series)))));
+
+        String value = NhlEmbedBuilder.build(resp, null).getFields().get(0).getValue();
+        assertTrue(value.contains("*2nd Round · Tied 0-0*"), () -> "got: " + value);
+    }
+
+    @Test
+    void seriesStatusUsesBottomSeedWhenItLeads() {
+        SeriesStatus series = new SeriesStatus("1st Round", "CAR", 1, "PHI", 3);
+        ScheduleResponse resp = new ScheduleResponse(List.of(
+                new GameDay(LocalDate.of(2026, 5, 2), List.of(
+                        game("PHI", "CAR", "FUT", Instant.parse("2026-05-02T23:00:00Z"),
+                                0, 0, series)))));
+
+        String value = NhlEmbedBuilder.build(resp, null).getFields().get(0).getValue();
+        assertTrue(value.contains("*1st Round · PHI leads 3-1*"), () -> "got: " + value);
+    }
+
+    @Test
+    void seriesStatusFallsBackWhenSeedAbbrevsMissing() {
+        // Some payloads omit topSeedTeamAbbrev / bottomSeedTeamAbbrev.
+        SeriesStatus series = new SeriesStatus("2nd Round", null, 3, null, 2);
+        ScheduleResponse resp = new ScheduleResponse(List.of(
+                new GameDay(LocalDate.of(2026, 5, 2), List.of(
+                        game("PHI", "CAR", "FUT", Instant.parse("2026-05-02T23:00:00Z"),
+                                0, 0, series)))));
+
+        String value = NhlEmbedBuilder.build(resp, null).getFields().get(0).getValue();
+        assertTrue(value.contains("*2nd Round · Series leads 3-2*"), () -> "got: " + value);
     }
 
     @Test

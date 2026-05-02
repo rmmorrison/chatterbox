@@ -3,6 +3,7 @@ package ca.ryanmorrison.chatterbox.features.nhl;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.Game;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.GameDay;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.ScheduleResponse;
+import ca.ryanmorrison.chatterbox.features.nhl.dto.SeriesStatus;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.Team;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -71,6 +72,12 @@ final class NhlEmbedBuilder {
     }
 
     private static String renderGame(Game game) {
+        String header = renderHeader(game);
+        String series = renderSeries(game.seriesStatus());
+        return series == null ? header : header + "\n*" + series + "*";
+    }
+
+    private static String renderHeader(Game game) {
         String matchup = abbrev(game.awayTeam()) + " at " + abbrev(game.homeTeam());
         String state = game.gameState() == null ? "" : game.gameState().toUpperCase(Locale.ROOT);
         if (LIVE_STATES.contains(state)) {
@@ -85,6 +92,33 @@ final class NhlEmbedBuilder {
             return matchup + " — <t:" + game.startTimeUtc().getEpochSecond() + ":t>";
         }
         return matchup;
+    }
+
+    /**
+     * Renders the playoff series sub-line, e.g. {@code "2nd Round · CAR leads 3-2"}
+     * or {@code "2nd Round · Tied 1-1"}. Returns {@code null} for regular-season
+     * games (no {@code seriesStatus}) or when the payload is too sparse to
+     * describe.
+     */
+    private static String renderSeries(SeriesStatus s) {
+        if (s == null) return null;
+        int top = s.topSeedWins();
+        int bot = s.bottomSeedWins();
+        String body;
+        if (top == bot) {
+            body = "Tied " + top + "-" + bot;
+        } else if (top > bot) {
+            body = leaderName(s.topSeedTeamAbbrev()) + " leads " + top + "-" + bot;
+        } else {
+            body = leaderName(s.bottomSeedTeamAbbrev()) + " leads " + bot + "-" + top;
+        }
+        String title = s.seriesTitle();
+        if (title == null || title.isBlank()) return body;
+        return title + " · " + body;
+    }
+
+    private static String leaderName(String abbrev) {
+        return (abbrev == null || abbrev.isBlank()) ? "Series" : abbrev;
     }
 
     private static String abbrev(Team t) {

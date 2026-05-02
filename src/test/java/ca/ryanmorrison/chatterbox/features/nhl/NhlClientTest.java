@@ -141,6 +141,35 @@ class NhlClientTest {
     }
 
     @Test
+    void teamWeekParsesSeriesStatusWhenPresent() throws Exception {
+        String body = """
+                {
+                  "games": [
+                    {
+                      "id": 2025030221, "gameDate": "2026-05-02",
+                      "startTimeUTC": "2026-05-03T00:00:00Z", "gameState": "FUT",
+                      "awayTeam": { "abbrev": "PHI" },
+                      "homeTeam": { "abbrev": "CAR" },
+                      "seriesStatus": {
+                        "seriesTitle": "2nd Round",
+                        "topSeedTeamAbbrev": "CAR", "topSeedWins": 3,
+                        "bottomSeedTeamAbbrev": "PHI", "bottomSeedWins": 2
+                      }
+                    }
+                  ]
+                }
+                """;
+        serve("/v1/club-schedule/PHI/week/now", 200, body);
+        ScheduleResponse resp = client.teamWeek("PHI");
+        var series = resp.gameWeek().get(0).games().get(0).seriesStatus();
+        assertEquals("2nd Round", series.seriesTitle());
+        assertEquals("CAR", series.topSeedTeamAbbrev());
+        assertEquals(3, series.topSeedWins());
+        assertEquals("PHI", series.bottomSeedTeamAbbrev());
+        assertEquals(2, series.bottomSeedWins());
+    }
+
+    @Test
     void teamWeekGroupsMultipleGamesOnSameDate() throws Exception {
         String body = """
                 {
