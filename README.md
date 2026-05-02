@@ -336,3 +336,60 @@ not a hard guarantee — sufficient for a Manage-Messages-only feature.
 `MESSAGE_MANAGE` in the channel is required for every interaction
 (slash, modal, select, button). Permissions are re-checked on every
 event, so losing the role mid-flow denies further actions immediately.
+
+### RSS
+
+Per-channel RSS/Atom feed subscriptions. Anyone in a guild can add a
+feed; only the original adder (or a moderator with Manage Messages) can
+remove it. Each feed is polled on its own configurable cadence and new
+items are posted to the channel as embeds.
+
+Schema: each row stores guild + channel id, the feed URL, the parsed
+title, the user who added it, the refresh interval in minutes, and
+markers (`last_item_id`, `last_item_published_at`, `last_refreshed_at`)
+used by the scheduler to detect new items between refreshes. URLs are
+unique per `(channel_id, url)`.
+
+#### Subcommands
+
+- **`/rss add url:<URL> [refresh_minutes:<int>]`** fetches and parses
+  the feed synchronously (10s timeout, 2 MB body cap). On success the
+  feed is persisted with the parsed title and scheduled for refresh on
+  its individual cadence. The interval defaults to 60 minutes and must
+  be between 15 and 1440 (24 hours). Each channel may hold up to 25
+  feeds.
+- **`/rss remove`** lists the caller's feeds in this channel as an
+  ephemeral string-select; moderators see all feeds. Selecting a feed
+  shows a confirmation prompt with **Remove** / **Cancel** buttons.
+
+#### Refresh and posting
+
+A daemon `ScheduledExecutorService` runs one task per feed. On each
+tick the scheduler fetches the URL, parses it with Rome (RSS 0.9x/1.0/
+2.0 + Atom 0.3/1.0), diffs the entries against the stored markers,
+posts the most recent new item as an embed, and updates the markers.
+The first refresh after a feed is added silently establishes the
+markers (no post) so adding a high-volume feed doesn't flood the
+channel. If more than one item is new, the embed footer shows
+`+N more items`. The result is capped at 25 items per tick to prevent
+a stale marker (e.g. one that has aged out of the feed window) from
+replaying the entire archive.
+
+The embed contains the article title (linked to the article URL),
+author when present, a thumbnail (media:thumbnail / image enclosure /
+first `<img>` tag, in that order), and a plain-text preview built from
+the description or content body — HTML stripped via jsoup, whitespace
+collapsed, truncated to 400 chars with an ellipsis.
+
+Fetch failures (network errors, HTTP non-2xx, oversized bodies,
+unparseable XML) are logged at error level and skip the post; the
+channel sees nothing and the markers are preserved. When a channel is
+deleted, a `ChannelDeleteEvent` listener prunes its feeds and cancels
+the scheduled tasks.
+
+#### Permissions
+
+Anyone in a guild can `/rss add`. `/rss remove` is restricted to the
+adder of each feed; users with `MESSAGE_MANAGE` in the channel can
+remove any feed. The check is re-applied on the select and confirm
+buttons too, so losing the role mid-flow denies the deletion.

@@ -5,6 +5,7 @@ package ca.ryanmorrison.chatterbox.db.generated;
 
 
 import ca.ryanmorrison.chatterbox.db.generated.tables.AutoReplies;
+import ca.ryanmorrison.chatterbox.db.generated.tables.RssFeeds;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 
@@ -36,6 +37,11 @@ public class Public extends SchemaImpl {
     public final AutoReplies AUTO_REPLIES = AutoReplies.AUTO_REPLIES;
 
     /**
+     * The table <code>public.rss_feeds</code>.
+     */
+    public final RssFeeds RSS_FEEDS = RssFeeds.RSS_FEEDS;
+
+    /**
      * The table <code>public.shout_history</code>.
      */
     public final ShoutHistory SHOUT_HISTORY = ShoutHistory.SHOUT_HISTORY;
@@ -62,6 +68,7 @@ public class Public extends SchemaImpl {
     public final List<Table<?>> getTables() {
         return Arrays.asList(
             AutoReplies.AUTO_REPLIES,
+            RssFeeds.RSS_FEEDS,
             ShoutHistory.SHOUT_HISTORY,
             Shouts.SHOUTS
         );

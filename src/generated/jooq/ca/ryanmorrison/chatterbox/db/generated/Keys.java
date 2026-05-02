@@ -5,9 +5,11 @@ package ca.ryanmorrison.chatterbox.db.generated;
 
 
 import ca.ryanmorrison.chatterbox.db.generated.tables.AutoReplies;
+import ca.ryanmorrison.chatterbox.db.generated.tables.RssFeeds;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.AutoRepliesRecord;
+import ca.ryanmorrison.chatterbox.db.generated.tables.records.RssFeedsRecord;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.ShoutHistoryRecord;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.ShoutsRecord;
 
@@ -31,6 +33,7 @@ public class Keys {
     // -------------------------------------------------------------------------
 
     public static final UniqueKey<AutoRepliesRecord> AUTO_REPLIES_PKEY = Internal.createUniqueKey(AutoReplies.AUTO_REPLIES, DSL.name("auto_replies_pkey"), new TableField[] { AutoReplies.AUTO_REPLIES.ID }, true);
+    public static final UniqueKey<RssFeedsRecord> RSS_FEEDS_PKEY = Internal.createUniqueKey(RssFeeds.RSS_FEEDS, DSL.name("rss_feeds_pkey"), new TableField[] { RssFeeds.RSS_FEEDS.ID }, true);
     public static final UniqueKey<ShoutHistoryRecord> SHOUT_HISTORY_PKEY = Internal.createUniqueKey(ShoutHistory.SHOUT_HISTORY, DSL.name("shout_history_pkey"), new TableField[] { ShoutHistory.SHOUT_HISTORY.ID }, true);
     public static final UniqueKey<ShoutsRecord> SHOUTS_MESSAGE_ID_KEY = Internal.createUniqueKey(Shouts.SHOUTS, DSL.name("shouts_message_id_key"), new TableField[] { Shouts.SHOUTS.MESSAGE_ID }, true);
     public static final UniqueKey<ShoutsRecord> SHOUTS_PKEY = Internal.createUniqueKey(Shouts.SHOUTS, DSL.name("shouts_pkey"), new TableField[] { Shouts.SHOUTS.ID }, true);
