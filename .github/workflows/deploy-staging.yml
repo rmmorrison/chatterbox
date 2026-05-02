@@ -1,0 +1,96 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag, or SHA to deploy"
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: chatterbox:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save image to gzipped tarball
+        run: docker image save chatterbox:staging | gzip > chatterbox.tar.gz
+
+      - name: Derive staging compose file
+        run: |
+          yq eval '
+            del(.services.postgres) |
+            del(.services."postgres-backup") |
+            del(.services."backup-sync") |
+            del(.volumes) |
+            del(.services.chatterbox.depends_on) |
+            .services.chatterbox.image = "chatterbox:staging" |
+            .services.chatterbox.environment.CHATTERBOX_DB_URL = "jdbc:sqlite::memory:" |
+            del(.services.chatterbox.environment.CHATTERBOX_DB_USER) |
+            del(.services.chatterbox.environment.CHATTERBOX_DB_PASSWORD) |
+            .services.chatterbox.deploy.resources.limits.memory = "192M"
+          ' docker-compose.yml > docker-compose.staging.yml
+          cat docker-compose.staging.yml
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Copy image and compose file to VPS
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          scp -i ~/.ssh/id_ed25519 chatterbox.tar.gz docker-compose.staging.yml \
+            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+
+      - name: Load image and restart container
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$SSH_USER@$SSH_HOST" \
+            bash -s -- "$DEPLOY_PATH" <<'REMOTE'
+          set -euo pipefail
+          cd "$1"
+          gunzip -c chatterbox.tar.gz | docker image load
+          rm chatterbox.tar.gz
+          docker compose -p chatterbox-staging -f docker-compose.staging.yml up -d
+          docker image prune -f
+          REMOTE
