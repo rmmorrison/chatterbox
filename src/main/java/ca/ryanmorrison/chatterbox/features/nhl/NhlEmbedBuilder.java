@@ -58,7 +58,7 @@ final class NhlEmbedBuilder {
             for (Game game : day.games()) {
                 lines.add(renderGame(game));
             }
-            eb.addField(heading, lines.toString(), false);
+            eb.addField(heading, lines.toString(), true);
         }
         return eb.build();
     }
