@@ -7,6 +7,7 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -76,13 +77,39 @@ final class RssScheduler {
     }
 
     /**
-     * Schedule a feed loaded at startup. Initial delay is jittered (0..N-1
-     * minutes) so a cold start doesn't pound every host at once.
+     * Schedule a feed loaded at startup. If the feed has been refreshed
+     * before, resume the cycle by delaying for the remaining portion of its
+     * interval (so a 60-minute feed that synced 37 minutes before restart
+     * will tick again 23 minutes after restart). Feeds that have never been
+     * refreshed — or whose last refresh is past due — are spread out with a
+     * random 0..N-1-minute jitter so a cold start doesn't pound every host
+     * at once.
      */
     private void scheduleExisting(Feed feed) {
-        int jitter = feed.refreshMinutes() <= 1 ? 0
-                : ThreadLocalRandom.current().nextInt(feed.refreshMinutes());
-        schedule(feed, jitter);
+        int delay = feed.lastRefreshedAt()
+                .map(last -> resumeDelayMinutes(last, feed.refreshMinutes(),
+                        OffsetDateTime.now(ZoneOffset.UTC)))
+                .orElseGet(() -> jitterFor(feed.refreshMinutes()));
+        schedule(feed, delay);
+    }
+
+    /**
+     * Minutes to wait before the next tick given a known last-refresh time.
+     * Returns 0 when the feed is already past due, the full interval when
+     * the timestamp appears to be in the future (clock skew), and the
+     * remainder otherwise.
+     */
+    static int resumeDelayMinutes(OffsetDateTime lastRefreshedAt,
+                                  int refreshMinutes,
+                                  OffsetDateTime now) {
+        long elapsed = Duration.between(lastRefreshedAt, now).toMinutes();
+        if (elapsed < 0) return refreshMinutes;
+        long remaining = refreshMinutes - elapsed;
+        return (int) Math.max(0, remaining);
+    }
+
+    private static int jitterFor(int refreshMinutes) {
+        return refreshMinutes <= 1 ? 0 : ThreadLocalRandom.current().nextInt(refreshMinutes);
     }
 
     private void schedule(Feed feed, int initialDelayMinutes) {
