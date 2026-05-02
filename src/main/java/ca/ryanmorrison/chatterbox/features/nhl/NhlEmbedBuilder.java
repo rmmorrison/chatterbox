@@ -54,7 +54,7 @@ final class NhlEmbedBuilder {
 
         for (GameDay day : daysWithGames) {
             String heading = day.date() == null ? "Upcoming" : DAY_HEADING.format(day.date());
-            StringJoiner lines = new StringJoiner("\n");
+            StringJoiner lines = new StringJoiner("\n\n");
             for (Game game : day.games()) {
                 lines.add(renderGame(game));
             }
