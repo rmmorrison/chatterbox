@@ -31,6 +31,7 @@
         <rome.version>2.1.0</rome.version>
         <jsoup.version>1.22.2</jsoup.version>
         <jackson.version>2.21.3</jackson.version>
+        <javalin.version>7.2.0</javalin.version>
         <junit.version>6.0.3</junit.version>
         <testcontainers.version>1.21.4</testcontainers.version>
 
@@ -119,6 +120,12 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>${jackson.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.javalin</groupId>
+            <artifactId>javalin</artifactId>
+            <version>${javalin.version}</version>
         </dependency>
 
         <dependency>

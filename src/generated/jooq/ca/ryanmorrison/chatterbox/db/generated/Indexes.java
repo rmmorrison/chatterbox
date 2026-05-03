@@ -6,6 +6,7 @@ package ca.ryanmorrison.chatterbox.db.generated;
 
 import ca.ryanmorrison.chatterbox.db.generated.tables.AutoReplies;
 import ca.ryanmorrison.chatterbox.db.generated.tables.RssFeeds;
+import ca.ryanmorrison.chatterbox.db.generated.tables.ShortenedUrls;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 
@@ -29,6 +30,8 @@ public class Indexes {
     public static final Index AUTO_REPLIES_CHANNEL_PATTERN_UNIQ = Internal.createIndex(DSL.name("auto_replies_channel_pattern_uniq"), AutoReplies.AUTO_REPLIES, new OrderField[] { AutoReplies.AUTO_REPLIES.CHANNEL_ID, AutoReplies.AUTO_REPLIES.PATTERN }, true);
     public static final Index RSS_FEEDS_CHANNEL_IDX = Internal.createIndex(DSL.name("rss_feeds_channel_idx"), RssFeeds.RSS_FEEDS, new OrderField[] { RssFeeds.RSS_FEEDS.CHANNEL_ID }, false);
     public static final Index RSS_FEEDS_CHANNEL_URL_UNIQ = Internal.createIndex(DSL.name("rss_feeds_channel_url_uniq"), RssFeeds.RSS_FEEDS, new OrderField[] { RssFeeds.RSS_FEEDS.CHANNEL_ID, RssFeeds.RSS_FEEDS.URL }, true);
+    public static final Index SHORTENED_URLS_TOKEN_UNIQ = Internal.createIndex(DSL.name("shortened_urls_token_uniq"), ShortenedUrls.SHORTENED_URLS, new OrderField[] { ShortenedUrls.SHORTENED_URLS.TOKEN }, true);
+    public static final Index SHORTENED_URLS_URL_UNIQ = Internal.createIndex(DSL.name("shortened_urls_url_uniq"), ShortenedUrls.SHORTENED_URLS, new OrderField[] { ShortenedUrls.SHORTENED_URLS.URL }, true);
     public static final Index SHOUT_HISTORY_CHANNEL_ID_IDX = Internal.createIndex(DSL.name("shout_history_channel_id_idx"), ShoutHistory.SHOUT_HISTORY, new OrderField[] { ShoutHistory.SHOUT_HISTORY.CHANNEL_ID, ShoutHistory.SHOUT_HISTORY.ID.desc() }, false);
     public static final Index SHOUT_HISTORY_SHOUT_ID_IDX = Internal.createIndex(DSL.name("shout_history_shout_id_idx"), ShoutHistory.SHOUT_HISTORY, new OrderField[] { ShoutHistory.SHOUT_HISTORY.SHOUT_ID }, false);
     public static final Index SHOUTS_ACTIVE_IDX = Internal.createIndex(DSL.name("shouts_active_idx"), Shouts.SHOUTS, new OrderField[] { Shouts.SHOUTS.CHANNEL_ID }, false);

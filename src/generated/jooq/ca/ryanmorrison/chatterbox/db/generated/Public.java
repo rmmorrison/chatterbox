@@ -6,6 +6,7 @@ package ca.ryanmorrison.chatterbox.db.generated;
 
 import ca.ryanmorrison.chatterbox.db.generated.tables.AutoReplies;
 import ca.ryanmorrison.chatterbox.db.generated.tables.RssFeeds;
+import ca.ryanmorrison.chatterbox.db.generated.tables.ShortenedUrls;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
 
@@ -42,6 +43,11 @@ public class Public extends SchemaImpl {
     public final RssFeeds RSS_FEEDS = RssFeeds.RSS_FEEDS;
 
     /**
+     * The table <code>public.shortened_urls</code>.
+     */
+    public final ShortenedUrls SHORTENED_URLS = ShortenedUrls.SHORTENED_URLS;
+
+    /**
      * The table <code>public.shout_history</code>.
      */
     public final ShoutHistory SHOUT_HISTORY = ShoutHistory.SHOUT_HISTORY;
@@ -69,6 +75,7 @@ public class Public extends SchemaImpl {
         return Arrays.asList(
             AutoReplies.AUTO_REPLIES,
             RssFeeds.RSS_FEEDS,
+            ShortenedUrls.SHORTENED_URLS,
             ShoutHistory.SHOUT_HISTORY,
             Shouts.SHOUTS
         );

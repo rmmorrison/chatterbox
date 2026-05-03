@@ -24,6 +24,8 @@ deployment.
 | `CHATTERBOX_DB_PASSWORD`   | no       | —       | DB password (Postgres). Unused for SQLite. |
 | `CHATTERBOX_DEV_MODE`      | no       | `false` | When `true`, slash commands register per-guild for instant updates. When `false`, they register globally. The opposite scope is cleared on each startup, so switching modes never leaves duplicates. |
 | `CHATTERBOX_LOG_LEVEL`     | no       | `INFO`  | Root logger level. |
+| `CHATTERBOX_HTTP_PORT`     | no       | `8080`  | Port the bot's internal HTTP server binds to. The server only starts when at least one module registers a route. |
+| `CHATTERBOX_SHORTENER_BASE_URL` | no  | —       | Public-facing prefix for the URL shortener (e.g. `https://example.com`). Required only when `/shorten` is invoked; the bot can run without it set. |
 
 ## Building
 
@@ -174,6 +176,7 @@ public interface Module {
     List<SlashCommandData> slashCommands(InitContext);
     List<EventListener> listeners(InitContext);
     List<String> migrationLocations();         // classpath dirs for Flyway
+    void registerHttpRoutes(HttpRouter, InitContext);  // optional Javalin routes
     void onStart(ModuleContext ctx);           // post-JDA-ready hook
     void onStop();
 }
@@ -222,11 +225,50 @@ src/main/resources/db/migration/
 The dialect is selected from the JDBC URL (`postgresql` → `POSTGRES`,
 `sqlite` → `SQLITE`).
 
+### HTTP server
+
+A bot-wide [Javalin](https://javalin.io) instance is available to modules that
+want to expose HTTP endpoints alongside their Discord behaviour. Modules
+register routes via `registerHttpRoutes(HttpRouter, InitContext)`; the server
+only binds its port when at least one module has registered a route, so a
+deployment without HTTP-using modules pays no port cost.
+
+The server listens on `CHATTERBOX_HTTP_PORT` (default `8080`). In the
+default `docker-compose.yml`, traffic reaches it through Traefik — see
+[Reverse proxy and TLS](#reverse-proxy-and-tls) below.
+
 ### Logging
 
 SLF4J 2 + Logback. `java.util.logging` is bridged through `jul-to-slf4j` so
 output from JDBC drivers flows to the same place. The root level is driven by
 `CHATTERBOX_LOG_LEVEL`.
+
+## Reverse proxy and TLS
+
+`docker-compose.yml` ships with a Traefik service that terminates TLS for any
+HTTP-using module (today, the URL shortener). Traefik is the only service
+that publishes ports on the host (`80` and `443`); the bot's Javalin port is
+private to the Docker network.
+
+| Variable                | Required (when shortener is in use) | Default | Purpose |
+|-------------------------|-------------------------------------|---------|---------|
+| `SHORTENER_DOMAIN`      | yes                                 | —       | Hostname Traefik should serve, e.g. `example.com`. |
+| `SHORTENER_PATH_PREFIX` | no                                  | empty   | Path prefix the bot is mounted under (e.g. `/links`). Empty serves at the root. |
+| `LETSENCRYPT_EMAIL`     | yes                                 | —       | Email used for ACME registration / expiry notices. |
+| `LETSENCRYPT_CA_SERVER` | no                                  | LE prod | ACME directory URL. Use `https://acme-staging-v02.api.letsencrypt.org/directory` for non-production deployments to avoid the prod CA's tight rate limits. |
+| `TRAEFIK_NETWORK_NAME`  | no                                  | `chatterbox-web` | Docker network used between Traefik and the bot. Override on hosts running multiple chatterbox stacks side-by-side (e.g. prod + staging) so the network names don't collide. |
+
+HTTP traffic on `:80` is unconditionally redirected to HTTPS on `:443`.
+Certificates are issued via the LetsEncrypt HTTP-01 challenge and persisted
+to a `letsencrypt/` directory bind-mounted next to `docker-compose.yml`.
+The directory is created automatically on first start; back it up with the
+rest of the deploy directory.
+
+The staging deploy pipeline (`.github/workflows/deploy-staging.yml`) keeps
+the Traefik service in the deployed compose file. Staging environments
+should set `LETSENCRYPT_CA_SERVER` to the LetsEncrypt staging endpoint and
+use a distinct `SHORTENER_DOMAIN` (e.g. `staging.example.com`) and
+`TRAEFIK_NETWORK_NAME`.
 
 ## Adding a new module
 
@@ -243,6 +285,28 @@ output from JDBC drivers flows to the same place. The root level is driven by
      commit the result.
 
 ## Built-in features
+
+### URL shortener
+
+Stores HTTP(S) URLs against a 6-character lowercase alphanumeric token and
+exposes a redirect endpoint behind the bot's HTTP server.
+
+#### `/shorten url:<URL>`
+
+Validates the URL (must be HTTP or HTTPS with a host) and replies privately
+with the short URL constructed from `CHATTERBOX_SHORTENER_BASE_URL`. The
+URL is deduplicated globally — if any user has already shortened the same
+URL, that user's existing token is returned. Token collisions retry up to
+ten times before surfacing an error.
+
+The original creator (Discord user id) and the slash command's timestamp
+are recorded alongside each row.
+
+#### `GET /{token}`
+
+Public endpoint exposed via Javalin. Returns `301 Moved Permanently` with
+the original URL in the `Location` header on hit, or `404` on miss. Token
+lookups are case-insensitive.
 
 ### Shout
 

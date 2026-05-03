@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.module;
 
+import ca.ryanmorrison.chatterbox.http.HttpRouter;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.EventListener;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
@@ -68,6 +69,13 @@ public interface Module {
      * <p>Use timestamp-based version numbers to avoid collisions across modules.
      */
     default List<String> migrationLocations() { return List.of(); }
+
+    /**
+     * HTTP routes the module exposes via the bot-wide Javalin server. The
+     * server is bound to a port only if at least one module registers a route,
+     * so a deployment without HTTP-using modules pays no port cost.
+     */
+    default void registerHttpRoutes(HttpRouter router, InitContext ctx) {}
 
     /**
      * Invoked after JDA is fully ready ({@link ReadyEvent} fired) and after
