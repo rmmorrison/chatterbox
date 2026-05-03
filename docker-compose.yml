@@ -152,7 +152,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - traefik-letsencrypt:/letsencrypt
+      - ./letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - web
@@ -176,4 +176,3 @@ networks:
 volumes:
   postgres-data:
   postgres-backups:
-  traefik-letsencrypt:

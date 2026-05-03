@@ -260,7 +260,9 @@ private to the Docker network.
 
 HTTP traffic on `:80` is unconditionally redirected to HTTPS on `:443`.
 Certificates are issued via the LetsEncrypt HTTP-01 challenge and persisted
-to the `traefik-letsencrypt` named volume.
+to a `letsencrypt/` directory bind-mounted next to `docker-compose.yml`.
+The directory is created automatically on first start; back it up with the
+rest of the deploy directory.
 
 The staging deploy pipeline (`.github/workflows/deploy-staging.yml`) keeps
 the Traefik service in the deployed compose file. Staging environments
