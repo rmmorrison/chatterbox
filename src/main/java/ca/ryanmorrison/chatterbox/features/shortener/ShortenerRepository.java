@@ -43,17 +43,12 @@ final class ShortenerRepository {
                 .map(ShortenerRepository::toShortenedUrl);
     }
 
-    Optional<ShortenedUrl> insert(String token, String url, long createdBy, OffsetDateTime createdAt,
-                                  OpenGraphMetadata metadata) {
-        OpenGraphMetadata m = metadata == null ? OpenGraphMetadata.EMPTY : metadata;
+    Optional<ShortenedUrl> insert(String token, String url, long createdBy, OffsetDateTime createdAt) {
         try {
             Long id = dsl.insertInto(SHORTENED_URLS)
                     .columns(SHORTENED_URLS.TOKEN, SHORTENED_URLS.URL,
-                             SHORTENED_URLS.CREATED_BY, SHORTENED_URLS.CREATED_AT,
-                             SHORTENED_URLS.OG_TITLE, SHORTENED_URLS.OG_DESCRIPTION,
-                             SHORTENED_URLS.OG_IMAGE, SHORTENED_URLS.OG_SITE_NAME)
-                    .values(token, url, createdBy, createdAt,
-                            m.title(), m.description(), m.image(), m.siteName())
+                             SHORTENED_URLS.CREATED_BY, SHORTENED_URLS.CREATED_AT)
+                    .values(token, url, createdBy, createdAt)
                     .returning(SHORTENED_URLS.ID)
                     .fetchOne(SHORTENED_URLS.ID);
             if (id == null) return Optional.empty();
@@ -71,11 +66,6 @@ final class ShortenerRepository {
                 r.get(SHORTENED_URLS.TOKEN),
                 r.get(SHORTENED_URLS.URL),
                 r.get(SHORTENED_URLS.CREATED_BY),
-                r.get(SHORTENED_URLS.CREATED_AT),
-                new OpenGraphMetadata(
-                        r.get(SHORTENED_URLS.OG_TITLE),
-                        r.get(SHORTENED_URLS.OG_DESCRIPTION),
-                        r.get(SHORTENED_URLS.OG_IMAGE),
-                        r.get(SHORTENED_URLS.OG_SITE_NAME)));
+                r.get(SHORTENED_URLS.CREATED_AT));
     }
 }

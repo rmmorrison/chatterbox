@@ -80,26 +80,6 @@ public class ShortenedUrls extends TableImpl<ShortenedUrlsRecord> {
      */
     public final TableField<ShortenedUrlsRecord, OffsetDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false), this, "");
 
-    /**
-     * The column <code>public.shortened_urls.og_title</code>.
-     */
-    public final TableField<ShortenedUrlsRecord, String> OG_TITLE = createField(DSL.name("og_title"), SQLDataType.CLOB, this, "");
-
-    /**
-     * The column <code>public.shortened_urls.og_description</code>.
-     */
-    public final TableField<ShortenedUrlsRecord, String> OG_DESCRIPTION = createField(DSL.name("og_description"), SQLDataType.CLOB, this, "");
-
-    /**
-     * The column <code>public.shortened_urls.og_image</code>.
-     */
-    public final TableField<ShortenedUrlsRecord, String> OG_IMAGE = createField(DSL.name("og_image"), SQLDataType.CLOB, this, "");
-
-    /**
-     * The column <code>public.shortened_urls.og_site_name</code>.
-     */
-    public final TableField<ShortenedUrlsRecord, String> OG_SITE_NAME = createField(DSL.name("og_site_name"), SQLDataType.CLOB, this, "");
-
     private ShortenedUrls(Name alias, Table<ShortenedUrlsRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }
