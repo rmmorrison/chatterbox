@@ -8,10 +8,18 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Javalin handler for {@code GET /{token}}. On hit, returns 301 with the
- * original URL in the {@code Location} header plus a tiny HTML body
- * carrying an anchor to the destination — matches the shape bit.ly serves,
- * which Discord's link-preview crawler unfurls correctly. On miss, 404.
+ * Javalin handler for {@code GET /{token}}.
+ *
+ * <p>Outcomes:
+ * <ul>
+ *   <li><b>Live token</b>: 301 with the original URL in the {@code Location}
+ *       header plus a tiny HTML body carrying an anchor — matches bit.ly's
+ *       shape, which Discord's link-preview crawler unfurls correctly.</li>
+ *   <li><b>Soft-deleted token</b>: 410 Gone. Tokens are never reissued, so
+ *       this is a permanent state — 410 communicates that more accurately
+ *       than 404 to crawlers.</li>
+ *   <li><b>Unknown token</b>: 404.</li>
+ * </ul>
  *
  * <p>Tokens are looked up in lowercase since the alphabet is case-insensitive.
  */
@@ -30,12 +38,17 @@ final class ShortenerRedirectHandler implements Handler {
     public void handle(Context ctx) {
         String token = ctx.pathParam(PATH_PARAM).toLowerCase(Locale.ROOT);
 
-        Optional<ShortenedUrl> match = repository.findByToken(token);
+        Optional<ShortenedUrl> match = repository.findByTokenIncludingDeleted(token);
         if (match.isEmpty()) {
             ctx.status(HttpStatus.NOT_FOUND).result("Not found.");
             return;
         }
-        String url = match.get().url();
+        ShortenedUrl entry = match.get();
+        if (entry.isDeleted()) {
+            ctx.status(HttpStatus.GONE).result("This short URL has been removed.");
+            return;
+        }
+        String url = entry.url();
         ctx.status(HttpStatus.MOVED_PERMANENTLY)
                 .header("Location", url)
                 .contentType("text/html; charset=utf-8")

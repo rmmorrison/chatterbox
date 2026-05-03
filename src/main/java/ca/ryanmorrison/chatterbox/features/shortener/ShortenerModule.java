@@ -7,18 +7,26 @@ import net.dv8tion.jda.api.hooks.EventListener;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 
 import java.util.List;
 
 /**
  * URL shortener feature.
  *
- * <p>Slash command: {@code /shorten <url>}. Stores HTTP(S) URLs against a
- * 6-character lowercase alphanumeric token, deduplicating by URL across users.
+ * <p>Slash command: {@code /shorten} with three subcommands:
+ * <ul>
+ *   <li>{@code create url:<URL>} — anyone; mints (or returns the existing)
+ *       short URL for an HTTP(S) URL.</li>
+ *   <li>{@code delete target:<URL or token>} — moderators only; soft-deletes
+ *       a short URL after a button confirmation.</li>
+ *   <li>{@code peek target:<URL or token> [share:<bool>]} — anyone; reveals
+ *       a short URL's destination, ephemerally by default.</li>
+ * </ul>
  *
- * <p>HTTP route: {@code GET /{token}} → 301 redirect to the original URL, or
- * 404 if unknown. The bot-wide HTTP server only binds when this (or another)
- * module registers a route.
+ * <p>HTTP route: {@code GET /{token}} → 301 redirect to the original URL,
+ * 410 Gone if the token has been soft-deleted, 404 if unknown. The bot-wide
+ * HTTP server only binds when this (or another) module registers a route.
  *
  * <p>Configuration: the public-facing prefix used to construct the link
  * returned to Discord users is read lazily from
@@ -41,9 +49,21 @@ public final class ShortenerModule implements Module {
 
     @Override
     public List<SlashCommandData> slashCommands(InitContext ctx) {
-        return List.of(Commands.slash(ShortenerHandler.COMMAND, "Shorten an HTTP(S) URL.")
-                .addOption(OptionType.STRING, ShortenerHandler.OPTION_URL,
-                        "The HTTP(S) URL to shorten.", true));
+        return List.of(Commands.slash(ShortenerHandler.COMMAND, "Manage short URLs.")
+                .addSubcommands(
+                        new SubcommandData(ShortenerHandler.SUB_CREATE, "Shorten an HTTP(S) URL.")
+                                .addOption(OptionType.STRING, ShortenerHandler.OPTION_URL,
+                                        "The HTTP(S) URL to shorten.", true),
+                        new SubcommandData(ShortenerHandler.SUB_DELETE,
+                                "Soft-delete a short URL (Manage Messages required).")
+                                .addOption(OptionType.STRING, ShortenerHandler.OPTION_TARGET,
+                                        "Full short URL or 6-character short code.", true),
+                        new SubcommandData(ShortenerHandler.SUB_PEEK,
+                                "Show where a short URL points without following it.")
+                                .addOption(OptionType.STRING, ShortenerHandler.OPTION_TARGET,
+                                        "Full short URL or 6-character short code.", true)
+                                .addOption(OptionType.BOOLEAN, ShortenerHandler.OPTION_SHARE,
+                                        "Post the result to the channel instead of just to you.", false)));
     }
 
     @Override

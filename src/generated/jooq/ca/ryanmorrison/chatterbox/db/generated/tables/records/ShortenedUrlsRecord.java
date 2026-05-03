@@ -90,6 +90,34 @@ public class ShortenedUrlsRecord extends UpdatableRecordImpl<ShortenedUrlsRecord
         return (OffsetDateTime) get(4);
     }
 
+    /**
+     * Setter for <code>public.shortened_urls.deleted_at</code>.
+     */
+    public void setDeletedAt(OffsetDateTime value) {
+        set(5, value);
+    }
+
+    /**
+     * Getter for <code>public.shortened_urls.deleted_at</code>.
+     */
+    public OffsetDateTime getDeletedAt() {
+        return (OffsetDateTime) get(5);
+    }
+
+    /**
+     * Setter for <code>public.shortened_urls.deleted_by</code>.
+     */
+    public void setDeletedBy(Long value) {
+        set(6, value);
+    }
+
+    /**
+     * Getter for <code>public.shortened_urls.deleted_by</code>.
+     */
+    public Long getDeletedBy() {
+        return (Long) get(6);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -113,7 +141,7 @@ public class ShortenedUrlsRecord extends UpdatableRecordImpl<ShortenedUrlsRecord
     /**
      * Create a detached, initialised ShortenedUrlsRecord
      */
-    public ShortenedUrlsRecord(Long id, String token, String url, Long createdBy, OffsetDateTime createdAt) {
+    public ShortenedUrlsRecord(Long id, String token, String url, Long createdBy, OffsetDateTime createdAt, OffsetDateTime deletedAt, Long deletedBy) {
         super(ShortenedUrls.SHORTENED_URLS);
 
         setId(id);
@@ -121,6 +149,8 @@ public class ShortenedUrlsRecord extends UpdatableRecordImpl<ShortenedUrlsRecord
         setUrl(url);
         setCreatedBy(createdBy);
         setCreatedAt(createdAt);
+        setDeletedAt(deletedAt);
+        setDeletedBy(deletedBy);
         resetTouchedOnNotNull();
     }
 }

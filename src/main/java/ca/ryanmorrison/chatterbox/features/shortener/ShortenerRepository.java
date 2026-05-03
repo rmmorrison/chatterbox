@@ -12,14 +12,19 @@ import static ca.ryanmorrison.chatterbox.db.generated.Tables.SHORTENED_URLS;
 /**
  * jOOQ-backed access for the {@code shortened_urls} table.
  *
- * <p>Concurrency notes:
+ * <p>Concurrency / dedup notes:
  * <ul>
- *   <li>{@code token} is unique — {@link #insert} surfaces an empty Optional on
- *       collision so the caller can retry with a fresh token.</li>
- *   <li>{@code url} is unique — global dedup is enforced at the DB level.
- *       Callers should {@link #findByUrl} first; if two requests race past
- *       that check, the loser also gets an empty Optional and can re-read.</li>
+ *   <li>{@code token} is unconditionally unique — even soft-deleted rows hold
+ *       their token reservation, so a reissued short link can never collide
+ *       with a deleted one (the moderator's intent: no token reuse).</li>
+ *   <li>{@code url} uniqueness is partial: only enforced for live rows
+ *       ({@code WHERE deleted_at IS NULL}). After a delete, the same URL can
+ *       be shortened again, producing a fresh token in a new row.</li>
  * </ul>
+ *
+ * <p>Lookups exclude soft-deleted rows by default. Methods with the
+ * {@code IncludingDeleted} suffix are provided for the redirect handler so
+ * tombstoned tokens can return {@code 410 Gone} rather than {@code 404}.
  */
 final class ShortenerRepository {
 
@@ -32,6 +37,21 @@ final class ShortenerRepository {
     Optional<ShortenedUrl> findByToken(String token) {
         return dsl.selectFrom(SHORTENED_URLS)
                 .where(SHORTENED_URLS.TOKEN.eq(token))
+                .and(SHORTENED_URLS.DELETED_AT.isNull())
+                .fetchOptional()
+                .map(ShortenerRepository::toShortenedUrl);
+    }
+
+    Optional<ShortenedUrl> findByTokenIncludingDeleted(String token) {
+        return dsl.selectFrom(SHORTENED_URLS)
+                .where(SHORTENED_URLS.TOKEN.eq(token))
+                .fetchOptional()
+                .map(ShortenerRepository::toShortenedUrl);
+    }
+
+    Optional<ShortenedUrl> findByIdIncludingDeleted(long id) {
+        return dsl.selectFrom(SHORTENED_URLS)
+                .where(SHORTENED_URLS.ID.eq(id))
                 .fetchOptional()
                 .map(ShortenerRepository::toShortenedUrl);
     }
@@ -39,6 +59,7 @@ final class ShortenerRepository {
     Optional<ShortenedUrl> findByUrl(String url) {
         return dsl.selectFrom(SHORTENED_URLS)
                 .where(SHORTENED_URLS.URL.eq(url))
+                .and(SHORTENED_URLS.DELETED_AT.isNull())
                 .fetchOptional()
                 .map(ShortenerRepository::toShortenedUrl);
     }
@@ -60,12 +81,27 @@ final class ShortenerRepository {
         }
     }
 
+    /**
+     * Idempotent: a second call against an already-deleted row is a no-op,
+     * preserving the original deleter and timestamp.
+     */
+    int softDelete(long id, long deletedBy, OffsetDateTime deletedAt) {
+        return dsl.update(SHORTENED_URLS)
+                .set(SHORTENED_URLS.DELETED_AT, deletedAt)
+                .set(SHORTENED_URLS.DELETED_BY, deletedBy)
+                .where(SHORTENED_URLS.ID.eq(id))
+                .and(SHORTENED_URLS.DELETED_AT.isNull())
+                .execute();
+    }
+
     private static ShortenedUrl toShortenedUrl(Record r) {
         return new ShortenedUrl(
                 r.get(SHORTENED_URLS.ID),
                 r.get(SHORTENED_URLS.TOKEN),
                 r.get(SHORTENED_URLS.URL),
                 r.get(SHORTENED_URLS.CREATED_BY),
-                r.get(SHORTENED_URLS.CREATED_AT));
+                r.get(SHORTENED_URLS.CREATED_AT),
+                Optional.ofNullable(r.get(SHORTENED_URLS.DELETED_AT)),
+                Optional.ofNullable(r.get(SHORTENED_URLS.DELETED_BY)));
     }
 }

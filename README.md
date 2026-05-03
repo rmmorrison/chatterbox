@@ -342,22 +342,54 @@ Two workflows under `.github/workflows/`:
 Stores HTTP(S) URLs against a 6-character lowercase alphanumeric token and
 exposes a redirect endpoint behind the bot's HTTP server.
 
-#### `/shorten url:<URL>`
+#### `/shorten create url:<URL>`
 
 Validates the URL (must be HTTP or HTTPS with a host) and replies privately
-with the short URL constructed from `CHATTERBOX_SHORTENER_BASE_URL`. The
-URL is deduplicated globally — if any user has already shortened the same
-URL, that user's existing token is returned. Token collisions retry up to
-ten times before surfacing an error.
+with the short URL constructed from `CHATTERBOX_SHORTENER_BASE_URL`. Live
+URLs are deduplicated globally — if any user has already shortened the same
+URL and the row is still active, that token is returned. Token collisions
+retry up to ten times before surfacing an error.
 
 The original creator (Discord user id) and the slash command's timestamp
 are recorded alongside each row.
 
+#### `/shorten delete target:<URL or token>`
+
+Restricted to users with the **Manage Messages** permission in the channel.
+Accepts either the bare 6-character short code or the full short URL (the
+prefix must match `CHATTERBOX_SHORTENER_BASE_URL`). Replies ephemerally
+with an embed showing the destination, the original creator (as a Discord
+mention), and the creation timestamp, plus **Delete** / **Cancel** buttons.
+
+On confirmation the row is **soft-deleted**: `deleted_at` and `deleted_by`
+are stamped onto the row and live lookups stop returning it. The token is
+permanently retired (the unique index covers deleted rows too) so the same
+short URL can never resolve to anything else later. The original
+destination URL becomes available for re-shortening — a fresh request mints
+a brand-new token. There is no restore path.
+
+The Manage Messages check runs again on the **Delete** button click to
+defend against role removal between rendering and confirming.
+
+#### `/shorten peek target:<URL or token> [share:<bool>]`
+
+Available to everyone. Reveals where a short URL points without following
+it — useful for vetting a suspicious link before clicking. Replies
+ephemerally by default; pass `share:true` to post the result to the channel
+instead (e.g. so a moderator can warn others publicly).
+
 #### `GET /{token}`
 
-Public endpoint exposed via Javalin. Returns `301 Moved Permanently` with
-the original URL in the `Location` header on hit, or `404` on miss. Token
-lookups are case-insensitive.
+Public endpoint exposed via Javalin. Outcomes:
+
+- **Live token** — `301 Moved Permanently` with the original URL in the
+  `Location` header plus a tiny HTML body carrying an anchor (matches
+  bit.ly's shape so Discord's preview crawler unfurls it correctly).
+- **Soft-deleted token** — `410 Gone`. Tokens are never reissued, so this
+  is a permanent state; 410 communicates that more accurately than 404.
+- **Unknown token** — `404 Not Found`.
+
+Token lookups are case-insensitive.
 
 ### Shout
 

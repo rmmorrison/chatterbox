@@ -80,6 +80,16 @@ public class ShortenedUrls extends TableImpl<ShortenedUrlsRecord> {
      */
     public final TableField<ShortenedUrlsRecord, OffsetDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false), this, "");
 
+    /**
+     * The column <code>public.shortened_urls.deleted_at</code>.
+     */
+    public final TableField<ShortenedUrlsRecord, OffsetDateTime> DELETED_AT = createField(DSL.name("deleted_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6), this, "");
+
+    /**
+     * The column <code>public.shortened_urls.deleted_by</code>.
+     */
+    public final TableField<ShortenedUrlsRecord, Long> DELETED_BY = createField(DSL.name("deleted_by"), SQLDataType.BIGINT, this, "");
+
     private ShortenedUrls(Name alias, Table<ShortenedUrlsRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }

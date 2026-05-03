@@ -1,6 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.shout;
 
-import net.dv8tion.jda.api.Permission;
+import ca.ryanmorrison.chatterbox.common.permissions.Permissions;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -194,7 +194,7 @@ final class ShoutHistoryHandler extends ListenerAdapter {
     }
 
     private static boolean canModerate(Member member, GuildChannel channel) {
-        return member.hasPermission(channel, Permission.MESSAGE_MANAGE);
+        return Permissions.canManageMessages(member, channel);
     }
 
     /**

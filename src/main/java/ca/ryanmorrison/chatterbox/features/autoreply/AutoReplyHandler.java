@@ -1,6 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.autoreply;
 
-import net.dv8tion.jda.api.Permission;
+import ca.ryanmorrison.chatterbox.common.permissions.Permissions;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.label.Label;
@@ -8,14 +8,11 @@ import net.dv8tion.jda.api.components.selections.SelectOption;
 import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.components.textinput.TextInput;
 import net.dv8tion.jda.api.components.textinput.TextInputStyle;
-import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.modals.Modal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,7 +72,7 @@ final class AutoReplyHandler extends ListenerAdapter {
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (!CMD_NAME.equals(event.getName())) return;
-        if (!requireModerator(event)) return;
+        if (!Permissions.requireManageMessages(event)) return;
         String sub = event.getSubcommandName();
         if (sub == null) return;
         switch (sub) {
@@ -135,7 +132,7 @@ final class AutoReplyHandler extends ListenerAdapter {
     public void onModalInteraction(ModalInteractionEvent event) {
         String id = event.getModalId();
         if (!id.startsWith(PREFIX)) return;
-        if (!requireModerator(event)) return;
+        if (!Permissions.requireManageMessages(event)) return;
 
         if (id.equals(MODAL_ADD)) {
             handleAddSubmit(event);
@@ -219,7 +216,7 @@ final class AutoReplyHandler extends ListenerAdapter {
     public void onStringSelectInteraction(StringSelectInteractionEvent event) {
         String id = event.getComponentId();
         if (!id.startsWith(PREFIX)) return;
-        if (!requireModerator(event)) return;
+        if (!Permissions.requireManageMessages(event)) return;
 
         long ruleId;
         try {
@@ -254,7 +251,7 @@ final class AutoReplyHandler extends ListenerAdapter {
     public void onButtonInteraction(ButtonInteractionEvent event) {
         String id = event.getComponentId();
         if (!id.startsWith(PREFIX)) return;
-        if (!requireModerator(event)) return;
+        if (!Permissions.requireManageMessages(event)) return;
 
         if (id.startsWith(OVERRIDE_CONFIRM)) {
             handleOverrideConfirm(event, id.substring(OVERRIDE_CONFIRM.length()));
@@ -403,20 +400,5 @@ final class AutoReplyHandler extends ListenerAdapter {
 
     private static String truncate(String s, int max) {
         return s.length() <= max ? s : s.substring(0, max - 1) + "…";
-    }
-
-    private static boolean requireModerator(IReplyCallback event) {
-        Member member = event.getMember();
-        GuildChannel channel = event.getGuildChannel();
-        if (member == null || channel == null) {
-            event.reply("This command is only available in servers.").setEphemeral(true).queue();
-            return false;
-        }
-        if (!member.hasPermission(channel, Permission.MESSAGE_MANAGE)) {
-            event.reply("You need the **Manage Messages** permission in this channel to use `/autoreply`.")
-                    .setEphemeral(true).queue();
-            return false;
-        }
-        return true;
     }
 }
