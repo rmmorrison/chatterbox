@@ -304,9 +304,22 @@ are recorded alongside each row.
 
 #### `GET /{token}`
 
-Public endpoint exposed via Javalin. Returns `301 Moved Permanently` with
-the original URL in the `Location` header on hit, or `404` on miss. Token
-lookups are case-insensitive.
+Public endpoint exposed via Javalin. On hit, returns an HTML interstitial
+that (a) carries OpenGraph + Twitter Card metadata captured at shorten
+time so social-card crawlers (Discord, Slack, Twitter) render a preview
+without bouncing through a 30x, and (b) redirects browsers immediately
+via `<meta http-equiv="refresh">` plus a JavaScript fallback. On miss,
+returns `404`. Token lookups are case-insensitive.
+
+#### Preview metadata
+
+When `/shorten` runs against a fresh URL, the bot makes a best-effort
+HTTP fetch of the target and stores any OpenGraph / Twitter Card / HTML
+`<title>` and `<meta name="description">` it can find. The fetch is
+bounded (3s timeout, 1 MiB cap, 5 redirects max) and SSRF-protected —
+loopback, RFC 1918, link-local, IPv6 unique-local, and multicast targets
+are refused on every redirect hop. Failures are non-fatal: shortening
+proceeds and the redirect page just won't carry preview tags.
 
 ### Shout
 

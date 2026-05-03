@@ -90,6 +90,62 @@ public class ShortenedUrlsRecord extends UpdatableRecordImpl<ShortenedUrlsRecord
         return (OffsetDateTime) get(4);
     }
 
+    /**
+     * Setter for <code>public.shortened_urls.og_title</code>.
+     */
+    public void setOgTitle(String value) {
+        set(5, value);
+    }
+
+    /**
+     * Getter for <code>public.shortened_urls.og_title</code>.
+     */
+    public String getOgTitle() {
+        return (String) get(5);
+    }
+
+    /**
+     * Setter for <code>public.shortened_urls.og_description</code>.
+     */
+    public void setOgDescription(String value) {
+        set(6, value);
+    }
+
+    /**
+     * Getter for <code>public.shortened_urls.og_description</code>.
+     */
+    public String getOgDescription() {
+        return (String) get(6);
+    }
+
+    /**
+     * Setter for <code>public.shortened_urls.og_image</code>.
+     */
+    public void setOgImage(String value) {
+        set(7, value);
+    }
+
+    /**
+     * Getter for <code>public.shortened_urls.og_image</code>.
+     */
+    public String getOgImage() {
+        return (String) get(7);
+    }
+
+    /**
+     * Setter for <code>public.shortened_urls.og_site_name</code>.
+     */
+    public void setOgSiteName(String value) {
+        set(8, value);
+    }
+
+    /**
+     * Getter for <code>public.shortened_urls.og_site_name</code>.
+     */
+    public String getOgSiteName() {
+        return (String) get(8);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -113,7 +169,7 @@ public class ShortenedUrlsRecord extends UpdatableRecordImpl<ShortenedUrlsRecord
     /**
      * Create a detached, initialised ShortenedUrlsRecord
      */
-    public ShortenedUrlsRecord(Long id, String token, String url, Long createdBy, OffsetDateTime createdAt) {
+    public ShortenedUrlsRecord(Long id, String token, String url, Long createdBy, OffsetDateTime createdAt, String ogTitle, String ogDescription, String ogImage, String ogSiteName) {
         super(ShortenedUrls.SHORTENED_URLS);
 
         setId(id);
@@ -121,6 +177,10 @@ public class ShortenedUrlsRecord extends UpdatableRecordImpl<ShortenedUrlsRecord
         setUrl(url);
         setCreatedBy(createdBy);
         setCreatedAt(createdAt);
+        setOgTitle(ogTitle);
+        setOgDescription(ogDescription);
+        setOgImage(ogImage);
+        setOgSiteName(ogSiteName);
         resetTouchedOnNotNull();
     }
 }

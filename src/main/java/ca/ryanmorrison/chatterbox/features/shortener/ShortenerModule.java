@@ -61,7 +61,8 @@ public final class ShortenerModule implements Module {
     private void ensureWired(InitContext ctx) {
         if (handler != null) return;
         var repository = new ShortenerRepository(ctx.database());
-        this.handler = new ShortenerHandler(repository, new TokenGenerator(), ShortenerModule::resolveBaseUrl);
+        this.handler = new ShortenerHandler(repository, new TokenGenerator(),
+                new OpenGraphScraper(), ShortenerModule::resolveBaseUrl);
         this.redirectHandler = new ShortenerRedirectHandler(repository);
     }
 
