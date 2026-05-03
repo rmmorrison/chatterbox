@@ -245,31 +245,58 @@ output from JDBC drivers flows to the same place. The root level is driven by
 
 ## Reverse proxy and TLS
 
-`docker-compose.yml` ships with a Traefik service that terminates TLS for any
-HTTP-using module (today, the URL shortener). Traefik is the only service
-that publishes ports on the host (`80` and `443`); the bot's Javalin port is
-private to the Docker network.
+Traefik is deployed once per host as **shared infrastructure** in its own
+compose file (`docker-compose.traefik.yml`), not embedded in each chatterbox
+stack. The shared Traefik owns ports 80/443, owns the `chatterbox-web`
+Docker network, and routes to every chatterbox container that joins that
+network — so a single VPS can host prod and staging side-by-side without
+port contention.
 
-| Variable                | Required (when shortener is in use) | Default | Purpose |
-|-------------------------|-------------------------------------|---------|---------|
-| `SHORTENER_DOMAIN`      | yes                                 | —       | Hostname Traefik should serve, e.g. `example.com`. |
-| `SHORTENER_PATH_PREFIX` | no                                  | empty   | Path prefix the bot is mounted under (e.g. `/links`). Empty serves at the root. |
-| `LETSENCRYPT_EMAIL`     | yes                                 | —       | Email used for ACME registration / expiry notices. |
-| `LETSENCRYPT_CA_SERVER` | no                                  | LE prod | ACME directory URL. Use `https://acme-staging-v02.api.letsencrypt.org/directory` for non-production deployments to avoid the prod CA's tight rate limits. |
-| `TRAEFIK_NETWORK_NAME`  | no                                  | `chatterbox-web` | Docker network used between Traefik and the bot. Override on hosts running multiple chatterbox stacks side-by-side (e.g. prod + staging) so the network names don't collide. |
-| `TRAEFIK_ROUTER_NAME`   | no                                  | `chatterbox`     | Traefik router/service name and the value of the `chatterbox.stack` label that each Traefik instance filters on via constraint. Must be unique across all stacks any single Traefik instance is watching. Set staging to e.g. `chatterbox-staging` when prod and staging share a host, otherwise Traefik logs `Router defined multiple times with different configurations` and falls back to its default cert. |
+### Shared Traefik (`docker-compose.traefik.yml`)
 
-HTTP traffic on `:80` is unconditionally redirected to HTTPS on `:443`.
-Certificates are issued via the LetsEncrypt HTTP-01 challenge and persisted
-to a `letsencrypt/` directory bind-mounted next to `docker-compose.yml`.
-The directory is created automatically on first start; back it up with the
-rest of the deploy directory.
+Lives in its own deploy directory on the host. Configuration is a single
+`.env` (see `.env.traefik.example`):
 
-The staging deploy pipeline (`.github/workflows/deploy-staging.yml`) keeps
-the Traefik service in the deployed compose file. Staging environments
-should set `LETSENCRYPT_CA_SERVER` to the LetsEncrypt staging endpoint and
-use a distinct `SHORTENER_DOMAIN` (e.g. `staging.example.com`) and
-`TRAEFIK_NETWORK_NAME`.
+| Variable            | Required | Purpose |
+|---------------------|----------|---------|
+| `LETSENCRYPT_EMAIL` | yes      | Email used for ACME registration / expiry notices. Both resolvers below use this value. |
+
+Two ACME resolvers are pre-defined:
+
+- **`letsencrypt`** — production CA (`acme-v02.api.letsencrypt.org`), browsers trust it, tight rate limits.
+- **`letsencrypt-staging`** — staging CA (`acme-staging-v02.api.letsencrypt.org`), browsers warn but generous limits. Use this from non-production stacks.
+
+Cert state is persisted to a `letsencrypt/` directory bind-mounted next to
+`docker-compose.traefik.yml` (separate `acme.json` per resolver). HTTP `:80`
+traffic is unconditionally redirected to HTTPS `:443`.
+
+Deploy with the **Deploy Traefik** GitHub Actions workflow
+(`.github/workflows/deploy-traefik.yml`); see [Deploy pipelines](#deploy-pipelines)
+below.
+
+### Per-stack chatterbox labels
+
+Each chatterbox stack just attaches to the `chatterbox-web` external network
+and emits the right Traefik labels via these `.env` values:
+
+| Variable                | Required (when shortener is in use) | Default        | Purpose |
+|-------------------------|-------------------------------------|----------------|---------|
+| `SHORTENER_DOMAIN`      | yes                                 | —              | Hostname Traefik should serve, e.g. `example.com`. |
+| `SHORTENER_PATH_PREFIX` | no                                  | empty          | Path prefix the bot is mounted under (e.g. `/links`). Empty serves at the root. |
+| `LETSENCRYPT_RESOLVER`  | no                                  | `letsencrypt`  | Which resolver on the shared Traefik to use. Set staging stacks to `letsencrypt-staging`. |
+| `TRAEFIK_ROUTER_NAME`   | no                                  | `chatterbox`   | Traefik router/service name. Must be unique across all chatterbox stacks the shared Traefik is watching. Set staging to e.g. `chatterbox-staging`, otherwise Traefik logs `Router defined multiple times with different configurations` and falls back to its default cert. |
+
+The chatterbox container's HTTP port (`CHATTERBOX_HTTP_PORT`, default
+`8080`) is reachable only over the docker network; nothing else publishes
+ports on the host.
+
+### Deploy pipelines
+
+Three workflows under `.github/workflows/`:
+
+- **`deploy-traefik.yml`** — pushes `docker-compose.traefik.yml` to the host and runs `docker compose -p chatterbox-traefik -f docker-compose.traefik.yml up -d`. Uses `secrets.DEPLOY_PATH_TRAEFIK` (must be set on the `traefik` GitHub environment alongside the existing `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_SSH_KEY` / `DEPLOY_KNOWN_HOSTS`). Run once per host; rerun on edits to the Traefik compose. The workflow expects a `.env` file already present in `DEPLOY_PATH_TRAEFIK` with `LETSENCRYPT_EMAIL` set, and exits with a clear error if not.
+- **`deploy-staging.yml`** — unchanged in shape: builds the image, derives a SQLite-only staging compose via `yq`, ships both to the host, and brings the staging stack up. The staging compose still references `chatterbox-web` as an external network, so the Traefik workflow must have run first.
+- (Production deploy lives outside the repo today.)
 
 ## Adding a new module
 
