@@ -117,11 +117,12 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK_NAME:-chatterbox-web}"
-      - "traefik.http.routers.chatterbox.rule=Host(`${SHORTENER_DOMAIN:?SHORTENER_DOMAIN must be set}`)${SHORTENER_PATH_PREFIX:+ && PathPrefix(`${SHORTENER_PATH_PREFIX}`)}"
-      - "traefik.http.routers.chatterbox.entrypoints=websecure"
-      - "traefik.http.routers.chatterbox.tls=true"
-      - "traefik.http.routers.chatterbox.tls.certresolver=letsencrypt"
-      - "traefik.http.services.chatterbox.loadbalancer.server.port=${CHATTERBOX_HTTP_PORT:-8080}"
+      - "chatterbox.stack=${TRAEFIK_ROUTER_NAME:-chatterbox}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-chatterbox}.rule=Host(`${SHORTENER_DOMAIN:?SHORTENER_DOMAIN must be set}`)${SHORTENER_PATH_PREFIX:+ && PathPrefix(`${SHORTENER_PATH_PREFIX}`)}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-chatterbox}.entrypoints=websecure"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-chatterbox}.tls=true"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-chatterbox}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${TRAEFIK_ROUTER_NAME:-chatterbox}.loadbalancer.server.port=${CHATTERBOX_HTTP_PORT:-8080}"
     deploy:
       resources:
         limits:
@@ -139,6 +140,7 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.network=${TRAEFIK_NETWORK_NAME:-chatterbox-web}"
+      - "--providers.docker.constraints=Label(`chatterbox.stack`,`${TRAEFIK_ROUTER_NAME:-chatterbox}`)"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"

@@ -257,6 +257,7 @@ private to the Docker network.
 | `LETSENCRYPT_EMAIL`     | yes                                 | —       | Email used for ACME registration / expiry notices. |
 | `LETSENCRYPT_CA_SERVER` | no                                  | LE prod | ACME directory URL. Use `https://acme-staging-v02.api.letsencrypt.org/directory` for non-production deployments to avoid the prod CA's tight rate limits. |
 | `TRAEFIK_NETWORK_NAME`  | no                                  | `chatterbox-web` | Docker network used between Traefik and the bot. Override on hosts running multiple chatterbox stacks side-by-side (e.g. prod + staging) so the network names don't collide. |
+| `TRAEFIK_ROUTER_NAME`   | no                                  | `chatterbox`     | Traefik router/service name and the value of the `chatterbox.stack` label that each Traefik instance filters on via constraint. Must be unique across all stacks any single Traefik instance is watching. Set staging to e.g. `chatterbox-staging` when prod and staging share a host, otherwise Traefik logs `Router defined multiple times with different configurations` and falls back to its default cert. |
 
 HTTP traffic on `:80` is unconditionally redirected to HTTPS on `:443`.
 Certificates are issued via the LetsEncrypt HTTP-01 challenge and persisted
