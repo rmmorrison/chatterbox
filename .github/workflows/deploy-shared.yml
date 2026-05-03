@@ -1,9 +1,9 @@
-name: Deploy Traefik
+name: Deploy Shared
 
-# Pushes the shared Traefik compose file to the host. Idempotent — the host's
-# .env (with LETSENCRYPT_EMAIL) and any existing letsencrypt/ cert store are
-# left untouched. Run this once per host, then re-run after edits to
-# docker-compose.traefik.yml.
+# Pushes the shared-infrastructure compose file to the host. Idempotent — the
+# host's .env and any persistent state (e.g. Traefik's letsencrypt/ cert
+# store) are left untouched. Run this once per host, then re-run after edits
+# to docker-compose.shared.yml.
 
 on:
   workflow_dispatch:
@@ -17,13 +17,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-traefik
+  group: deploy-shared
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: traefik
+    environment: shared
     timeout-minutes: 10
     steps:
       - name: Check out repository
@@ -47,26 +47,26 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH_TRAEFIK }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH_SHARED }}
         run: |
           ssh -i ~/.ssh/id_ed25519 "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH'"
-          scp -i ~/.ssh/id_ed25519 docker-compose.traefik.yml \
-            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/docker-compose.traefik.yml"
+          scp -i ~/.ssh/id_ed25519 docker-compose.shared.yml \
+            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/docker-compose.shared.yml"
 
       - name: Apply compose
         env:
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH_TRAEFIK }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH_SHARED }}
         run: |
           ssh -i ~/.ssh/id_ed25519 "$SSH_USER@$SSH_HOST" \
             bash -s -- "$DEPLOY_PATH" <<'REMOTE'
           set -euo pipefail
           cd "$1"
           if [ ! -f .env ]; then
-            echo "[deploy-traefik] .env missing in $1; copy .env.traefik.example from the repo and set LETSENCRYPT_EMAIL." >&2
+            echo "[deploy-shared] .env missing in $1; copy .env.shared.example from the repo and fill it in." >&2
             exit 1
           fi
-          docker compose -p chatterbox-traefik -f docker-compose.traefik.yml up -d
+          docker compose -p chatterbox-shared -f docker-compose.shared.yml up -d
           docker image prune -f
           REMOTE

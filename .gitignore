@@ -13,7 +13,7 @@ target/
 .env
 .env.*
 !.env.example
-!.env.traefik.example
+!.env.shared.example
 letsencrypt/
 *.db
 *.sqlite

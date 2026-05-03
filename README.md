@@ -245,33 +245,34 @@ output from JDBC drivers flows to the same place. The root level is driven by
 
 ## Reverse proxy and TLS
 
-Traefik is deployed once per host as **shared infrastructure** in its own
-compose file (`docker-compose.traefik.yml`), not embedded in each chatterbox
-stack. The shared Traefik owns ports 80/443, owns the `chatterbox-web`
-Docker network, and routes to every chatterbox container that joins that
-network — so a single VPS can host prod and staging side-by-side without
-port contention.
+Components that need to be shared across application stacks (today: Traefik;
+in the future, anything else where one instance must serve both prod and
+staging) live in `docker-compose.shared.yml`, deployed once per host
+independent of any individual chatterbox stack. The shared Traefik in
+particular owns ports 80/443 and the `chatterbox-web` Docker network, and
+routes to every chatterbox container that joins that network — so a single
+VPS can host prod and staging side-by-side without port contention.
 
-### Shared Traefik (`docker-compose.traefik.yml`)
+### Shared infrastructure (`docker-compose.shared.yml`)
 
 Lives in its own deploy directory on the host. Configuration is a single
-`.env` (see `.env.traefik.example`):
+`.env` (see `.env.shared.example`):
 
 | Variable            | Required | Purpose |
 |---------------------|----------|---------|
-| `LETSENCRYPT_EMAIL` | yes      | Email used for ACME registration / expiry notices. Both resolvers below use this value. |
+| `LETSENCRYPT_EMAIL` | yes      | Email used for ACME registration / expiry notices. Both Traefik resolvers below use this value. |
 
-Two ACME resolvers are pre-defined:
+Two Traefik ACME resolvers are pre-defined:
 
 - **`letsencrypt`** — production CA (`acme-v02.api.letsencrypt.org`), browsers trust it, tight rate limits.
 - **`letsencrypt-staging`** — staging CA (`acme-staging-v02.api.letsencrypt.org`), browsers warn but generous limits. Use this from non-production stacks.
 
 Cert state is persisted to a `letsencrypt/` directory bind-mounted next to
-`docker-compose.traefik.yml` (separate `acme.json` per resolver). HTTP `:80`
+`docker-compose.shared.yml` (separate `acme.json` per resolver). HTTP `:80`
 traffic is unconditionally redirected to HTTPS `:443`.
 
-Deploy with the **Deploy Traefik** GitHub Actions workflow
-(`.github/workflows/deploy-traefik.yml`); see [Deploy pipelines](#deploy-pipelines)
+Deploy with the **Deploy Shared** GitHub Actions workflow
+(`.github/workflows/deploy-shared.yml`); see [Deploy pipelines](#deploy-pipelines)
 below.
 
 ### Per-stack chatterbox labels
@@ -290,12 +291,34 @@ The chatterbox container's HTTP port (`CHATTERBOX_HTTP_PORT`, default
 `8080`) is reachable only over the docker network; nothing else publishes
 ports on the host.
 
+### Deploy directory layout
+
+Recommended path layout on the host so prod, staging, and shared infra
+each own their own deploy dir, `.env`, and any persistent state:
+
+```
+/opt/chatterbox/
+├── shared/        # docker-compose.shared.yml + .env + letsencrypt/
+├── production/    # docker-compose.yml + .env + (postgres data lives in named volumes)
+└── staging/       # docker-compose.staging.yml + .env
+```
+
+Set the matching GitHub Actions secrets to these paths:
+
+| Secret                | Value                       | Used by                |
+|-----------------------|-----------------------------|------------------------|
+| `DEPLOY_PATH_SHARED`  | `/opt/chatterbox/shared`    | `deploy-shared.yml`    |
+| `DEPLOY_PATH`         | `/opt/chatterbox/staging`   | `deploy-staging.yml`   |
+
+(If production gets an in-repo deploy workflow later, it would use a
+`DEPLOY_PATH_PRODUCTION` secret pointing at `/opt/chatterbox/production`.)
+
 ### Deploy pipelines
 
-Three workflows under `.github/workflows/`:
+Two workflows under `.github/workflows/`:
 
-- **`deploy-traefik.yml`** — pushes `docker-compose.traefik.yml` to the host and runs `docker compose -p chatterbox-traefik -f docker-compose.traefik.yml up -d`. Uses `secrets.DEPLOY_PATH_TRAEFIK` (must be set on the `traefik` GitHub environment alongside the existing `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_SSH_KEY` / `DEPLOY_KNOWN_HOSTS`). Run once per host; rerun on edits to the Traefik compose. The workflow expects a `.env` file already present in `DEPLOY_PATH_TRAEFIK` with `LETSENCRYPT_EMAIL` set, and exits with a clear error if not.
-- **`deploy-staging.yml`** — unchanged in shape: builds the image, derives a SQLite-only staging compose via `yq`, ships both to the host, and brings the staging stack up. The staging compose still references `chatterbox-web` as an external network, so the Traefik workflow must have run first.
+- **`deploy-shared.yml`** — pushes `docker-compose.shared.yml` to the host and runs `docker compose -p chatterbox-shared -f docker-compose.shared.yml up -d`. Uses `secrets.DEPLOY_PATH_SHARED` (must be set on the `shared` GitHub environment alongside the existing `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_SSH_KEY` / `DEPLOY_KNOWN_HOSTS`). Run once per host; rerun on edits to the shared compose. The workflow expects a `.env` file already present in `DEPLOY_PATH_SHARED` with `LETSENCRYPT_EMAIL` set, and exits with a clear error if not.
+- **`deploy-staging.yml`** — unchanged in shape: builds the image, derives a SQLite-only staging compose via `yq`, ships both to the host, and brings the staging stack up. The staging compose still references `chatterbox-web` as an external network, so the shared workflow must have run first.
 - (Production deploy lives outside the repo today.)
 
 ## Adding a new module
