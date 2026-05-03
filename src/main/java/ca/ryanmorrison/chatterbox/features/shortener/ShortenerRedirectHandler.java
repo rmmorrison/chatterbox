@@ -8,9 +8,12 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Javalin handler for {@code GET /{token}}. Returns 301 with the original URL
- * in the {@code Location} header on hit, 404 on miss. Tokens are looked up in
- * lowercase since the alphabet is case-insensitive.
+ * Javalin handler for {@code GET /{token}}. On hit, returns 301 with the
+ * original URL in the {@code Location} header plus a tiny HTML body
+ * carrying an anchor to the destination — matches the shape bit.ly serves,
+ * which Discord's link-preview crawler unfurls correctly. On miss, 404.
+ *
+ * <p>Tokens are looked up in lowercase since the alphabet is case-insensitive.
  */
 final class ShortenerRedirectHandler implements Handler {
 
@@ -32,6 +35,27 @@ final class ShortenerRedirectHandler implements Handler {
             ctx.status(HttpStatus.NOT_FOUND).result("Not found.");
             return;
         }
-        ctx.status(HttpStatus.MOVED_PERMANENTLY).header("Location", match.get().url());
+        String url = match.get().url();
+        ctx.status(HttpStatus.MOVED_PERMANENTLY)
+                .header("Location", url)
+                .contentType("text/html; charset=utf-8")
+                .result("<html>\n<body><a href=\"" + escapeAttr(url) + "\">moved here</a></body>\n");
+    }
+
+    static String escapeAttr(String s) {
+        if (s == null) return "";
+        StringBuilder out = new StringBuilder(s.length() + 16);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '&'  -> out.append("&amp;");
+                case '<'  -> out.append("&lt;");
+                case '>'  -> out.append("&gt;");
+                case '"'  -> out.append("&quot;");
+                case '\'' -> out.append("&#39;");
+                default   -> out.append(c);
+            }
+        }
+        return out.toString();
     }
 }
