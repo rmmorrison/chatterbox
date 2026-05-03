@@ -25,7 +25,9 @@ deployment.
 | `CHATTERBOX_DEV_MODE`      | no       | `false` | When `true`, slash commands register per-guild for instant updates. When `false`, they register globally. The opposite scope is cleared on each startup, so switching modes never leaves duplicates. |
 | `CHATTERBOX_LOG_LEVEL`     | no       | `INFO`  | Root logger level. |
 | `CHATTERBOX_HTTP_PORT`     | no       | `8080`  | Port the bot's internal HTTP server binds to. The server only starts when at least one module registers a route. |
-| `CHATTERBOX_SHORTENER_BASE_URL` | no  | —       | Public-facing prefix for the URL shortener (e.g. `https://example.com`). Required only when `/shorten` is invoked; the bot can run without it set. |
+| `CHATTERBOX_SHORTENER_BASE_URL` | no  | —       | Public-facing prefix for the URL shortener (e.g. `https://example.com`). Required only when `/shorten` is invoked or `CHATTERBOX_AUTOSHORTEN_ENABLED=true`; the bot can run without it set. |
+| `CHATTERBOX_AUTOSHORTEN_ENABLED` | no | `true` | Auto-shorten long URLs in guild messages by replacing the originals. Requires the bot to have **Manage Messages** in each channel. See [Auto-shortener](#auto-shortener). |
+| `CHATTERBOX_AUTOSHORTEN_THRESHOLD` | no | `160` | Minimum URL length (characters) that triggers auto-shortening. |
 
 ## Building
 
@@ -390,6 +392,69 @@ Public endpoint exposed via Javalin. Outcomes:
 - **Unknown token** — `404 Not Found`.
 
 Token lookups are case-insensitive.
+
+#### Auto-shortener
+
+When `CHATTERBOX_AUTOSHORTEN_ENABLED=true` (the default), the bot watches
+guild messages and quietly replaces the user's message with one of its own
+when any URL in the body exceeds `CHATTERBOX_AUTOSHORTEN_THRESHOLD`
+characters (default `160`). Defaults err on the side of leaving URLs alone.
+
+Behaviour:
+
+- **Skip conditions**: bot/system/webhook/self messages, DMs, messages
+  with no URLs over the threshold, URLs already on the configured short
+  prefix, and any URLs found inside code spans / triple-backtick blocks /
+  spoilers / Markdown links — those formatting structures are intentional
+  and left intact.
+- **Per-message opt-out**: wrap a URL in angle brackets to keep it as-is —
+  e.g. `look at <https://really-long.example/path/...>`. Discord already
+  treats this syntax as "don't auto-embed", so it doubles as our
+  "don't auto-shorten" marker.
+- **Replacement format**: `<@author>: <original text with long URLs swapped>`.
+  Mentions in the rewritten body do not trigger pings — the user's mention
+  renders as their name, but no notification fires (also covers any other
+  mentions copied from the original message).
+- **Reply threading**: if the original was a reply to another message, the
+  replacement is too. With `failOnInvalidReply(false)` so a deleted
+  reply target doesn't block the post.
+- **Provenance**: rows minted by the auto-shortener are attributed to the
+  *original author's* user ID and the *original message's* timestamp, so
+  `/shorten delete` and audit lookups identify the right user.
+- **Failure ordering**: the replacement is posted *before* the original is
+  deleted. A failed post never erases the user's text; a failed delete
+  leaves both messages briefly with a logged warning so a moderator can
+  clean up.
+
+The bot needs **Manage Messages** in every channel where shortening
+should happen. Without it, the listener logs a warning and skips.
+
+##### Granting Manage Messages to the bot in your server
+
+If the bot is already in your server but doesn't have Manage Messages,
+the easiest fix is to grant the permission to the bot's role
+server-wide:
+
+1. Open your server's **Server Settings → Roles**.
+2. Find the bot's role (typically named after the bot, e.g. `Chatterbox`)
+   and click it.
+3. On the **Permissions** tab, scroll to **Text Channel Permissions** and
+   enable **Manage Messages**. Save.
+
+If you'd rather scope the permission to specific channels:
+
+1. Right-click the channel → **Edit Channel → Permissions**.
+2. Add the bot's role under **Roles/Members** (if not already present).
+3. Toggle **Manage Messages** to ✓ for that role. Save.
+
+If you're re-inviting the bot, append `&permissions=8192` (Manage Messages)
+to the existing permissions integer in your invite URL — or, easiest, use
+Discord's permissions calculator on the bot's developer-portal page to
+check the box and copy the new install URL.
+
+After the role gains the permission, no restart is needed — the bot
+checks per-message and starts auto-shortening on the next eligible
+message.
 
 ### Shout
 

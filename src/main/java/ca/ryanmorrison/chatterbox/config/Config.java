@@ -5,6 +5,7 @@ public record Config(
         boolean devMode,
         DatabaseConfig database,
         HttpConfig http,
+        ShortenerConfig shortener,
         String logLevel) {
 
     public record DatabaseConfig(String url, String user, String password) {
@@ -13,6 +14,18 @@ public record Config(
     }
 
     public record HttpConfig(int port) {}
+
+    /**
+     * URL shortener feature configuration.
+     *
+     * @param autoShortenEnabled  when true, the bot scans guild messages for
+     *                            HTTP(S) URLs and replaces overly long ones
+     *                            with short links.
+     * @param autoShortenThreshold a URL must exceed this many characters
+     *                             before auto-shortening kicks in. Defaults
+     *                             err on the side of leaving URLs alone.
+     */
+    public record ShortenerConfig(boolean autoShortenEnabled, int autoShortenThreshold) {}
 
     public static Config fromEnvironment() {
         return fromEnvironment(System::getenv);
@@ -30,7 +43,14 @@ public record Config(
                 envOrDefault(env, "CHATTERBOX_DB_USER", ""),
                 envOrDefault(env, "CHATTERBOX_DB_PASSWORD", ""));
 
-        return new Config(token, devMode, db, new HttpConfig(httpPort), logLevel);
+        boolean autoShortenEnabled = Boolean.parseBoolean(
+                envOrDefault(env, "CHATTERBOX_AUTOSHORTEN_ENABLED", "true"));
+        int autoShortenThreshold = parsePositiveInt(
+                envOrDefault(env, "CHATTERBOX_AUTOSHORTEN_THRESHOLD", "160"),
+                "CHATTERBOX_AUTOSHORTEN_THRESHOLD");
+        var shortener = new ShortenerConfig(autoShortenEnabled, autoShortenThreshold);
+
+        return new Config(token, devMode, db, new HttpConfig(httpPort), shortener, logLevel);
     }
 
     private static int parsePort(String raw) {
@@ -42,6 +62,18 @@ public record Config(
             return p;
         } catch (NumberFormatException e) {
             throw new IllegalStateException("CHATTERBOX_HTTP_PORT is not a valid integer: " + raw, e);
+        }
+    }
+
+    private static int parsePositiveInt(String raw, String key) {
+        try {
+            int v = Integer.parseInt(raw);
+            if (v <= 0) {
+                throw new IllegalStateException(key + " must be > 0, got " + v);
+            }
+            return v;
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException(key + " is not a valid integer: " + raw, e);
         }
     }
 
