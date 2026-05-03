@@ -436,6 +436,24 @@ non-moderator's in the same channel.
 The permission is re-checked on every interaction (slash and button), so
 losing the role mid-pagination immediately removes the moderation buttons.
 
+#### `/shout-stats`
+
+Ephemeral, guild-only stats snapshot for the current channel. Shows:
+
+- **Total shouts** — live count.
+- **Distinct shouters** — unique authors with at least one live shout.
+- **Last 7 days** — live shouts authored in the trailing week.
+- **Top shouters** — the top three contributors with medal emoji and counts.
+- **First shout** / **Most recent** — author and timestamp of the channel's
+  oldest and newest live shouts, with jump-to-message links.
+- **Longest** — the longest live shout by character count, plus a 200-char
+  preview and jump link.
+- **Hall of fame** — the live shout the bot has re-emitted most often
+  (joined through `shout_history`), with replay count and jump link.
+
+All counts and lookups exclude soft-deleted shouts so the figures match
+what's browseable via `/shout-history`. There is no moderator-only view.
+
 ### Autoreply
 
 Channel-scoped automated replies. Moderators (Manage Messages) configure
