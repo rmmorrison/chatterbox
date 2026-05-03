@@ -1,12 +1,11 @@
 package ca.ryanmorrison.chatterbox.features.rss;
 
-import net.dv8tion.jda.api.Permission;
+import ca.ryanmorrison.chatterbox.common.permissions.Permissions;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.selections.SelectOption;
 import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
@@ -139,7 +138,7 @@ final class RssHandler extends ListenerAdapter {
     private void handleRemove(SlashCommandInteractionEvent event) {
         long channelId = event.getChannel().getIdLong();
         long userId = event.getUser().getIdLong();
-        boolean isModerator = hasManageMessages(event);
+        boolean isModerator = Permissions.canManageMessages(event);
 
         List<Feed> all = repo.listByChannel(channelId);
         List<Feed> visible = isModerator
@@ -277,14 +276,8 @@ final class RssHandler extends ListenerAdapter {
         return true;
     }
 
-    private static boolean hasManageMessages(IReplyCallback event) {
-        Member member = event.getMember();
-        GuildChannel channel = event.getGuildChannel();
-        return member != null && channel != null && member.hasPermission(channel, Permission.MESSAGE_MANAGE);
-    }
-
     private static boolean canRemove(IReplyCallback event, Feed feed) {
-        if (hasManageMessages(event)) return true;
+        if (Permissions.canManageMessages(event)) return true;
         Member m = event.getMember();
         return m != null && m.getIdLong() == feed.addedBy();
     }
