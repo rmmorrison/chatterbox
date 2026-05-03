@@ -54,4 +54,54 @@ class ConfigTest {
                         "CHATTERBOX_DISCORD_TOKEN", "abc"
                 )::get));
     }
+
+    @Test
+    void autoShortenDefaultsToEnabledAt160() {
+        Config cfg = Config.fromEnvironment(Map.of(
+                "CHATTERBOX_DISCORD_TOKEN", "abc",
+                "CHATTERBOX_DB_URL", "jdbc:sqlite:./x.db"
+        )::get);
+        assertTrue(cfg.shortener().autoShortenEnabled());
+        assertEquals(160, cfg.shortener().autoShortenThreshold());
+    }
+
+    @Test
+    void autoShortenCanBeDisabled() {
+        Config cfg = Config.fromEnvironment(Map.of(
+                "CHATTERBOX_DISCORD_TOKEN", "abc",
+                "CHATTERBOX_DB_URL", "jdbc:sqlite:./x.db",
+                "CHATTERBOX_AUTOSHORTEN_ENABLED", "false"
+        )::get);
+        assertFalse(cfg.shortener().autoShortenEnabled());
+    }
+
+    @Test
+    void autoShortenThresholdIsParsed() {
+        Config cfg = Config.fromEnvironment(Map.of(
+                "CHATTERBOX_DISCORD_TOKEN", "abc",
+                "CHATTERBOX_DB_URL", "jdbc:sqlite:./x.db",
+                "CHATTERBOX_AUTOSHORTEN_THRESHOLD", "200"
+        )::get);
+        assertEquals(200, cfg.shortener().autoShortenThreshold());
+    }
+
+    @Test
+    void autoShortenThresholdMustBePositive() {
+        assertThrows(IllegalStateException.class,
+                () -> Config.fromEnvironment(Map.of(
+                        "CHATTERBOX_DISCORD_TOKEN", "abc",
+                        "CHATTERBOX_DB_URL", "jdbc:sqlite:./x.db",
+                        "CHATTERBOX_AUTOSHORTEN_THRESHOLD", "0"
+                )::get));
+    }
+
+    @Test
+    void autoShortenThresholdMustBeAnInteger() {
+        assertThrows(IllegalStateException.class,
+                () -> Config.fromEnvironment(Map.of(
+                        "CHATTERBOX_DISCORD_TOKEN", "abc",
+                        "CHATTERBOX_DB_URL", "jdbc:sqlite:./x.db",
+                        "CHATTERBOX_AUTOSHORTEN_THRESHOLD", "not-a-number"
+                )::get));
+    }
 }
