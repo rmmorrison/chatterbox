@@ -4,6 +4,7 @@ import ca.ryanmorrison.chatterbox.commands.CommandSync;
 import ca.ryanmorrison.chatterbox.config.Config;
 import ca.ryanmorrison.chatterbox.db.Database;
 import ca.ryanmorrison.chatterbox.db.Migrations;
+import ca.ryanmorrison.chatterbox.http.HttpServer;
 import ca.ryanmorrison.chatterbox.module.InitContext;
 import ca.ryanmorrison.chatterbox.module.Module;
 import ca.ryanmorrison.chatterbox.module.ModuleContext;
@@ -48,6 +49,8 @@ public final class Bootstrap {
 
         InitContext initCtx = new InitContextImpl(config, database.dsl());
 
+        HttpServer httpServer = new HttpServer(config.http().port());
+
         Set<GatewayIntent> intents = new HashSet<>();
         EnumSet<CacheFlag> cacheFlags = EnumSet.noneOf(CacheFlag.class);
         List<SlashCommandData> commands = new ArrayList<>();
@@ -58,9 +61,16 @@ public final class Bootstrap {
             cacheFlags.addAll(m.cacheFlags());
             commands.addAll(m.slashCommands(initCtx));
             listeners.addAll(m.listeners(initCtx));
+            m.registerHttpRoutes(httpServer.router(), initCtx);
         }
         log.info("Aggregated {} intent(s), {} command(s), {} listener(s) across {} module(s).",
                 intents.size(), commands.size(), listeners.size(), modules.size());
+
+        if (httpServer.hasRoutes()) {
+            httpServer.start();
+        } else {
+            log.info("No modules registered HTTP routes; skipping HTTP server bind.");
+        }
 
         CommandSync commandSync = new CommandSync(commands, config.devMode());
 
@@ -87,10 +97,10 @@ public final class Bootstrap {
             }
         }
 
-        installShutdownHook(jda, modules, database);
+        installShutdownHook(jda, modules, database, httpServer);
     }
 
-    private static void installShutdownHook(JDA jda, List<Module> modules, Database database) {
+    private static void installShutdownHook(JDA jda, List<Module> modules, Database database, HttpServer httpServer) {
         var shuttingDown = new AtomicBoolean(false);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (!shuttingDown.compareAndSet(false, true)) return;
@@ -102,6 +112,7 @@ public final class Bootstrap {
                     log.warn("Module {} failed during shutdown.", m.name(), e);
                 }
             }
+            httpServer.stop();
             jda.shutdown();
             database.close();
             log.info("Shutdown complete.");

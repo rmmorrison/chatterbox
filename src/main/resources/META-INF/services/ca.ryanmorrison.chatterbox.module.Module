@@ -3,3 +3,4 @@ ca.ryanmorrison.chatterbox.features.shout.ShoutModule
 ca.ryanmorrison.chatterbox.features.autoreply.AutoReplyModule
 ca.ryanmorrison.chatterbox.features.rss.RssModule
 ca.ryanmorrison.chatterbox.features.nhl.NhlModule
+ca.ryanmorrison.chatterbox.features.shortener.ShortenerModule
