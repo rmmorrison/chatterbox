@@ -17,7 +17,8 @@ import java.util.Set;
  * previously-stored shout from the same channel.
  *
  * <p>Also exposes {@code /shout-history} (ephemeral, guild-only) so users can
- * page back through emissions in the channel.
+ * page back through emissions in the channel, and {@code /shout-stats}
+ * (ephemeral, guild-only) for a per-channel stats snapshot.
  *
  * <p>Requires the {@code MESSAGE_CONTENT} privileged intent. Enable it on the
  * bot's application page in the Discord Developer Portal.
@@ -40,15 +41,19 @@ public final class ShoutModule implements Module {
     public List<EventListener> listeners(InitContext ctx) {
         var shouts = new ShoutRepository(ctx.database());
         var history = new ShoutHistoryRepository(ctx.database());
+        var stats = new ShoutStatsRepository(ctx.database());
         return List.of(
                 new ShoutListener(new ShoutDetector(), shouts, history),
-                new ShoutHistoryHandler(shouts, history));
+                new ShoutHistoryHandler(shouts, history),
+                new ShoutStatsHandler(stats));
     }
 
     @Override
     public List<SlashCommandData> slashCommands(InitContext ctx) {
         return List.of(
                 Commands.slash(ShoutHistoryView.CMD_NAME, "Browse the bot's shout history for this channel.")
+                        .setContexts(InteractionContextType.GUILD),
+                Commands.slash(ShoutStatsView.CMD_NAME, "Show fun stats about shouts in this channel.")
                         .setContexts(InteractionContextType.GUILD));
     }
 }
