@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Pure rendering for the {@code /shout-history} response. Given an entry, the
+ * Pure rendering for the {@code /shout history} response. Given an entry, the
  * resolved author display name, the deleter display name (only relevant when
  * the entry is deleted and the viewer is a moderator), the position info, and
  * a {@code viewerCanModerate} flag, produces the embed and button row.
@@ -21,8 +21,13 @@ import java.util.Optional;
  */
 final class ShoutHistoryView {
 
-    static final String CMD_NAME = "shout-history";
-    static final String BUTTON_PREFIX = CMD_NAME + ":";
+    static final String SUBCOMMAND = "history";
+    /**
+     * Stable namespace for the button component IDs; deliberately distinct
+     * from the slash command path so future {@code /shout} subcommands can't
+     * accidentally collide with active button interactions.
+     */
+    static final String BUTTON_PREFIX = "shout-history:";
     static final String OLDER   = BUTTON_PREFIX + "older:";
     static final String NEWER   = BUTTON_PREFIX + "newer:";
     static final String DELETE  = BUTTON_PREFIX + "delete:";

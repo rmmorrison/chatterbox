@@ -22,12 +22,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * Slash handler for {@code /shout-stats}. Loads the channel's stat snapshot,
+ * Slash handler for {@code /shout stats}. Loads the channel's stat snapshot,
  * resolves all referenced user IDs to Discord mentions in parallel, and
  * renders a single embed via {@link ShoutStatsView}.
  *
  * <p>All counts and lookups exclude soft-deleted shouts so the figures
- * always match what's browseable via {@code /shout-history}.
+ * always match what's browseable via {@code /shout history}.
  */
 final class ShoutStatsHandler extends ListenerAdapter {
 
@@ -44,7 +44,8 @@ final class ShoutStatsHandler extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
-        if (!ShoutStatsView.CMD_NAME.equals(event.getName())) return;
+        if (!ShoutModule.COMMAND.equals(event.getName())) return;
+        if (!ShoutStatsView.SUBCOMMAND.equals(event.getSubcommandName())) return;
 
         Guild guild = event.getGuild();
         Member member = event.getMember();
