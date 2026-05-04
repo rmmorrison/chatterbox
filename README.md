@@ -644,3 +644,22 @@ Public by default since decisions are usually shared; pass `private:true`
 to keep the result to yourself. Mentions in the rendered options are
 suppressed so a `/decide options:"@everyone or no"` can't ping the
 channel.
+
+### Magic 8 Ball
+
+`/8ball question:<text> [private:<bool>]` — ask the bot a question,
+get one of the 20 canonical Magic 8 Ball answers chosen uniformly at
+random (10 affirmative, 5 non-committal, 5 negative — same split as
+the physical toy, which slightly favours "yes").
+
+Reply echoes the question and renders the answer in bold:
+
+```
+🎱 *"will it rain tomorrow?"*
+**It is decidedly so.**
+```
+
+Public by default; pass `private:true` to keep the answer ephemeral.
+Mentions in the question text are suppressed so
+`/8ball question:should @everyone get pinged?` can't actually ping
+anyone.
