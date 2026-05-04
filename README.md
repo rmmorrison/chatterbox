@@ -663,3 +663,36 @@ Public by default; pass `private:true` to keep the answer ephemeral.
 Mentions in the question text are suppressed so
 `/8ball question:should @everyone get pinged?` can't actually ping
 anyone.
+
+### Format
+
+`/format style:<choice> text:<text> [private:<bool>]` — apply a fun
+text transform and post the result. Available styles:
+
+- **Clap 👏** — inserts 👏 between whitespace-separated words.
+  `make it stop` → `make 👏 it 👏 stop`. Runs of whitespace collapse
+  to a single clap.
+- **SpongeCase** — alternates letter case across the whole string,
+  starting lowercase. The cursor advances only on letters, so spaces,
+  digits, punctuation, and emoji pass through without disturbing the
+  rhythm. `alternating caps` → `aLtErNaTiNg CaPs`.
+
+Public by default; pass `private:true` to keep it ephemeral. Input is
+truncated above 1500 characters (so the formatted output stays under
+Discord's 2000-char message cap), and mentions in the input are
+suppressed so a hostile `/format text:"@everyone hi"` can't ping
+anyone. Adding a new style is one enum line — see
+[`TextStyle.java`](src/main/java/ca/ryanmorrison/chatterbox/features/format/TextStyle.java).
+
+### Emote
+
+`/emote name:<choice> [private:<bool>]` — post one of a small roster
+of canned text emotes. Roster includes **Flip table**
+(`(╯°□°)╯︵ ┻━┻`), **Put table back** (`┬─┬ノ( º _ ºノ)`),
+**Rage-flip table** (`(ノಠ益ಠ)ノ彡┻━┻`), **Double-flip**
+(`┻━┻ ︵ ヽ(°□°ヽ)`), **Shrug** (`¯\_(ツ)_/¯`), **Lenny face**
+(`( ͡° ͜ʖ ͡°)`), and **Look of disapproval** (`ಠ_ಠ`).
+
+Public by default; pass `private:true` to keep it ephemeral. Adding a
+new emote is one enum line — see
+[`Emote.java`](src/main/java/ca/ryanmorrison/chatterbox/features/emote/Emote.java).

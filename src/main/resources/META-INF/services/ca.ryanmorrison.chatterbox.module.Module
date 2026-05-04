@@ -6,3 +6,5 @@ ca.ryanmorrison.chatterbox.features.nhl.NhlModule
 ca.ryanmorrison.chatterbox.features.shortener.ShortenerModule
 ca.ryanmorrison.chatterbox.features.decide.DecideModule
 ca.ryanmorrison.chatterbox.features.eightball.EightBallModule
+ca.ryanmorrison.chatterbox.features.format.FormatModule
+ca.ryanmorrison.chatterbox.features.emote.EmoteModule
