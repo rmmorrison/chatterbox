@@ -626,3 +626,21 @@ Anyone in a guild can `/rss add`. `/rss remove` is restricted to the
 adder of each feed; users with `MESSAGE_MANAGE` in the channel can
 remove any feed. The check is re-applied on the select and confirm
 buttons too, so losing the role mid-flow denies the deletion.
+
+### Decide
+
+`/decide options:<text> [private:<bool>]` — picks one option at random
+and posts it. Two ways to phrase the options string:
+
+- **Whitespace-separated** — `pizza tacos sushi` → three options.
+- **`or`-separated** — when the input contains the standalone word `or`
+  (case-insensitive, surrounded by whitespace), it splits on that
+  instead. Lets multi-word choices read naturally:
+  `say hello or be silent` → `["say hello", "be silent"]`.
+
+Reply renders the chosen option in bold with a "from:" line listing all
+the alternatives, e.g. `🎲 **say hello`\n_(from: say hello · be silent)_`.
+Public by default since decisions are usually shared; pass `private:true`
+to keep the result to yourself. Mentions in the rendered options are
+suppressed so a `/decide options:"@everyone or no"` can't ping the
+channel.
