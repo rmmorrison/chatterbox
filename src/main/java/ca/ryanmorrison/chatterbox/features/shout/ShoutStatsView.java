@@ -9,14 +9,14 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 import java.util.List;
 
 /**
- * Pure rendering for the {@code /shout-stats} response. The handler resolves
+ * Pure rendering for the {@code /shout stats} response. The handler resolves
  * raw shouts to their public-facing references (Discord mentions, jump-to-
  * message links, truncated content previews) and passes everything in via
  * value records, so this class makes no DB or REST calls and is unit-testable.
  */
 final class ShoutStatsView {
 
-    static final String CMD_NAME = "shout-stats";
+    static final String SUBCOMMAND = "stats";
 
     /** Cap on content shown inline so a 2000-char shout doesn't blow the embed field. */
     static final int CONTENT_PREVIEW_LIMIT = 200;

@@ -15,7 +15,7 @@ import static ca.ryanmorrison.chatterbox.db.generated.Tables.SHOUTS;
 import static ca.ryanmorrison.chatterbox.db.generated.Tables.SHOUT_HISTORY;
 
 /**
- * jOOQ-backed read-only access for the {@code /shout-stats} command. All
+ * jOOQ-backed read-only access for the {@code /shout stats} command. All
  * queries filter soft-deleted shouts ({@code deleted_at IS NOT NULL}) so the
  * stats reflect what's actually browseable.
  *

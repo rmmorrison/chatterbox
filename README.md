@@ -467,10 +467,10 @@ for the classifier rules.
 Requires the **`MESSAGE_CONTENT`** privileged intent — enable it on the bot's
 application page in the Discord Developer Portal.
 
-#### `/shout-history`
+#### `/shout history`
 
 Each successful emission is recorded against the channel. Users can run the
-ephemeral, guild-only `/shout-history` slash command to browse the bot's
+ephemeral, guild-only `/shout history` slash command to browse the bot's
 emissions for the current channel, paginating with **← Older** / **Newer →**
 buttons. The embed shows the original author's server display name, the time
 the shout was first written, and a position indicator (e.g. `Entry 2 of 17`).
@@ -501,7 +501,7 @@ non-moderator's in the same channel.
 The permission is re-checked on every interaction (slash and button), so
 losing the role mid-pagination immediately removes the moderation buttons.
 
-#### `/shout-stats`
+#### `/shout stats`
 
 Ephemeral, guild-only stats snapshot for the current channel. Shows:
 
@@ -517,7 +517,7 @@ Ephemeral, guild-only stats snapshot for the current channel. Shows:
   (joined through `shout_history`), with replay count and jump link.
 
 All counts and lookups exclude soft-deleted shouts so the figures match
-what's browseable via `/shout-history`. There is no moderator-only view.
+what's browseable via `/shout history`. There is no moderator-only view.
 
 ### Autoreply
 

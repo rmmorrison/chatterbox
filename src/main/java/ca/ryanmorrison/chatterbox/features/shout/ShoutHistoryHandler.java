@@ -19,7 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * Slash command and button glue for {@code /shout-history}. Looks up the
+ * Slash command and button glue for {@code /shout history}. Looks up the
  * latest history entry on slash invocation, then steps older / newer / soft-
  * deletes / restores in response to button clicks. Replies are ephemeral, so
  * cross-user button spoofing isn't a concern.
@@ -45,7 +45,8 @@ final class ShoutHistoryHandler extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
-        if (!ShoutHistoryView.CMD_NAME.equals(event.getName())) return;
+        if (!ShoutModule.COMMAND.equals(event.getName())) return;
+        if (!ShoutHistoryView.SUBCOMMAND.equals(event.getSubcommandName())) return;
 
         Guild guild = event.getGuild();
         Member member = event.getMember();

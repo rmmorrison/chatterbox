@@ -6,6 +6,7 @@ import net.dv8tion.jda.api.hooks.EventListener;
 import net.dv8tion.jda.api.interactions.InteractionContextType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 
 import java.util.List;
@@ -16,14 +17,16 @@ import java.util.Set;
  * channel, the bot stores it (per channel) and replies with a random
  * previously-stored shout from the same channel.
  *
- * <p>Also exposes {@code /shout-history} (ephemeral, guild-only) so users can
- * page back through emissions in the channel, and {@code /shout-stats}
+ * <p>Also exposes {@code /shout history} (ephemeral, guild-only) so users can
+ * page back through emissions in the channel, and {@code /shout stats}
  * (ephemeral, guild-only) for a per-channel stats snapshot.
  *
  * <p>Requires the {@code MESSAGE_CONTENT} privileged intent. Enable it on the
  * bot's application page in the Discord Developer Portal.
  */
 public final class ShoutModule implements Module {
+
+    static final String COMMAND = "shout";
 
     @Override public String name() { return "shout"; }
 
@@ -50,10 +53,12 @@ public final class ShoutModule implements Module {
 
     @Override
     public List<SlashCommandData> slashCommands(InitContext ctx) {
-        return List.of(
-                Commands.slash(ShoutHistoryView.CMD_NAME, "Browse the bot's shout history for this channel.")
-                        .setContexts(InteractionContextType.GUILD),
-                Commands.slash(ShoutStatsView.CMD_NAME, "Show fun stats about shouts in this channel.")
-                        .setContexts(InteractionContextType.GUILD));
+        return List.of(Commands.slash(COMMAND, "Tools for the shout feature.")
+                .setContexts(InteractionContextType.GUILD)
+                .addSubcommands(
+                        new SubcommandData(ShoutHistoryView.SUBCOMMAND,
+                                "Browse the bot's shout history for this channel."),
+                        new SubcommandData(ShoutStatsView.SUBCOMMAND,
+                                "Show fun stats about shouts in this channel.")));
     }
 }

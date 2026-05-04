@@ -6,8 +6,8 @@ import java.util.Optional;
 
 /**
  * Aggregated stats for a single channel, computed once and rendered into the
- * {@code /shout-stats} embed. All counts and lookups exclude soft-deleted
- * shouts so the figures match what users can browse via {@code /shout-history}.
+ * {@code /shout stats} embed. All counts and lookups exclude soft-deleted
+ * shouts so the figures match what users can browse via {@code /shout history}.
  *
  * @param totalShouts        live shouts in the channel
  * @param distinctShouters   unique authors with at least one live shout
