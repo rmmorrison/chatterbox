@@ -1,6 +1,5 @@
 package ca.ryanmorrison.chatterbox.features.frinkiac;
 
-import ca.ryanmorrison.chatterbox.features.frinkiac.dto.CaptionResponse;
 import ca.ryanmorrison.chatterbox.features.frinkiac.dto.SearchResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -25,14 +24,15 @@ import java.util.Locale;
  * <p>Endpoints used:
  * <ul>
  *   <li>{@code GET /api/search?q=...} → list of {@link SearchResult}</li>
- *   <li>{@code GET /api/caption?e=...&t=...} → {@link CaptionResponse}</li>
+ *   <li>{@code GET /img/{episode}/{timestamp}/medium.jpg} → uncaptioned frame bytes</li>
  *   <li>{@code GET /comic/img?b64=...} → captioned frame bytes (single-panel comic)</li>
  * </ul>
  *
- * <p>The image endpoints sit behind a Cloudflare bot rule that returns 403 for
- * requests without a browser-like {@code User-Agent} and {@code Referer}, so
- * those headers are sent on every call. JSON endpoints accept any UA but get
- * the same headers for consistency.
+ * <p>Browsing search results uses the plain {@code /img/...} endpoint so we
+ * only invoke the heavier comic renderer once the user has actually entered
+ * caption text. The image endpoints sit behind a Cloudflare bot rule that
+ * returns 403 for requests without a browser-like {@code User-Agent} and
+ * {@code Referer}, so those headers are sent on every call.
  *
  * <p>Posture mirrors {@code NhlClient}: 10s timeout, response-size cap, all
  * failures funnelled into {@link FrinkiacException} with messages safe to
@@ -86,18 +86,14 @@ final class FrinkiacClient {
         }
     }
 
-    /** Caption metadata (episode info + nearby subtitles) for a specific frame. */
-    CaptionResponse caption(String episode, long timestamp) throws FrinkiacException {
+    /** Raw, uncaptioned medium-sized frame image. */
+    byte[] fetchFrame(String episode, long timestamp) throws FrinkiacException {
         if (episode == null || episode.isBlank()) {
             throw new FrinkiacException("Episode key is required.");
         }
-        String e = URLEncoder.encode(episode.trim().toUpperCase(Locale.ROOT), StandardCharsets.UTF_8);
-        byte[] body = getBytes("/api/caption?e=" + e + "&t=" + timestamp, MAX_JSON_BYTES);
-        try {
-            return mapper.readValue(body, CaptionResponse.class);
-        } catch (IOException e1) {
-            throw new FrinkiacException("Frinkiac returned an unexpected caption response.");
-        }
+        String path = "/img/" + episode.trim().toUpperCase(Locale.ROOT)
+                + "/" + timestamp + "/medium.jpg";
+        return getBytes(path, MAX_IMAGE_BYTES);
     }
 
     /**

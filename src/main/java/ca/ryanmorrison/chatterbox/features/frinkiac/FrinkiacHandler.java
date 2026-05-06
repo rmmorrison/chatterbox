@@ -1,8 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.frinkiac;
 
-import ca.ryanmorrison.chatterbox.features.frinkiac.dto.CaptionResponse;
 import ca.ryanmorrison.chatterbox.features.frinkiac.dto.SearchResult;
-import ca.ryanmorrison.chatterbox.features.frinkiac.dto.Subtitle;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
@@ -32,17 +30,21 @@ import java.util.UUID;
  * <p>Flow:
  * <ol>
  *   <li>Slash command runs a search, stashes results in {@link FrinkiacSessions},
- *       replies <em>ephemerally</em> with a preview of the first hit.</li>
- *   <li>Prev/Next re-render the same ephemeral message at a different index.
- *       The on-screen subtitle and an uncaptioned thumbnail are loaded from
- *       Frinkiac's caption + image endpoints.</li>
- *   <li>Edit Caption opens a modal pre-filled with the joined subtitle text
- *       (or the user's prior edit, if any). Submitting it saves the override
- *       and re-renders the preview using Frinkiac's {@code /comic/img}
+ *       replies <em>ephemerally</em> with the first hit's plain frame.</li>
+ *   <li>Prev/Next re-render the same ephemeral message at a different index,
+ *       fetching just the uncaptioned image — no comic renderer call until
+ *       the user actually wants caption text.</li>
+ *   <li>Edit Caption opens a modal pre-filled with the search hit's matching
+ *       subtitle (or the user's prior edit). Submitting it saves the text
+ *       and re-renders the preview through Frinkiac's {@code /comic/img}
  *       endpoint so the user sees the captioned frame they're about to post.</li>
- *   <li>Post to Channel uploads the (captioned-or-plain) image as a file in
+ *   <li>Post to Channel uploads the captioned-or-plain image as a file in
  *       the originating channel and dismisses the ephemeral preview.</li>
  * </ol>
+ *
+ * <p>The image fetched at any point is captioned only if the user has typed
+ * something for that frame; pure browsing stays on the lighter
+ * {@code /img/...} endpoint.</p>
  *
  * <p>All button/modal IDs encode a {@link UUID} that points at the session.
  * The session is checked on every interaction; if it has expired the user
@@ -163,9 +165,9 @@ final class FrinkiacHandler extends ListenerAdapter {
 
         FrinkiacSessions.Session s = sessionOpt.get();
         SearchResult current = s.current();
-        // The first render of this frame cached its on-screen subtitle here, so the
-        // modal can prefill without a network call. Fall back to the search hit's
-        // content if the user somehow opens this before the preview has rendered.
+        // Modals must be the immediate response to a button click — no networking
+        // here. Prefill with the user's previous edit if any, else the search hit's
+        // own matching subtitle (which Frinkiac already shipped us inline).
         String prefill = s.captionFor(current.id())
                 .orElseGet(() -> current.content() == null ? "" : current.content());
 
@@ -184,12 +186,13 @@ final class FrinkiacHandler extends ListenerAdapter {
 
         event.deferEdit().queue();
         SearchResult current = s.current();
-        String caption = s.captionFor(current.id())
-                .orElseGet(() -> current.content() == null ? "" : current.content());
+        Optional<String> override = s.captionFor(current.id());
 
         byte[] image;
         try {
-            image = client.fetchCaptionedFrame(current.episode(), current.timestamp(), caption);
+            image = override.isPresent()
+                    ? client.fetchCaptionedFrame(current.episode(), current.timestamp(), override.get())
+                    : client.fetchFrame(current.episode(), current.timestamp());
         } catch (FrinkiacClient.FrinkiacException e) {
             event.getHook().editOriginal("Couldn't fetch the image to post: " + e.getMessage())
                     .setEmbeds(List.of()).setComponents(List.of()).setAttachments().queue();
@@ -258,11 +261,10 @@ final class FrinkiacHandler extends ListenerAdapter {
 
     /**
      * Updates the ephemeral preview message to reflect the session's current
-     * frame. Always renders the caption text into the image via Frinkiac's
-     * {@code /comic/img} endpoint so the user sees the same Simpsons-fonted
-     * frame they'll be posting. The text comes from a per-frame cache that's
-     * seeded with the on-screen subtitle on first render and replaced when
-     * the user edits it.
+     * frame. Uses the lighter {@code /img/...} endpoint while the user is
+     * just browsing; only invokes the comic renderer once the user has
+     * actually entered caption text for this frame, which is also when the
+     * Simpsons-fonted overlay first appears.
      */
     private void renderPreview(InteractionHook hook, UUID token) {
         var sessionOpt = sessions.get(token);
@@ -273,11 +275,13 @@ final class FrinkiacHandler extends ListenerAdapter {
         }
         FrinkiacSessions.Session s = sessionOpt.get();
         SearchResult current = s.current();
-        String caption = resolveAndCacheCaption(token, s, current);
+        Optional<String> override = s.captionFor(current.id());
 
         byte[] image;
         try {
-            image = client.fetchCaptionedFrame(current.episode(), current.timestamp(), caption);
+            image = override.isPresent()
+                    ? client.fetchCaptionedFrame(current.episode(), current.timestamp(), override.get())
+                    : client.fetchFrame(current.episode(), current.timestamp());
         } catch (FrinkiacClient.FrinkiacException e) {
             hook.editOriginal("Couldn't fetch the frame image: " + e.getMessage())
                     .setEmbeds(List.of()).setComponents(List.of()).setAttachments().queue();
@@ -296,33 +300,6 @@ final class FrinkiacHandler extends ListenerAdapter {
                 .setComponents(buildButtonRow(token, s))
                 .setAttachments(upload)
                 .queue();
-    }
-
-    /**
-     * Returns the caption text that should be rendered onto {@code current},
-     * caching it in the session on first lookup. The cached value is whatever
-     * the user has typed (if they've edited this frame) or the joined nearby
-     * subtitles from {@code /api/caption} (mirroring the website's display).
-     * Falls back to the search hit's own {@code Content} if the caption
-     * endpoint is unreachable.
-     */
-    private String resolveAndCacheCaption(UUID token, FrinkiacSessions.Session s, SearchResult current) {
-        var cached = s.captionFor(current.id());
-        if (cached.isPresent()) return cached.get();
-
-        String fallback = current.content() == null ? "" : current.content();
-        String resolved = fallback;
-        try {
-            CaptionResponse cap = client.caption(current.episode(), current.timestamp());
-            String joined = joinSubtitles(cap);
-            if (!joined.isEmpty()) resolved = joined;
-        } catch (FrinkiacClient.FrinkiacException e) {
-            log.debug("Caption fetch failed: {}", e.getMessage());
-        } catch (RuntimeException e) {
-            log.warn("Unexpected caption fetch error", e);
-        }
-        sessions.putCaption(token, current.id(), resolved);
-        return resolved;
     }
 
     private MessageEmbed buildPreviewEmbed(FrinkiacSessions.Session s) {
@@ -368,18 +345,6 @@ final class FrinkiacHandler extends ListenerAdapter {
         return Modal.create(MODAL_EDIT + token, "Edit caption")
                 .addComponents(Label.of("Caption", caption))
                 .build();
-    }
-
-    /** Joins the {@code /api/caption} {@code Subtitles} list with newlines, mimicking the website. */
-    private static String joinSubtitles(CaptionResponse cap) {
-        if (cap == null || cap.subtitles() == null || cap.subtitles().isEmpty()) return "";
-        StringBuilder sb = new StringBuilder();
-        for (Subtitle sub : cap.subtitles()) {
-            if (sub.content() == null || sub.content().isBlank()) continue;
-            if (sb.length() > 0) sb.append('\n');
-            sb.append(sub.content().trim());
-        }
-        return sb.toString();
     }
 
     // ---- helpers ----

@@ -1,6 +1,5 @@
 package ca.ryanmorrison.chatterbox.features.frinkiac;
 
-import ca.ryanmorrison.chatterbox.features.frinkiac.dto.CaptionResponse;
 import ca.ryanmorrison.chatterbox.features.frinkiac.dto.SearchResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
@@ -89,28 +88,11 @@ class FrinkiacClientTest {
     }
 
     @Test
-    void captionParsesEpisodeAndSubtitles() throws Exception {
-        serveJson("/api/caption", 200, """
-                {
-                  "Episode": {"Id":406,"Key":"S04E12","Season":4,"EpisodeNumber":12,
-                              "Title":"Marge vs. the Monorail","Director":"Rich Moore",
-                              "Writer":"Conan O'Brien","OriginalAirDate":"1993-01-14",
-                              "WikiLink":"https://en.wikipedia.org/wiki/Marge_vs._the_Monorail"},
-                  "Frame": {"Id":3493747,"Episode":"S04E12","Timestamp":1279570},
-                  "Subtitles": [
-                    {"Id":1,"RepresentativeTimestamp":1276025,"Episode":"S04E12",
-                     "StartTimestamp":1275524,"EndTimestamp":1276984,"Content":"Huh?","Language":"en"},
-                    {"Id":2,"RepresentativeTimestamp":1278736,"Episode":"S04E12",
-                     "StartTimestamp":1278193,"EndTimestamp":1279736,"Content":"Donuts.","Language":"en"}
-                  ],
-                  "MinTimestamp": 1001, "MaxTimestamp": 1384258
-                }
-                """);
-        CaptionResponse cap = client.caption("S04E12", 1279570);
-        assertEquals("S04E12", cap.episode().key());
-        assertEquals("Marge vs. the Monorail", cap.episode().title());
-        assertEquals(2, cap.subtitles().size());
-        assertEquals("Donuts.", cap.subtitles().get(1).content());
+    void fetchFrameReturnsBytes() throws Exception {
+        byte[] fake = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1, 2, 3};
+        serveBytes("/img/S04E12/1279570/medium.jpg", 200, fake, "image/jpeg", null);
+        byte[] got = client.fetchFrame("s04e12", 1279570);
+        assertArrayEquals(fake, got);
     }
 
     @Test
