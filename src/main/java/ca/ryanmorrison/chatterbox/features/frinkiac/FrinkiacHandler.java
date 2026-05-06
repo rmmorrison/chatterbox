@@ -219,11 +219,9 @@ final class FrinkiacHandler extends ListenerAdapter {
     private void handleCancel(ButtonInteractionEvent event, String tokenStr) {
         UUID token = parseUuid(tokenStr);
         if (token != null) sessions.discard(token);
-        event.editMessage("Cancelled.")
-                .setEmbeds(List.of())
-                .setComponents(List.of())
-                .setAttachments()
-                .queue();
+        // Acknowledge the click and delete the ephemeral preview entirely.
+        event.deferEdit().queue();
+        event.getHook().deleteOriginal().queue();
     }
 
     // ---- modal handling ----
