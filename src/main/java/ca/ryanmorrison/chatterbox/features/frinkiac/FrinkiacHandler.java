@@ -209,8 +209,8 @@ final class FrinkiacHandler extends ListenerAdapter {
         event.getMessageChannel().sendMessageEmbeds(publicEmbed)
                 .addFiles(upload)
                 .queue(
-                        m -> event.getHook().editOriginal("Posted to channel.")
-                                .setEmbeds(List.of()).setComponents(List.of()).setAttachments().queue(),
+                        // The public post itself is the confirmation — drop the ephemeral.
+                        m -> event.getHook().deleteOriginal().queue(),
                         err -> {
                             log.warn("Failed to post Frinkiac frame to channel", err);
                             event.getHook().editOriginal("Couldn't post to the channel.")
