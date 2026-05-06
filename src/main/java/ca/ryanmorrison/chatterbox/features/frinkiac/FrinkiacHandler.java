@@ -206,7 +206,10 @@ final class FrinkiacHandler extends ListenerAdapter {
 
         MessageEmbed publicEmbed = buildPublicEmbed(current);
         FileUpload upload = FileUpload.fromData(image, IMAGE_FILENAME);
-        event.getMessageChannel().sendMessageEmbeds(publicEmbed)
+        // Mention the requester in the message content — embed text doesn't render
+        // mentions as clickable links, so it has to live above the embed.
+        event.getMessageChannel().sendMessage(event.getUser().getAsMention())
+                .addEmbeds(publicEmbed)
                 .addFiles(upload)
                 .queue(
                         // The public post itself is the confirmation — drop the ephemeral.
