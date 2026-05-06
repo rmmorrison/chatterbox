@@ -116,7 +116,10 @@ final class FrinkiacClient {
         } catch (IOException e) {
             throw new FrinkiacException("Couldn't serialise the caption payload.");
         }
-        String b64 = Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+        // URL-safe alphabet (- and _ instead of + and /) — the comic renderer's b64
+        // decoder rejects standard base64 with "error decoding comic b64" when the
+        // payload's byte alignment happens to produce a + or /.
+        String b64 = Base64.getUrlEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
         String encoded = URLEncoder.encode(b64, StandardCharsets.UTF_8);
         return getBytes("/comic/img?b64=" + encoded, MAX_IMAGE_BYTES);
     }

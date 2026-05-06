@@ -119,7 +119,10 @@ class FrinkiacClientTest {
         AtomicReference<String> capturedQuery = new AtomicReference<>();
         serveBytes("/comic/img", 200, fake, "image/jpeg", capturedQuery);
 
-        byte[] got = client.fetchCaptionedFrame("S04E12", 1279570, "Hello\nworld");
+        // Caption chosen so its standard-base64 form contains a "/" — this
+        // forces the URL-safe-encoder check below to actually have bite.
+        byte[] got = client.fetchCaptionedFrame("S04E12", 1279570,
+                "Hello? Hellodilly-odilly?\nworld");
         assertArrayEquals(fake, got);
 
         // Decode the b64 query and check the panel structure round-trips through Jackson.
@@ -127,7 +130,10 @@ class FrinkiacClientTest {
         assertNotNull(q, "expected /comic/img request to carry a query string");
         assertTrue(q.startsWith("b64="), () -> "got: " + q);
         String b64 = java.net.URLDecoder.decode(q.substring("b64=".length()), StandardCharsets.UTF_8);
-        byte[] json = Base64.getDecoder().decode(b64);
+        // URL-safe alphabet — the renderer rejects standard base64 ("+/").
+        assertTrue(!b64.contains("+") && !b64.contains("/"),
+                () -> "expected URL-safe base64, got: " + b64);
+        byte[] json = Base64.getUrlDecoder().decode(b64);
         ObjectMapper mapper = new ObjectMapper();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> panels = mapper.readValue(json, List.class);
@@ -143,7 +149,7 @@ class FrinkiacClientTest {
         // Overlay uses the compact, single-letter-keyed shape the renderer expects.
         // Verbose keys (text/font/size/...) are silently ignored and produce an uncaptioned image.
         Map<String, Object> overlay = overlays.get(0);
-        assertEquals("Hello\nworld", overlay.get("t"));
+        assertEquals("Hello? Hellodilly-odilly?\nworld", overlay.get("t"));
         assertEquals(CaptionOverlay.DEFAULT_FONT, overlay.get("f"));
         assertEquals(0, ((Number) overlay.get("s")).intValue());
         assertEquals("ffffffff", overlay.get("c"));
