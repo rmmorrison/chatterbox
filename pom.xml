@@ -55,6 +55,21 @@
             <version>${jooq.version}</version>
         </dependency>
 
+        <!--
+            jOOQ's runtime jar carries XJC-generated configuration classes that
+            reference JAXB annotations. We don't use XML config or pull in a
+            JAXB implementation, but javac still needs the annotation
+            interfaces on the compile classpath to silence ~200 "Cannot find
+            annotation method" warnings when those classes are transitively
+            loaded. Provided scope keeps the API out of the runtime uber-jar.
+        -->
+        <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+            <version>4.0.2</version>
+            <scope>provided</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
@@ -234,15 +249,39 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>${main.class}</mainClass>
                                 </transformer>
+                                <!--
+                                    Concatenate LICENSE / NOTICE files from third-party jars
+                                    into single entries instead of letting one randomly win.
+                                -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
                             </transformers>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
+                                        <!-- Signing artefacts: must be stripped or the JVM rejects the uber-jar. -->
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <!-- module-info.class (root and multi-release): JPMS metadata is meaningless in a flat uber-jar. -->
                                         <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
+                                        <!--
+                                            Source-jar manifests don't survive the merge anyway —
+                                            ManifestResourceTransformer writes a fresh one with the
+                                            main class. Stripping them up-front silences the noisy
+                                            "MANIFEST.MF defined in N jars" overlap warning.
+                                        -->
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <!-- Per-jar boilerplate that the LICENSE/NOTICE transformers above don't claim. -->
+                                        <exclude>META-INF/LICENSE.md</exclude>
+                                        <exclude>META-INF/LICENSE.txt</exclude>
+                                        <exclude>META-INF/NOTICE.md</exclude>
+                                        <exclude>META-INF/NOTICE.txt</exclude>
+                                        <exclude>META-INF/README*</exclude>
+                                        <exclude>META-INF/*-LICENSE</exclude>
+                                        <exclude>META-INF/*-NOTICE</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
