@@ -207,8 +207,10 @@ final class FrinkiacHandler extends ListenerAdapter {
         MessageEmbed publicEmbed = buildPublicEmbed(current);
         FileUpload upload = FileUpload.fromData(image, IMAGE_FILENAME);
         // Mention the requester in the message content — embed text doesn't render
-        // mentions as clickable links, so it has to live above the embed.
+        // mentions as clickable links, so it has to live above the embed. Sent
+        // @silent so the mention is a clickable reference without a notification.
         event.getMessageChannel().sendMessage(event.getUser().getAsMention())
+                .setSuppressedNotifications(true)
                 .addEmbeds(publicEmbed)
                 .addFiles(upload)
                 .queue(
