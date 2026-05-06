@@ -15,10 +15,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * In-memory holding tank for in-flight {@code /frinkiac} interactions.
  *
  * <p>A session is created when the slash command produces hits; subsequent
- * navigation, edit, and post buttons reference it by UUID. Per-frame caption
- * edits are kept in {@code captionOverrides} keyed by the {@link SearchResult}'s
- * {@code id}, so flipping back and forth with prev/next preserves what the user
- * typed.
+ * navigation, edit, and post buttons reference it by UUID. The caption text
+ * being rendered onto each frame is cached in {@code captionTexts} keyed by
+ * the {@link SearchResult}'s {@code id} — populated lazily from the
+ * on-screen subtitles on first render and replaced when the user edits it.
+ * Caching avoids re-fetching subtitles every time prev/next moves over a
+ * frame and lets the edit modal prefill without an extra network round-trip.
  *
  * <p>Entries expire after a few minutes; abandoned prompts are reaped on the
  * next access so a forgotten interaction doesn't leak.
@@ -48,7 +50,7 @@ final class FrinkiacSessions {
 
     void putCaption(UUID token, long resultId, String caption) {
         sessions.computeIfPresent(token, (k, s) -> {
-            s.captionOverrides.put(resultId, caption);
+            s.captionTexts.put(resultId, caption);
             return s;
         });
     }
@@ -63,9 +65,8 @@ final class FrinkiacSessions {
     }
 
     /**
-     * Mutable session state. {@code captionOverrides} is mutated in-place;
-     * {@code index} is replaced via {@link #withIndex(int)} to keep the record
-     * itself effectively-immutable for snapshot reads from {@link #get(UUID)}.
+     * Mutable session state. {@code captionTexts} is mutated in-place;
+     * {@code index} is updated via {@link #withIndex(int)}.
      */
     static final class Session {
         final long requestedBy;
@@ -73,17 +74,17 @@ final class FrinkiacSessions {
         final String query;
         final List<SearchResult> hits;
         private volatile int index;
-        final Map<Long, String> captionOverrides;
+        final Map<Long, String> captionTexts;
         final Instant createdAt;
 
         Session(long requestedBy, long channelId, String query, List<SearchResult> hits,
-                int index, Map<Long, String> captionOverrides, Instant createdAt) {
+                int index, Map<Long, String> captionTexts, Instant createdAt) {
             this.requestedBy = requestedBy;
             this.channelId = channelId;
             this.query = query;
             this.hits = hits;
             this.index = index;
-            this.captionOverrides = captionOverrides;
+            this.captionTexts = captionTexts;
             this.createdAt = createdAt;
         }
 
@@ -97,7 +98,7 @@ final class FrinkiacSessions {
         SearchResult current() { return hits.get(index); }
 
         Optional<String> captionFor(long resultId) {
-            return Optional.ofNullable(captionOverrides.get(resultId));
+            return Optional.ofNullable(captionTexts.get(resultId));
         }
     }
 }

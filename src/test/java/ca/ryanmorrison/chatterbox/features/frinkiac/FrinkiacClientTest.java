@@ -114,14 +114,6 @@ class FrinkiacClientTest {
     }
 
     @Test
-    void fetchFrameReturnsBytes() throws Exception {
-        byte[] fake = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1, 2, 3};
-        serveBytes("/img/S04E12/1279570/medium.jpg", 200, fake, "image/jpeg", null);
-        byte[] got = client.fetchFrame("s04e12", 1279570);
-        assertArrayEquals(fake, got);
-    }
-
-    @Test
     void fetchCaptionedFrameSendsBase64PanelJson() throws Exception {
         byte[] fake = new byte[]{(byte) 0xFF, (byte) 0xD8, 9, 9, 9};
         AtomicReference<String> capturedQuery = new AtomicReference<>();
@@ -148,14 +140,19 @@ class FrinkiacClientTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> overlays = (List<Map<String, Object>>) panel.get("o");
         assertEquals(1, overlays.size());
+        // Overlay uses the compact, single-letter-keyed shape the renderer expects.
+        // Verbose keys (text/font/size/...) are silently ignored and produce an uncaptioned image.
         Map<String, Object> overlay = overlays.get(0);
-        assertEquals("Hello\nworld", overlay.get("text"));
-        assertEquals(CaptionOverlay.DEFAULT_FONT, overlay.get("font"));
-        assertEquals(0, ((Number) overlay.get("size")).intValue());
+        assertEquals("Hello\nworld", overlay.get("t"));
+        assertEquals(CaptionOverlay.DEFAULT_FONT, overlay.get("f"));
+        assertEquals(0, ((Number) overlay.get("s")).intValue());
+        assertEquals("ffffffff", overlay.get("c"));
         assertEquals(50, ((Number) overlay.get("x")).intValue());
         assertEquals(97, ((Number) overlay.get("y")).intValue());
-        assertEquals("c", overlay.get("text_align"));
-        assertEquals(false, overlay.get("all_caps"));
+        assertEquals("c", overlay.get("a"));
+        // Optional fields (b/d/u) are omitted when unset.
+        assertTrue(!overlay.containsKey("b") && !overlay.containsKey("d") && !overlay.containsKey("u"),
+                () -> "expected optional fields to be omitted: " + overlay.keySet());
     }
 
     @Test

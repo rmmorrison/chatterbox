@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.frinkiac;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
@@ -12,9 +13,12 @@ import java.util.List;
  * one overlay is functionally equivalent to the old captioned-frame image, which
  * is all this feature needs.
  *
- * <p>Defaults mirror the values the SPA initialises new overlays with
- * ({@code window.defaultFont == "akbar"}, white text centred near the bottom
- * of the frame, auto-sized).
+ * <p>The SPA transforms each verbose overlay into a compact, single-letter-keyed
+ * shape before serialising; sending the verbose form to the renderer produces
+ * an uncaptioned image (the server silently ignores unknown fields). The
+ * mapping below mirrors that transformation: hex-stringified RGBA, 1-decimal
+ * coordinates, and the {@code start}/{@code end}/{@code all_caps} fields only
+ * emitted when set.
  */
 final class CaptionOverlay {
 
@@ -29,22 +33,23 @@ final class CaptionOverlay {
             @JsonProperty("o") List<Overlay> overlays) {}
 
     /**
-     * Overlay shape lifted from the SPA bundle. {@code size = 0} means
-     * auto-size, {@code text_align = "c"} centres horizontally,
-     * {@code (x, y) = (50, 97)} pins the text near the bottom of the frame
-     * (percent coordinates).
+     * Compact overlay shape the renderer actually consumes. {@code s = 0}
+     * means auto-size; {@code a = "c"} centres horizontally;
+     * {@code (x, y) = (50, 97)} pins text near the bottom of the frame
+     * (percent coordinates); {@code c} is an 8-char {@code rrggbbaa} hex string.
      */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     record Overlay(
-            @JsonProperty("text") String text,
-            @JsonProperty("font") String font,
-            @JsonProperty("size") int size,
-            @JsonProperty("color") int[] color,
-            @JsonProperty("x") int x,
-            @JsonProperty("y") int y,
-            @JsonProperty("text_align") String textAlign,
-            @JsonProperty("all_caps") boolean allCaps,
-            @JsonProperty("start") int start,
-            @JsonProperty("end") int end) {
+            @JsonProperty("t") String t,
+            @JsonProperty("f") String f,
+            @JsonProperty("s") double s,
+            @JsonProperty("c") String c,
+            @JsonProperty("x") double x,
+            @JsonProperty("y") double y,
+            @JsonProperty("a") String a,
+            @JsonProperty("b") Integer b,
+            @JsonProperty("d") Integer d,
+            @JsonProperty("u") Integer u) {
 
         /** Default-positioned, default-styled overlay carrying just the caption text. */
         static Overlay forText(String text) {
@@ -52,11 +57,10 @@ final class CaptionOverlay {
                     text,
                     DEFAULT_FONT,
                     0,
-                    new int[]{255, 255, 255, 255},
+                    "ffffffff",
                     50, 97,
                     "c",
-                    false,
-                    0, 0);
+                    null, null, null);
         }
     }
 

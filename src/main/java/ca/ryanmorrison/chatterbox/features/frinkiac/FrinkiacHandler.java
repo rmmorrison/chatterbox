@@ -163,8 +163,9 @@ final class FrinkiacHandler extends ListenerAdapter {
 
         FrinkiacSessions.Session s = sessionOpt.get();
         SearchResult current = s.current();
-        // Modal opens immediately; we can't defer & network here. Use whatever caption the
-        // session already knows about, falling back to the search result's content.
+        // The first render of this frame cached its on-screen subtitle here, so the
+        // modal can prefill without a network call. Fall back to the search hit's
+        // content if the user somehow opens this before the preview has rendered.
         String prefill = s.captionFor(current.id())
                 .orElseGet(() -> current.content() == null ? "" : current.content());
 
@@ -183,13 +184,12 @@ final class FrinkiacHandler extends ListenerAdapter {
 
         event.deferEdit().queue();
         SearchResult current = s.current();
-        Optional<String> override = s.captionFor(current.id());
+        String caption = s.captionFor(current.id())
+                .orElseGet(() -> current.content() == null ? "" : current.content());
 
         byte[] image;
         try {
-            image = override.isPresent()
-                    ? client.fetchCaptionedFrame(current.episode(), current.timestamp(), override.get())
-                    : client.fetchFrame(current.episode(), current.timestamp());
+            image = client.fetchCaptionedFrame(current.episode(), current.timestamp(), caption);
         } catch (FrinkiacClient.FrinkiacException e) {
             event.getHook().editOriginal("Couldn't fetch the image to post: " + e.getMessage())
                     .setEmbeds(List.of()).setComponents(List.of()).setAttachments().queue();
@@ -201,7 +201,7 @@ final class FrinkiacHandler extends ListenerAdapter {
             return;
         }
 
-        MessageEmbed publicEmbed = buildPublicEmbed(current, override.orElse(null));
+        MessageEmbed publicEmbed = buildPublicEmbed(current);
         FileUpload upload = FileUpload.fromData(image, IMAGE_FILENAME);
         event.getMessageChannel().sendMessageEmbeds(publicEmbed)
                 .addFiles(upload)
@@ -260,9 +260,11 @@ final class FrinkiacHandler extends ListenerAdapter {
 
     /**
      * Updates the ephemeral preview message to reflect the session's current
-     * frame. Fetches the on-screen subtitle context from {@code /api/caption}
-     * and the frame image (captioned if the user has edited it, plain
-     * otherwise) so the embed mirrors what Frinkiac's own UI would show.
+     * frame. Always renders the caption text into the image via Frinkiac's
+     * {@code /comic/img} endpoint so the user sees the same Simpsons-fonted
+     * frame they'll be posting. The text comes from a per-frame cache that's
+     * seeded with the on-screen subtitle on first render and replaced when
+     * the user edits it.
      */
     private void renderPreview(InteractionHook hook, UUID token) {
         var sessionOpt = sessions.get(token);
@@ -273,30 +275,11 @@ final class FrinkiacHandler extends ListenerAdapter {
         }
         FrinkiacSessions.Session s = sessionOpt.get();
         SearchResult current = s.current();
-        Optional<String> override = s.captionFor(current.id());
-
-        // Caption text: user override wins; otherwise join the subtitle lines that the
-        // website displays beneath this frame. Falls back to the search hit's own
-        // Content if /api/caption is unreachable.
-        String defaultCaption = current.content() == null ? "" : current.content();
-        String onScreenSubtitle = defaultCaption;
-        try {
-            CaptionResponse cap = client.caption(current.episode(), current.timestamp());
-            onScreenSubtitle = joinSubtitles(cap);
-            if (onScreenSubtitle.isEmpty()) onScreenSubtitle = defaultCaption;
-        } catch (FrinkiacClient.FrinkiacException e) {
-            // Non-fatal — fall back to the search hit's content. The image fetch
-            // below is the load-bearing call; if that's fine, the preview is still useful.
-            log.debug("Caption fetch failed: {}", e.getMessage());
-        } catch (RuntimeException e) {
-            log.warn("Unexpected caption fetch error", e);
-        }
+        String caption = resolveAndCacheCaption(token, s, current);
 
         byte[] image;
         try {
-            image = override.isPresent()
-                    ? client.fetchCaptionedFrame(current.episode(), current.timestamp(), override.get())
-                    : client.fetchFrame(current.episode(), current.timestamp());
+            image = client.fetchCaptionedFrame(current.episode(), current.timestamp(), caption);
         } catch (FrinkiacClient.FrinkiacException e) {
             hook.editOriginal("Couldn't fetch the frame image: " + e.getMessage())
                     .setEmbeds(List.of()).setComponents(List.of()).setAttachments().queue();
@@ -308,7 +291,7 @@ final class FrinkiacHandler extends ListenerAdapter {
             return;
         }
 
-        MessageEmbed embed = buildPreviewEmbed(s, onScreenSubtitle, override.orElse(null));
+        MessageEmbed embed = buildPreviewEmbed(s);
         FileUpload upload = FileUpload.fromData(image, IMAGE_FILENAME);
         hook.editOriginal("")
                 .setEmbeds(embed)
@@ -317,37 +300,54 @@ final class FrinkiacHandler extends ListenerAdapter {
                 .queue();
     }
 
-    private MessageEmbed buildPreviewEmbed(FrinkiacSessions.Session s, String onScreenSubtitle,
-                                           String override) {
-        SearchResult current = s.current();
-        String title = (current.title() == null ? "" : current.title()).trim();
-        String header = current.episode() + (title.isEmpty() ? "" : " — " + title);
+    /**
+     * Returns the caption text that should be rendered onto {@code current},
+     * caching it in the session on first lookup. The cached value is whatever
+     * the user has typed (if they've edited this frame) or the joined nearby
+     * subtitles from {@code /api/caption} (mirroring the website's display).
+     * Falls back to the search hit's own {@code Content} if the caption
+     * endpoint is unreachable.
+     */
+    private String resolveAndCacheCaption(UUID token, FrinkiacSessions.Session s, SearchResult current) {
+        var cached = s.captionFor(current.id());
+        if (cached.isPresent()) return cached.get();
 
-        EmbedBuilder eb = new EmbedBuilder().setColor(EMBED_COLOR).setTitle(header);
+        String fallback = current.content() == null ? "" : current.content();
+        String resolved = fallback;
+        try {
+            CaptionResponse cap = client.caption(current.episode(), current.timestamp());
+            String joined = joinSubtitles(cap);
+            if (!joined.isEmpty()) resolved = joined;
+        } catch (FrinkiacClient.FrinkiacException e) {
+            log.debug("Caption fetch failed: {}", e.getMessage());
+        } catch (RuntimeException e) {
+            log.warn("Unexpected caption fetch error", e);
+        }
+        sessions.putCaption(token, current.id(), resolved);
+        return resolved;
+    }
+
+    private MessageEmbed buildPreviewEmbed(FrinkiacSessions.Session s) {
+        EmbedBuilder eb = new EmbedBuilder().setColor(EMBED_COLOR).setTitle(headerFor(s.current()));
         eb.setImage("attachment://" + IMAGE_FILENAME);
-
-        if (!onScreenSubtitle.isBlank()) {
-            eb.addField("On-screen subtitle", truncate(onScreenSubtitle, 1024), false);
-        }
-        if (override != null) {
-            eb.addField("Your caption", truncate(override.isBlank() ? "(blank)" : override, 1024), false);
-        }
         eb.setFooter("Result " + (s.index() + 1) + " of " + s.hits.size()
                 + " · query: " + truncate(s.query, 80)
                 + " · via frinkiac.com");
         return eb.build();
     }
 
-    private MessageEmbed buildPublicEmbed(SearchResult current, String override) {
+    private MessageEmbed buildPublicEmbed(SearchResult current) {
+        return new EmbedBuilder()
+                .setColor(EMBED_COLOR)
+                .setTitle(headerFor(current))
+                .setImage("attachment://" + IMAGE_FILENAME)
+                .setFooter("via frinkiac.com")
+                .build();
+    }
+
+    private static String headerFor(SearchResult current) {
         String title = (current.title() == null ? "" : current.title()).trim();
-        String header = current.episode() + (title.isEmpty() ? "" : " — " + title);
-        EmbedBuilder eb = new EmbedBuilder().setColor(EMBED_COLOR).setTitle(header);
-        eb.setImage("attachment://" + IMAGE_FILENAME);
-        if (override != null && !override.isBlank()) {
-            eb.setDescription(truncate(override, 2000));
-        }
-        eb.setFooter("via frinkiac.com");
-        return eb.build();
+        return current.episode() + (title.isEmpty() ? "" : " — " + title);
     }
 
     private List<ActionRow> buildButtonRow(UUID token, FrinkiacSessions.Session s) {

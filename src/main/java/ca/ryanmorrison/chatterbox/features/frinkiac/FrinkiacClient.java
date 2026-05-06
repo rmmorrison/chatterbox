@@ -26,7 +26,6 @@ import java.util.Locale;
  * <ul>
  *   <li>{@code GET /api/search?q=...} → list of {@link SearchResult}</li>
  *   <li>{@code GET /api/caption?e=...&t=...} → {@link CaptionResponse}</li>
- *   <li>{@code GET /img/{episode}/{timestamp}/medium.jpg} → uncaptioned frame bytes</li>
  *   <li>{@code GET /comic/img?b64=...} → captioned frame bytes (single-panel comic)</li>
  * </ul>
  *
@@ -99,16 +98,6 @@ final class FrinkiacClient {
         } catch (IOException e1) {
             throw new FrinkiacException("Frinkiac returned an unexpected caption response.");
         }
-    }
-
-    /** Raw, uncaptioned medium-sized frame image. */
-    byte[] fetchFrame(String episode, long timestamp) throws FrinkiacException {
-        if (episode == null || episode.isBlank()) {
-            throw new FrinkiacException("Episode key is required.");
-        }
-        String path = "/img/" + episode.trim().toUpperCase(Locale.ROOT)
-                + "/" + timestamp + "/medium.jpg";
-        return getBytes(path, MAX_IMAGE_BYTES);
     }
 
     /**
