@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.shortener;
 
+import ca.ryanmorrison.chatterbox.config.runtime.ConfigKey;
 import ca.ryanmorrison.chatterbox.http.HttpRouter;
 import ca.ryanmorrison.chatterbox.module.InitContext;
 import ca.ryanmorrison.chatterbox.module.Module;
@@ -10,7 +11,6 @@ import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -31,12 +31,15 @@ import java.util.Set;
  * 410 Gone if the token has been soft-deleted, 404 if unknown. The bot-wide
  * HTTP server only binds when this (or another) module registers a route.
  *
- * <p>Auto-shortener: when {@code CHATTERBOX_AUTOSHORTEN_ENABLED} is true
- * (default), the module also installs an {@link AutoShortenListener} that
- * watches guild messages, replaces URLs longer than
- * {@code CHATTERBOX_AUTOSHORTEN_THRESHOLD} characters with short links, and
- * deletes the originals. Requires {@link net.dv8tion.jda.api.Permission#MESSAGE_MANAGE}
- * in each channel; without it the listener is a no-op.
+ * <p>Auto-shortener: an {@link AutoShortenListener} is always installed and
+ * consults {@link ca.ryanmorrison.chatterbox.config.runtime.RuntimeConfig}
+ * per-guild on every message. The keys it reads — {@code autoshorten.enabled}
+ * and {@code autoshorten.threshold} — are server-overridable via the
+ * {@code /config} slash command and fall back to {@code CHATTERBOX_AUTOSHORTEN_ENABLED}
+ * / {@code CHATTERBOX_AUTOSHORTEN_THRESHOLD} env vars (and finally
+ * {@code true} / {@code 160} defaults). Requires
+ * {@link net.dv8tion.jda.api.Permission#MESSAGE_MANAGE} in each channel;
+ * without it the listener is a no-op.
  *
  * <p>Configuration: the public-facing prefix used to construct the link
  * returned to Discord users is read lazily from
@@ -48,6 +51,18 @@ public final class ShortenerModule implements Module {
 
     static final String BASE_URL_ENV = "CHATTERBOX_SHORTENER_BASE_URL";
 
+    static final ConfigKey<Boolean> AUTOSHORTEN_ENABLED = ConfigKey.bool(
+            "autoshorten.enabled",
+            "CHATTERBOX_AUTOSHORTEN_ENABLED",
+            "true",
+            "When true, the bot replaces long HTTP(S) URLs in this server's messages with short links.");
+
+    static final ConfigKey<Integer> AUTOSHORTEN_THRESHOLD = ConfigKey.positiveInt(
+            "autoshorten.threshold",
+            "CHATTERBOX_AUTOSHORTEN_THRESHOLD",
+            "160",
+            "Minimum URL length (characters) before auto-shortening kicks in.");
+
     private ShortenerHandler handler;
     private ShortenerRedirectHandler redirectHandler;
     private AutoShortenListener autoShortenListener;
@@ -56,16 +71,19 @@ public final class ShortenerModule implements Module {
 
     /**
      * The auto-shortener needs to read message bodies, which requires the
-     * privileged {@code MESSAGE_CONTENT} intent. We always request it (and
-     * {@code GUILD_MESSAGES}) so toggling {@code CHATTERBOX_AUTOSHORTEN_ENABLED}
-     * doesn't require a re-deploy with intent changes — those toggles are
-     * commonly used as a "kill switch" in production. When disabled, the
-     * listener isn't registered and any received message events are dropped
-     * without action.
+     * privileged {@code MESSAGE_CONTENT} intent. Always request it (and
+     * {@code GUILD_MESSAGES}); toggling the {@code autoshorten.enabled} key
+     * just makes the listener short-circuit per-guild without re-deploying
+     * with different intents.
      */
     @Override
     public Set<GatewayIntent> intents() {
         return Set.of(GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT);
+    }
+
+    @Override
+    public List<ConfigKey<?>> configKeys() {
+        return List.of(AUTOSHORTEN_ENABLED, AUTOSHORTEN_THRESHOLD);
     }
 
     @Override
@@ -95,12 +113,7 @@ public final class ShortenerModule implements Module {
     @Override
     public List<EventListener> listeners(InitContext ctx) {
         ensureWired(ctx);
-        List<EventListener> result = new ArrayList<>(2);
-        result.add(handler);
-        if (autoShortenListener != null) {
-            result.add(autoShortenListener);
-        }
-        return result;
+        return List.of(handler, autoShortenListener);
     }
 
     @Override
@@ -115,12 +128,10 @@ public final class ShortenerModule implements Module {
         var tokenGenerator = new TokenGenerator();
         this.handler = new ShortenerHandler(repository, tokenGenerator, ShortenerModule::resolveBaseUrl);
         this.redirectHandler = new ShortenerRedirectHandler(repository);
-
-        var cfg = ctx.config().shortener();
-        if (cfg.autoShortenEnabled()) {
-            this.autoShortenListener = new AutoShortenListener(
-                    repository, tokenGenerator, ShortenerModule::resolveBaseUrl, cfg.autoShortenThreshold());
-        }
+        // Listener is registered unconditionally — per-guild enabled/threshold
+        // are looked up at message-receive time via RuntimeConfig.
+        this.autoShortenListener = new AutoShortenListener(
+                repository, tokenGenerator, ShortenerModule::resolveBaseUrl, ctx.runtimeConfig());
     }
 
     private static String resolveBaseUrl() {

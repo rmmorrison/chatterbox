@@ -2,6 +2,10 @@ package ca.ryanmorrison.chatterbox;
 
 import ca.ryanmorrison.chatterbox.commands.CommandSync;
 import ca.ryanmorrison.chatterbox.config.Config;
+import ca.ryanmorrison.chatterbox.config.runtime.ConfigKey;
+import ca.ryanmorrison.chatterbox.config.runtime.ConfigRegistry;
+import ca.ryanmorrison.chatterbox.config.runtime.RuntimeConfig;
+import ca.ryanmorrison.chatterbox.config.runtime.RuntimeConfigRepository;
 import ca.ryanmorrison.chatterbox.db.Database;
 import ca.ryanmorrison.chatterbox.db.Migrations;
 import ca.ryanmorrison.chatterbox.http.HttpServer;
@@ -42,12 +46,22 @@ public final class Bootstrap {
 
         Database database = new Database(config.database());
 
-        var migrationLocations = modules.stream()
-                .flatMap(m -> m.migrationLocations().stream())
-                .toList();
+        var migrationLocations = new ArrayList<String>();
+        modules.forEach(m -> migrationLocations.addAll(m.migrationLocations()));
+        // The /config slash command lives in a feature module too, but its
+        // table needs to exist regardless of whether that module loads (other
+        // modules read RuntimeConfig at message time). Bootstrap owns this
+        // migration so the runtime-config feature can never be silently absent.
+        migrationLocations.add("classpath:db/migration/runtime-config");
         Migrations.run(database.dataSource(), migrationLocations, database.dialect());
 
-        InitContext initCtx = new InitContextImpl(config, database.dsl());
+        var configKeys = new ArrayList<ConfigKey<?>>();
+        modules.forEach(m -> configKeys.addAll(m.configKeys()));
+        ConfigRegistry configRegistry = new ConfigRegistry(configKeys);
+        RuntimeConfig runtimeConfig = new RuntimeConfig(
+                configRegistry, new RuntimeConfigRepository(database.dsl()));
+
+        InitContext initCtx = new InitContextImpl(config, database.dsl(), runtimeConfig);
 
         HttpServer httpServer = new HttpServer(config.http().port());
 
@@ -87,7 +101,7 @@ public final class Bootstrap {
 
         commandSync.syncAll(jda);
 
-        ModuleContext ctx = new ModuleContextImpl(jda, config, database.dsl());
+        ModuleContext ctx = new ModuleContextImpl(jda, config, database.dsl(), runtimeConfig);
         for (Module m : modules) {
             try {
                 m.onStart(ctx);
@@ -119,8 +133,10 @@ public final class Bootstrap {
         }, "chatterbox-shutdown"));
     }
 
-    private record InitContextImpl(Config config, DSLContext database) implements InitContext {}
-    private record ModuleContextImpl(JDA jda, Config config, DSLContext database) implements ModuleContext {}
+    private record InitContextImpl(Config config, DSLContext database, RuntimeConfig runtimeConfig)
+            implements InitContext {}
+    private record ModuleContextImpl(JDA jda, Config config, DSLContext database, RuntimeConfig runtimeConfig)
+            implements ModuleContext {}
 
     private Bootstrap() {}
 }

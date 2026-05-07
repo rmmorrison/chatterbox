@@ -6,6 +6,7 @@ package ca.ryanmorrison.chatterbox.db.generated;
 
 import ca.ryanmorrison.chatterbox.db.generated.tables.AutoReplies;
 import ca.ryanmorrison.chatterbox.db.generated.tables.RssFeeds;
+import ca.ryanmorrison.chatterbox.db.generated.tables.RuntimeConfig;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShortenedUrls;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
@@ -26,6 +27,11 @@ public class Tables {
      * The table <code>public.rss_feeds</code>.
      */
     public static final RssFeeds RSS_FEEDS = RssFeeds.RSS_FEEDS;
+
+    /**
+     * The table <code>public.runtime_config</code>.
+     */
+    public static final RuntimeConfig RUNTIME_CONFIG = RuntimeConfig.RUNTIME_CONFIG;
 
     /**
      * The table <code>public.shortened_urls</code>.

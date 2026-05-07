@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.shortener;
 
+import ca.ryanmorrison.chatterbox.config.runtime.RuntimeConfig;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
@@ -38,8 +39,8 @@ import java.util.function.Supplier;
  * <h2>Skip conditions</h2>
  * The listener is a no-op when:
  * <ul>
- *   <li>{@code CHATTERBOX_AUTOSHORTEN_ENABLED} is false (handled by
- *       {@link ShortenerModule} not registering us).</li>
+ *   <li>The {@code autoshorten.enabled} key resolves to false for the guild
+ *       (per-guild override → env var → default; see {@link RuntimeConfig}).</li>
  *   <li>{@code CHATTERBOX_SHORTENER_BASE_URL} is unset — without it we
  *       can't construct the replacement URL.</li>
  *   <li>The bot lacks {@link Permission#MESSAGE_MANAGE} in the channel.
@@ -65,14 +66,14 @@ final class AutoShortenListener extends ListenerAdapter {
     private final ShortenerRepository repository;
     private final TokenGenerator tokenGenerator;
     private final Supplier<String> baseUrlSupplier;
-    private final int threshold;
+    private final RuntimeConfig runtimeConfig;
 
     AutoShortenListener(ShortenerRepository repository, TokenGenerator tokenGenerator,
-                        Supplier<String> baseUrlSupplier, int threshold) {
+                        Supplier<String> baseUrlSupplier, RuntimeConfig runtimeConfig) {
         this.repository = repository;
         this.tokenGenerator = tokenGenerator;
         this.baseUrlSupplier = baseUrlSupplier;
-        this.threshold = threshold;
+        this.runtimeConfig = runtimeConfig;
     }
 
     @Override
@@ -81,6 +82,10 @@ final class AutoShortenListener extends ListenerAdapter {
         if (event.getAuthor().isBot()) return;
         if (event.isWebhookMessage()) return;
         if (event.getAuthor().getIdLong() == event.getJDA().getSelfUser().getIdLong()) return;
+
+        long guildId = event.getGuild().getIdLong();
+        if (!runtimeConfig.bool(guildId, ShortenerModule.AUTOSHORTEN_ENABLED)) return;
+        int threshold = runtimeConfig.integer(guildId, ShortenerModule.AUTOSHORTEN_THRESHOLD);
 
         Message message = event.getMessage();
         String content = message.getContentRaw();

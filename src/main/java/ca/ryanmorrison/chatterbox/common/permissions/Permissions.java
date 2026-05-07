@@ -16,6 +16,8 @@ public final class Permissions {
             "This command is only available in servers.";
     private static final String MISSING_MANAGE_MESSAGES_MESSAGE =
             "You need the **Manage Messages** permission in this channel to do that.";
+    private static final String MISSING_ADMINISTRATOR_MESSAGE =
+            "You need the **Administrator** permission in this server to do that.";
 
     private Permissions() {}
 
@@ -57,6 +59,24 @@ public final class Permissions {
         }
         if (!member.hasPermission(channel, Permission.MESSAGE_MANAGE)) {
             event.reply(MISSING_MANAGE_MESSAGES_MESSAGE).setEphemeral(true).queue();
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Gate for guild-administrator-only commands. The guild owner always
+     * passes (Discord grants them every permission implicitly), so this is
+     * the union "owner OR administrator".
+     */
+    public static boolean requireAdministrator(IReplyCallback event) {
+        Member member = event.getMember();
+        if (member == null) {
+            event.reply(NOT_A_GUILD_MESSAGE).setEphemeral(true).queue();
+            return false;
+        }
+        if (!member.hasPermission(Permission.ADMINISTRATOR)) {
+            event.reply(MISSING_ADMINISTRATOR_MESSAGE).setEphemeral(true).queue();
             return false;
         }
         return true;
