@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.module;
 
+import ca.ryanmorrison.chatterbox.config.runtime.ConfigKey;
 import ca.ryanmorrison.chatterbox.http.HttpRouter;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.EventListener;
@@ -69,6 +70,17 @@ public interface Module {
      * <p>Use timestamp-based version numbers to avoid collisions across modules.
      */
     default List<String> migrationLocations() { return List.of(); }
+
+    /**
+     * Runtime-overridable configuration keys this module owns. The bootstrap
+     * unions these across modules into a {@link ca.ryanmorrison.chatterbox.config.runtime.ConfigRegistry}
+     * which backs the {@code /config} slash command and per-guild lookups.
+     *
+     * <p>Each key declares its env-var fallback and built-in default; reads go
+     * through {@link ca.ryanmorrison.chatterbox.config.runtime.RuntimeConfig}
+     * which checks per-guild overrides first, then the env var, then the default.
+     */
+    default List<ConfigKey<?>> configKeys() { return List.of(); }
 
     /**
      * HTTP routes the module exposes via the bot-wide Javalin server. The

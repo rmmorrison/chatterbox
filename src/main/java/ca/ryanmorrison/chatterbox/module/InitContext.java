@@ -1,6 +1,7 @@
 package ca.ryanmorrison.chatterbox.module;
 
 import ca.ryanmorrison.chatterbox.config.Config;
+import ca.ryanmorrison.chatterbox.config.runtime.RuntimeConfig;
 import org.jooq.DSLContext;
 
 /**
@@ -12,4 +13,5 @@ import org.jooq.DSLContext;
 public interface InitContext {
     Config config();
     DSLContext database();
+    RuntimeConfig runtimeConfig();
 }

@@ -400,6 +400,12 @@ guild messages and quietly replaces the user's message with one of its own
 when any URL in the body exceeds `CHATTERBOX_AUTOSHORTEN_THRESHOLD`
 characters (default `160`). Defaults err on the side of leaving URLs alone.
 
+Both values are also overridable per-server at runtime — administrators
+can `/config set key:autoshorten.enabled value:false` (or
+`autoshorten.threshold`) to deviate from the deployment-wide defaults.
+Lookup order: per-server override → environment variable → built-in
+default. See [`/config`](#config) for the full command.
+
 Behaviour:
 
 - **Skip conditions**: bot/system/webhook/self messages, DMs, messages
@@ -683,6 +689,37 @@ Discord's 2000-char message cap), and mentions in the input are
 suppressed so a hostile `/format text:"@everyone hi"` can't ping
 anyone. Adding a new style is one enum line — see
 [`TextStyle.java`](src/main/java/ca/ryanmorrison/chatterbox/features/format/TextStyle.java).
+
+### Config
+
+`/config <list|get|set|unset>` — per-server overrides for runtime-mutable
+configuration values. Guild-only and gated on the **Administrator**
+permission (the guild owner passes implicitly).
+
+Subcommands:
+
+- **`list`** — every registered key with its current effective value and
+  the source it came from (`server` override, `env` var, or built-in
+  `default`).
+- **`get key:<name>`** — focused view of one key, including its default
+  and the env var name it falls back to.
+- **`set key:<name> value:<text>`** — validates the value against the
+  key's type and persists a per-server override. Invalid input (wrong
+  type, out-of-range) is rejected with a user-facing message.
+- **`unset key:<name>`** — drops the per-server override; the value
+  falls back to the env var (if set) or the built-in default.
+
+Lookup order, bottom-up: built-in default → environment variable →
+per-server override. Modules contribute their runtime-overridable keys
+via `Module#configKeys()`; the bot bundles them into a registry that
+backs the autocomplete on `key:`.
+
+Currently registered keys:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `autoshorten.enabled` | boolean | Enable auto-shortening of long URLs in this server. |
+| `autoshorten.threshold` | positive integer | Minimum URL length before auto-shortening kicks in. |
 
 ### Emote
 
