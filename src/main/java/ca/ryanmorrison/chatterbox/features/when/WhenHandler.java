@@ -122,25 +122,31 @@ final class WhenHandler extends ListenerAdapter {
     /**
      * Builds the user-facing reply.
      *
+     * <p>When {@code displayZone} is present (caller passed {@code in:}),
+     * the bold wall-clock literal in that zone leads — that's the answer
+     * they explicitly asked about — followed by the Discord timestamp
+     * markdown for the same instant (which Discord auto-localizes per
+     * viewer). Leading with the literal avoids the earlier surprise where
+     * the {@code <t:F>} appeared first in the output but rendered in the
+     * viewer's locale, looking like a contradicting answer to the bold
+     * line below it.
+     *
      * <p>When {@code displayZone} is empty, the reply is just the Discord
-     * timestamp markdown — Discord auto-localizes {@code <t:UNIX:F>} to
-     * each viewer's locale, so a wall-clock literal in the caller's own
-     * zone would just be redundant noise. When {@code displayZone} is
-     * present (caller passed {@code in:}), the literal renders in that
-     * zone — the explicit "show me what this is over there" path.
+     * timestamp markdown — there's no other zone to contrast against, so
+     * nothing extra to render.
      *
      * <pre>
      *   no display: &lt;t:UNIX:F&gt; (&lt;t:UNIX:R&gt;)
-     *   display zone: &lt;t:UNIX:F&gt; (&lt;t:UNIX:R&gt;) in Asia/Kolkata → **Saturday, May 9, 2026 at 9:30 PM**
+     *   display set: **Sunday, May 10, 2026 at 9:00 AM** in Europe/London — &lt;t:UNIX:F&gt; (&lt;t:UNIX:R&gt;)
      * </pre>
      */
     static String formatReply(Optional<ZoneId> displayZone, Instant instant) {
         long epoch = instant.getEpochSecond();
-        String base = "<t:" + epoch + ":F> (<t:" + epoch + ":R>)";
-        if (displayZone.isEmpty()) return base;
+        String discord = "<t:" + epoch + ":F> (<t:" + epoch + ":R>)";
+        if (displayZone.isEmpty()) return discord;
         ZoneId zone = displayZone.get();
         String literal = LITERAL_FORMAT.format(instant.atZone(zone));
-        return base + " in " + zone.getId() + " → **" + literal + "**";
+        return "**" + literal + "** in " + zone.getId() + " — " + discord;
     }
 
     private static String stringOption(SlashCommandInteractionEvent event, String name) {

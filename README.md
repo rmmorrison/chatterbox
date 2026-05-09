@@ -807,8 +807,12 @@ inputs (`now`, `in N units`) succeed without a stored timezone.
 
 Output:
 
-- With `in:` provided:
-  `<t:UNIX:F> (<t:UNIX:R>) in <zone> → **wall-clock in that zone**`
+- With `in:` provided: bold wall-clock literal in that zone leads, then
+  the Discord timestamp markdown for the same instant —
+  `**Sunday, May 10, 2026 at 9:00 AM** in Europe/London — <t:UNIX:F> (<t:UNIX:R>)`.
+  Leading with the literal makes the answer-to-the-explicit-question the
+  first thing on screen; the Discord timestamp follows for sharing
+  (Discord renders it in each viewer's own locale).
 - Without `in:`: just `<t:UNIX:F> (<t:UNIX:R>)` — Discord auto-localizes
   for each viewer.
 

@@ -29,13 +29,15 @@ class WhenHandlerTest {
     }
 
     @Test
-    void replyWithDisplayZoneAppendsLiteral() {
+    void replyWithDisplayZoneLeadsWithLiteralThenDiscordTimestamp() {
         Instant moment = Instant.parse("2026-12-25T17:00:00Z");
         String msg = WhenHandler.formatReply(Optional.of(ZoneId.of("America/Toronto")), moment);
 
         long epoch = moment.getEpochSecond();
-        assertTrue(msg.startsWith("<t:" + epoch + ":F> (<t:" + epoch + ":R>) in America/Toronto → **"),
-                () -> msg);
+        // Bold literal leads, then em-dash, then the Discord timestamp.
+        assertTrue(msg.startsWith("**"), () -> msg);
+        assertTrue(msg.contains(" in America/Toronto — <t:" + epoch + ":F>"), () -> msg);
+        assertTrue(msg.endsWith("(<t:" + epoch + ":R>)"), () -> msg);
     }
 
     @Test
@@ -48,20 +50,18 @@ class WhenHandlerTest {
     }
 
     /**
-     * The bug-fix scenario, end-to-end of the rendering step. Caller in
-     * Toronto with stored zone, in:Asia/Kolkata, "tomorrow 12pm" at Friday
-     * 11pm EDT resolves (in {@link TimeParserTest}) to
-     * {@code 2026-05-09T16:00:00Z} (Saturday noon Toronto time). With
-     * displayZone=Kolkata, the literal is Saturday 21:30 IST.
+     * The user-reported confusion case. Sunday May 10 9:00 AM in Europe/London
+     * (epoch 1778400000) — the literal leads now so the answer to "9 AM London"
+     * isn't buried after the Discord timestamp that renders in viewer locale.
      */
     @Test
-    void bugFixSaturdayNoonTorontoRendersAsSaturday930PmInKolkata() {
-        Instant moment = Instant.parse("2026-05-09T16:00:00Z");
-        String msg = WhenHandler.formatReply(Optional.of(ZoneId.of("Asia/Kolkata")), moment);
-        // Epoch second hand-verified: Instant.parse("2026-05-09T16:00:00Z").getEpochSecond() == 1778342400.
+    void bugFixSundayNineAmInLondon() {
+        Instant moment = Instant.parse("2026-05-10T08:00:00Z"); // = Sun May 10 09:00 BST
+        String msg = WhenHandler.formatReply(Optional.of(ZoneId.of("Europe/London")), moment);
+        // Hand-verified: Instant.parse("2026-05-10T08:00:00Z").getEpochSecond() == 1778400000.
         assertEquals(
-                "<t:1778342400:F> (<t:1778342400:R>) in Asia/Kolkata "
-                        + "→ **Saturday, May 9, 2026 at 9:30 PM**",
+                "**Sunday, May 10, 2026 at 9:00 AM** in Europe/London — "
+                        + "<t:1778400000:F> (<t:1778400000:R>)",
                 msg);
     }
 
@@ -97,7 +97,7 @@ class WhenHandlerTest {
         // Epoch second 1 = 1970-01-01 00:00:01 UTC.
         String msg = WhenHandler.formatReply(Optional.of(ZoneId.of("UTC")), Instant.ofEpochSecond(1L));
         assertEquals(
-                "<t:1:F> (<t:1:R>) in UTC → **Thursday, January 1, 1970 at 12:00 AM**",
+                "**Thursday, January 1, 1970 at 12:00 AM** in UTC — <t:1:F> (<t:1:R>)",
                 msg);
     }
 }
