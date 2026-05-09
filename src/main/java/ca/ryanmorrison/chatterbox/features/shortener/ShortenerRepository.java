@@ -94,6 +94,21 @@ final class ShortenerRepository {
                 .execute();
     }
 
+    /**
+     * Atomically bumps {@code click_count} and refreshes {@code last_clicked_at}
+     * for {@code id}. Returns the number of rows updated (0 if the id is gone,
+     * which the caller treats as a silent no-op — analytics never block a
+     * redirect). The increment is a single UPDATE so concurrent clicks
+     * stay correct without explicit locking.
+     */
+    int incrementClicks(long id, OffsetDateTime when) {
+        return dsl.update(SHORTENED_URLS)
+                .set(SHORTENED_URLS.CLICK_COUNT, SHORTENED_URLS.CLICK_COUNT.plus(1L))
+                .set(SHORTENED_URLS.LAST_CLICKED_AT, when)
+                .where(SHORTENED_URLS.ID.eq(id))
+                .execute();
+    }
+
     private static ShortenedUrl toShortenedUrl(Record r) {
         return new ShortenedUrl(
                 r.get(SHORTENED_URLS.ID),
@@ -102,6 +117,8 @@ final class ShortenerRepository {
                 r.get(SHORTENED_URLS.CREATED_BY),
                 r.get(SHORTENED_URLS.CREATED_AT),
                 Optional.ofNullable(r.get(SHORTENED_URLS.DELETED_AT)),
-                Optional.ofNullable(r.get(SHORTENED_URLS.DELETED_BY)));
+                Optional.ofNullable(r.get(SHORTENED_URLS.DELETED_BY)),
+                r.get(SHORTENED_URLS.CLICK_COUNT),
+                Optional.ofNullable(r.get(SHORTENED_URLS.LAST_CLICKED_AT)));
     }
 }

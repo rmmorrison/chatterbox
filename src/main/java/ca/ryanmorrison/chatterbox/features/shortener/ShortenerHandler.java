@@ -42,6 +42,7 @@ final class ShortenerHandler extends ListenerAdapter {
     static final String SUB_CREATE = "create";
     static final String SUB_DELETE = "delete";
     static final String SUB_PEEK = "peek";
+    static final String SUB_STATS = "stats";
     static final String OPTION_URL = "url";
     static final String OPTION_TARGET = "target";
     static final String OPTION_SHARE = "share";
@@ -79,6 +80,7 @@ final class ShortenerHandler extends ListenerAdapter {
             case SUB_CREATE -> handleCreate(event);
             case SUB_DELETE -> handleDelete(event);
             case SUB_PEEK   -> handlePeek(event);
+            case SUB_STATS  -> handleStats(event);
             default -> { /* unknown subcommand — silently ignore */ }
         }
     }
@@ -205,6 +207,36 @@ final class ShortenerHandler extends ListenerAdapter {
         event.editMessage("Cancelled.").setEmbeds().setComponents().queue();
     }
 
+    // -- stats --------------------------------------------------------------
+
+    /**
+     * Read-only view of click analytics for one shortened URL. Anyone can
+     * call it (counts aren't sensitive); replies are ephemeral so a quick
+     * stats check doesn't clutter the channel. Stats are visible for both
+     * live and soft-deleted entries — useful when an admin wants to know
+     * how popular something was before they nuked it.
+     */
+    private void handleStats(SlashCommandInteractionEvent event) {
+        String baseUrl = resolveBaseUrlOrReply(event);
+        if (baseUrl == null) return;
+
+        String target = optionString(event, OPTION_TARGET);
+        Optional<String> token = TargetParser.extractToken(target, baseUrl);
+        if (token.isEmpty()) {
+            event.reply(INVALID_TARGET_MESSAGE).setEphemeral(true).queue();
+            return;
+        }
+
+        // Including-deleted: stats stay queryable post-soft-delete (the
+        // delete confirmation embed already shows that the link is gone).
+        Optional<ShortenedUrl> match = repository.findByTokenIncludingDeleted(token.get());
+        if (match.isEmpty()) {
+            event.reply(NOT_FOUND_MESSAGE).setEphemeral(true).queue();
+            return;
+        }
+        event.replyEmbeds(buildStatsEmbed(match.get(), baseUrl)).setEphemeral(true).queue();
+    }
+
     // -- peek ---------------------------------------------------------------
 
     private void handlePeek(SlashCommandInteractionEvent event) {
@@ -268,5 +300,33 @@ final class ShortenerHandler extends ListenerAdapter {
                 .addField("Created", "<t:" + createdAtSeconds + ":f> (<t:" + createdAtSeconds + ":R>)", true)
                 .setFooter("This cannot be undone. The token will not be reissued.")
                 .build();
+    }
+
+    static net.dv8tion.jda.api.entities.MessageEmbed buildStatsEmbed(ShortenedUrl entry, String baseUrl) {
+        long createdAtSeconds = entry.createdAt().toEpochSecond();
+        EmbedBuilder eb = new EmbedBuilder()
+                .setTitle("Click stats: " + entry.token())
+                .setColor(entry.isDeleted() ? 0x90A4AE : 0x4F8DDC)
+                .addField("Short URL", "`" + buildShortUrl(baseUrl, entry.token()) + "`", false)
+                .addField("Destination", entry.url(), false)
+                .addField("Clicks", String.valueOf(entry.clickCount()), true)
+                .addField("Created",
+                        "<t:" + createdAtSeconds + ":R> by <@" + entry.createdBy() + ">",
+                        true);
+        eb.addField("Last clicked",
+                entry.lastClickedAt()
+                        .map(ts -> "<t:" + ts.toEpochSecond() + ":R>")
+                        .orElse("*Never*"),
+                true);
+        if (entry.isDeleted()) {
+            String deletedLine = entry.deletedAt()
+                    .map(ts -> "<t:" + ts.toEpochSecond() + ":R>")
+                    .orElse("(unknown)");
+            String deleter = entry.deletedBy()
+                    .map(id -> " by <@" + id + ">")
+                    .orElse("");
+            eb.addField("Deleted", deletedLine + deleter, false);
+        }
+        return eb.build();
     }
 }

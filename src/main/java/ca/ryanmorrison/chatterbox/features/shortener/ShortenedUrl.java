@@ -10,7 +10,9 @@ record ShortenedUrl(
         long createdBy,
         OffsetDateTime createdAt,
         Optional<OffsetDateTime> deletedAt,
-        Optional<Long> deletedBy) {
+        Optional<Long> deletedBy,
+        long clickCount,
+        Optional<OffsetDateTime> lastClickedAt) {
 
     boolean isDeleted() {
         return deletedAt.isPresent();

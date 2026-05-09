@@ -107,7 +107,11 @@ public final class ShortenerModule implements Module {
                                 .addOption(OptionType.STRING, ShortenerHandler.OPTION_TARGET,
                                         "Full short URL or 6-character short code.", true)
                                 .addOption(OptionType.BOOLEAN, ShortenerHandler.OPTION_SHARE,
-                                        "Post the result to the channel instead of just to you.", false)));
+                                        "Post the result to the channel instead of just to you.", false),
+                        new SubcommandData(ShortenerHandler.SUB_STATS,
+                                "Show click stats for a short URL.")
+                                .addOption(OptionType.STRING, ShortenerHandler.OPTION_TARGET,
+                                        "Full short URL or 6-character short code.", true)));
     }
 
     @Override

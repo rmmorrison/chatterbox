@@ -380,6 +380,15 @@ it — useful for vetting a suspicious link before clicking. Replies
 ephemerally by default; pass `share:true` to post the result to the channel
 instead (e.g. so a moderator can warn others publicly).
 
+#### `/shorten stats target:<URL or token>`
+
+Available to everyone. Replies ephemerally with click stats for a short
+URL: total click count, last-click timestamp (rendered as a Discord
+relative timestamp), creator, creation time, and — if the row was
+soft-deleted — the deleter and deletion time. Stats remain queryable for
+soft-deleted entries so admins can see what was popular before takedown.
+Accepts either the bare 6-character token or the full short URL.
+
 #### `GET /{token}`
 
 Public endpoint exposed via Javalin. Outcomes:
@@ -387,8 +396,12 @@ Public endpoint exposed via Javalin. Outcomes:
 - **Live token** — `301 Moved Permanently` with the original URL in the
   `Location` header plus a tiny HTML body carrying an anchor (matches
   bit.ly's shape so Discord's preview crawler unfurls it correctly).
+  Each successful redirect atomically increments the row's `click_count`
+  and refreshes `last_clicked_at`. Counter bumps are best-effort: if the
+  database is briefly unavailable the redirect still completes.
 - **Soft-deleted token** — `410 Gone`. Tokens are never reissued, so this
   is a permanent state; 410 communicates that more accurately than 404.
+  410s do not increment the counter.
 - **Unknown token** — `404 Not Found`.
 
 Token lookups are case-insensitive.
