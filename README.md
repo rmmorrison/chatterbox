@@ -956,3 +956,35 @@ errors come through as "HTTP N", and timeouts/network errors produce
   to get through.
 
 No SSRF surface: hostname is hard-coded `query1.finance.yahoo.com`.
+
+### Trivia
+
+`/trivia [difficulty:easy|medium|hard]` — pulls one random question from
+[Open Trivia DB](https://opentdb.com) and posts it publicly with answer
+buttons. **First user to click the correct answer wins.** No API key
+required.
+
+How a round plays:
+
+- The bot posts an embed with the question, lettered choices (A/B/C/D
+  for multiple-choice, or `True` / `False` for boolean questions), and
+  one button per choice. Choices are shuffled per round so the correct
+  position varies; button `custom_id`s encode only the round id and the
+  zero-based choice index, never the answer.
+- Anyone can click. The first correct click resolves the round: the
+  message edits to a green embed showing the correct answer and
+  mentioning the winner; the buttons are removed.
+- A wrong click locks that user out of the round (one shot each) and
+  gets an ephemeral "❌ Not quite!" reply. Other users can keep trying.
+- If 60 seconds pass with no correct answer, the round auto-resolves:
+  the embed turns grey and reveals the answer with a "no winner" note.
+
+State is in-memory only — there is no leaderboard or persistence. Rounds
+in flight at the moment of a bot restart are forgotten; clicks on the
+orphaned buttons get a polite "this round has ended" reply.
+
+Failure modes map to ephemeral text replies. Open Trivia DB enforces a
+soft rate limit of 1 request per ~5 seconds per IP; breaches surface as
+"Open Trivia DB is rate-limiting us. Try again in a few seconds." A
+filter that matches no questions (e.g. an unusual category combination
+in a future revision) returns "No trivia questions matched that filter".
