@@ -10,6 +10,7 @@ import ca.ryanmorrison.chatterbox.db.generated.tables.RuntimeConfig;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShortenedUrls;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
+import ca.ryanmorrison.chatterbox.db.generated.tables.UserTimezones;
 
 import java.util.Arrays;
 import java.util.List;
@@ -64,6 +65,11 @@ public class Public extends SchemaImpl {
     public final Shouts SHOUTS = Shouts.SHOUTS;
 
     /**
+     * The table <code>public.user_timezones</code>.
+     */
+    public final UserTimezones USER_TIMEZONES = UserTimezones.USER_TIMEZONES;
+
+    /**
      * No further instances allowed
      */
     private Public() {
@@ -84,7 +90,8 @@ public class Public extends SchemaImpl {
             RuntimeConfig.RUNTIME_CONFIG,
             ShortenedUrls.SHORTENED_URLS,
             ShoutHistory.SHOUT_HISTORY,
-            Shouts.SHOUTS
+            Shouts.SHOUTS,
+            UserTimezones.USER_TIMEZONES
         );
     }
 }

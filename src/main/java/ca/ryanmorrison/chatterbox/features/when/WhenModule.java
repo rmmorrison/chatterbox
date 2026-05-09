@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.when;
 
+import ca.ryanmorrison.chatterbox.features.timezone.UserTimezonesRepository;
 import ca.ryanmorrison.chatterbox.module.InitContext;
 import ca.ryanmorrison.chatterbox.module.Module;
 import net.dv8tion.jda.api.hooks.EventListener;
@@ -53,6 +54,6 @@ public final class WhenModule implements Module {
 
     @Override
     public List<EventListener> listeners(InitContext ctx) {
-        return List.of(new WhenHandler());
+        return List.of(new WhenHandler(new UserTimezonesRepository(ctx.database())));
     }
 }

@@ -10,12 +10,14 @@ import ca.ryanmorrison.chatterbox.db.generated.tables.RuntimeConfig;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShortenedUrls;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
+import ca.ryanmorrison.chatterbox.db.generated.tables.UserTimezones;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.AutoRepliesRecord;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.RssFeedsRecord;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.RuntimeConfigRecord;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.ShortenedUrlsRecord;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.ShoutHistoryRecord;
 import ca.ryanmorrison.chatterbox.db.generated.tables.records.ShoutsRecord;
+import ca.ryanmorrison.chatterbox.db.generated.tables.records.UserTimezonesRecord;
 
 import org.jooq.ForeignKey;
 import org.jooq.TableField;
@@ -43,6 +45,7 @@ public class Keys {
     public static final UniqueKey<ShoutHistoryRecord> SHOUT_HISTORY_PKEY = Internal.createUniqueKey(ShoutHistory.SHOUT_HISTORY, DSL.name("shout_history_pkey"), new TableField[] { ShoutHistory.SHOUT_HISTORY.ID }, true);
     public static final UniqueKey<ShoutsRecord> SHOUTS_MESSAGE_ID_KEY = Internal.createUniqueKey(Shouts.SHOUTS, DSL.name("shouts_message_id_key"), new TableField[] { Shouts.SHOUTS.MESSAGE_ID }, true);
     public static final UniqueKey<ShoutsRecord> SHOUTS_PKEY = Internal.createUniqueKey(Shouts.SHOUTS, DSL.name("shouts_pkey"), new TableField[] { Shouts.SHOUTS.ID }, true);
+    public static final UniqueKey<UserTimezonesRecord> USER_TIMEZONES_PKEY = Internal.createUniqueKey(UserTimezones.USER_TIMEZONES, DSL.name("user_timezones_pkey"), new TableField[] { UserTimezones.USER_TIMEZONES.USER_ID }, true);
 
     // -------------------------------------------------------------------------
     // FOREIGN KEY definitions

@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.when;
 
+import ca.ryanmorrison.chatterbox.features.timezone.UserTimezonesRepository;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -14,30 +15,37 @@ import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Handles {@code /when at:<text> in:<zone> [private:<bool>]}.
  *
- * <p>Parses {@code at:} via {@link TimeParser} in the timezone resolved
- * from {@code in:}, then renders the resolved instant as Discord's
- * {@code <t:UNIX:STYLE>} markdown — once in long form ({@code F}) and
- * once relative ({@code R}) — so every viewer sees both the absolute
- * time in their local zone and how far away it is.
+ * <p>Parses {@code at:} via {@link TimeParser} using the caller's stored
+ * timezone (from {@code /timezone set}, looked up via
+ * {@link UserTimezonesRepository}) as the calendar reference and the
+ * {@code in:} option as the wall-clock zone. Calendar-relative inputs
+ * ({@code today}, {@code tomorrow}, weekday names, bare times) require
+ * the caller to have set their timezone first; without it we'd have to
+ * guess and would surprise the caller (the original
+ * "tomorrow in Kolkata picks a day later than I meant" bug).
  *
- * <p>Public reply by default; the whole point is to share. {@code private:true}
- * keeps the result ephemeral for users who want to preview the parse before
- * sharing. Mentions in either input field are suppressed.
+ * <p>The reply is a single line that reads as a sentence: viewer-locale
+ * Discord timestamps first (which, for the caller, IS their wall clock —
+ * Discord auto-renders {@code <t:UNIX:F>} in viewer-local time), then
+ * the same instant expressed in the requested zone.
  */
 final class WhenHandler extends ListenerAdapter {
 
+    private final UserTimezonesRepository userTimezones;
     private final Clock clock;
 
-    WhenHandler() {
-        this(Clock.systemUTC());
+    WhenHandler(UserTimezonesRepository userTimezones) {
+        this(userTimezones, Clock.systemUTC());
     }
 
     /** Test seam — lets unit tests pin "now" with a fixed clock. */
-    WhenHandler(Clock clock) {
+    WhenHandler(UserTimezonesRepository userTimezones, Clock clock) {
+        this.userTimezones = userTimezones;
         this.clock = clock;
     }
 
@@ -54,25 +62,29 @@ final class WhenHandler extends ListenerAdapter {
             return;
         }
 
-        var resolvedZone = Timezones.resolve(zone);
-        if (resolvedZone.isEmpty()) {
+        Optional<ZoneId> targetZone = Timezones.resolve(zone);
+        if (targetZone.isEmpty()) {
             event.reply("`" + zone + "` isn't a valid timezone. Pick one from the autocomplete, "
                             + "or pass an IANA id like `America/Toronto` or an offset like `+05:30`.")
                     .setEphemeral(true).queue();
             return;
         }
 
-        TimeParser.Result parsed = TimeParser.parse(at, resolvedZone.get(), clock);
-        if (parsed instanceof TimeParser.Result.Failed(String reason)) {
-            event.reply(reason).setEphemeral(true).queue();
-            return;
-        }
+        Optional<ZoneId> callerZone = userTimezones.find(event.getUser().getIdLong())
+                .flatMap(Timezones::resolve);
 
-        Instant instant = ((TimeParser.Result.Ok) parsed).instant();
-        event.reply(formatReply(resolvedZone.get(), instant))
-                .setEphemeral(ephemeral)
-                .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
-                .queue();
+        TimeParser.Result parsed = TimeParser.parse(at, callerZone, targetZone.get(), clock);
+        switch (parsed) {
+            case TimeParser.Result.Failed(String reason) ->
+                    event.reply(reason).setEphemeral(true).queue();
+            case TimeParser.Result.RequiresCallerZone(String reason) ->
+                    event.reply(reason).setEphemeral(true).queue();
+            case TimeParser.Result.Ok(Instant instant) ->
+                    event.reply(formatReply(targetZone.get(), instant))
+                            .setEphemeral(ephemeral)
+                            .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
+                            .queue();
+        }
     }
 
     @Override
@@ -102,9 +114,7 @@ final class WhenHandler extends ListenerAdapter {
      * viewer's locale (so for the caller they're effectively "your time"),
      * and the bold trailing wall-clock is the same moment expressed in
      * the requested zone. Reading left-to-right works as a sentence:
-     * "this moment [your view] in &lt;zone&gt; is [their wall clock]." That
-     * eliminates the ambiguity of the earlier two-clock layout where the
-     * caller had to figure out which clock was which.
+     * "this moment [your view] in &lt;zone&gt; is [their wall clock]."
      */
     static String formatReply(ZoneId zone, Instant instant) {
         long epoch = instant.getEpochSecond();

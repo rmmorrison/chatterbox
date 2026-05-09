@@ -12,3 +12,4 @@ ca.ryanmorrison.chatterbox.features.config.ConfigModule
 ca.ryanmorrison.chatterbox.features.frinkiac.FrinkiacModule
 ca.ryanmorrison.chatterbox.features.isitdown.IsItDownModule
 ca.ryanmorrison.chatterbox.features.when.WhenModule
+ca.ryanmorrison.chatterbox.features.timezone.TimezoneModule

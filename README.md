@@ -784,13 +784,16 @@ Autocomplete shows a curated list of common zones (type a city name
 like `tor` to find `America/Toronto`); any IANA zone name (`Europe/London`)
 or offset (`+05:30`) is accepted even if not in the list.
 
-Relative words (`now`, `today`, `tomorrow`, weekday names) are interpreted
-**in the named zone**, not in the caller's own zone — the bot doesn't
-know where the caller is. So `tomorrow 1am in:Asia/Kolkata` always means
-"the next Kolkata calendar day at 01:00 IST", regardless of where the
-caller is sitting. The reply spells out the resolved date in plain text
-so any mismatch with the caller's mental model is visible at a glance;
-fall back to absolute forms (`2026-12-25 14:00`) when ambiguity matters.
+Relative inputs (`today`, `tomorrow`, weekday names, bare times) depend
+on the caller's *own* timezone for their calendar reference, while the
+wall-clock part of the input is interpreted in `in:`. Discord doesn't
+tell bots where users are, so the bot leans on the [`/timezone`](#timezone)
+command — set yours once, and `tomorrow 12pm in:Asia/Kolkata` resolves
+to "your tomorrow at noon Kolkata time". Without a stored caller
+timezone, the bot rejects relative inputs with a hint to set one (or
+to use an absolute form like `2026-12-25 14:00` instead). Inputs that
+don't depend on a calendar — `now`, `in N units`, fully-specified
+ISO dates and datetimes — work without a stored timezone.
 
 Output is a single line that reads as a sentence:
 `<t:UNIX:F> (<t:UNIX:R>) in <zone> → **wall-clock in that zone**`. The
@@ -799,3 +802,17 @@ locale (so for the caller they're effectively "your time"); the bold
 trailing wall-clock is the same moment expressed in the requested zone.
 Public by default since the whole point is to share; `private:true`
 previews the parse without posting.
+
+### Timezone
+
+`/timezone set tz:<zone>` / `/timezone show` / `/timezone clear` —
+manage your personal IANA timezone preference. Used by [`/when`](#when)
+to disambiguate relative-day inputs (today, tomorrow, weekday names,
+bare times) which would otherwise have no consistent calendar to pin
+to. Stored once per user and applied across every guild — your
+timezone follows you, not a server.
+
+Autocomplete on `tz:` shares the curated list with `/when`'s `in:`
+option (typing a city name like `tor` surfaces `America/Toronto`); any
+IANA name or offset is accepted. Replies are ephemeral throughout —
+no need to clutter the channel with someone's preference setting.
