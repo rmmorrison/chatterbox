@@ -861,3 +861,37 @@ body — wttr.in's odd convention for typos) from rate-limit (HTTP 429,
 ~30 req/hour per IP on the free tier) from generic upstream errors.
 Every failure mode produces a deterministic ephemeral message; raw
 exceptions are never surfaced.
+
+### Wiki
+
+`/wiki query:<text> [private:<bool>]` — Wikipedia summary lookup. English
+Wikipedia only; no API key required.
+
+Resolution: tries
+[`/api/rest_v1/page/summary/{title}`](https://en.wikipedia.org/api/rest_v1/)
+first (Wikipedia normalises common variants like capitalisation and
+redirects in-flight). On 404, falls back to
+[`/w/rest.php/v1/search/page?q=...&limit=1`](https://en.wikipedia.org/w/rest.php/v1/)
+and re-fetches the summary for the top hit, so typos like "torono"
+still find Toronto.
+
+Output is a Discord embed:
+
+- Title: page title, hyperlinked to the article.
+- Description: short Wikipedia description (italicised) + lead paragraph,
+  capped at ~1500 chars on a word boundary so the message stays
+  scrollable rather than wall-of-text.
+- Thumbnail: page image if Wikipedia provides one.
+- Footer: "Wikipedia".
+
+**Disambiguation pages** (`type == "disambiguation"`) get an italic hint
+at the top of the description so readers refine their query rather than
+treat the list of meanings as the answer.
+
+Failure modes map to ephemeral text replies: rate limit (HTTP 429),
+generic upstream errors (other non-2xx), timeouts, and "couldn't find
+anything" when both summary and search come up empty. Mentions in the
+extract are suppressed so a Wikipedia article that happens to contain
+`@everyone` can't ping the channel.
+
+Hostname is hard-coded `en.wikipedia.org`, so no SSRF surface to defend.
