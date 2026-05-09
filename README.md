@@ -733,3 +733,30 @@ of canned text emotes. Roster includes **Flip table**
 Public by default; pass `private:true` to keep it ephemeral. Adding a
 new emote is one enum line — see
 [`Emote.java`](src/main/java/ca/ryanmorrison/chatterbox/features/emote/Emote.java).
+
+### Is it down?
+
+`/isitdown url:<url> [private:<bool>]` — probe a URL with a single
+bounded GET and report whether it's responding. Inspired by
+"is it down for everyone, or just me?".
+
+Safeguards:
+
+- **Bounded request**: `Range: bytes=0-1023` on the GET so well-behaved
+  servers send only 1 KB; bodies are read up to a 4 KB cap client-side
+  for servers that ignore Range. We never download a full page.
+- **10-second total timeout** end-to-end (connect + headers + initial
+  body bytes). Long-running probes can't exhaust the bot's threads.
+- **SSRF deny-list**: the URL's host is resolved before connecting and
+  rejected if any of its addresses is loopback, link-local (covers AWS
+  metadata at `169.254.169.254`), RFC 1918 / IPv6 ULA, multicast, or the
+  wildcard. Useful so anyone in a Discord channel can't coax the bot
+  into probing internal services.
+- **No exception leakage**: every failure mode (DNS, connection refused,
+  unreachable, TLS error, timeout, bad status, disallowed address) maps
+  to a deterministic user-facing message. Underlying exceptions are
+  logged at WARN; their text never appears in Discord.
+
+Public reply by default — when a service is down, the channel usually
+wants to commiserate together — but `private:true` keeps it ephemeral.
+Reachable from DMs as well as guilds; no permissions required.
