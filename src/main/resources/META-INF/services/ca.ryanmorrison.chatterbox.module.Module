@@ -15,3 +15,4 @@ ca.ryanmorrison.chatterbox.features.when.WhenModule
 ca.ryanmorrison.chatterbox.features.timezone.TimezoneModule
 ca.ryanmorrison.chatterbox.features.weather.WeatherModule
 ca.ryanmorrison.chatterbox.features.wiki.WikiModule
+ca.ryanmorrison.chatterbox.features.stock.StockModule
