@@ -3,7 +3,11 @@ package ca.ryanmorrison.chatterbox.features.shortener;
 import io.javalin.http.Context;
 import io.javalin.http.Handler;
 import io.javalin.http.HttpStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -28,10 +32,19 @@ final class ShortenerRedirectHandler implements Handler {
     static final String PATH = "/{token}";
     static final String PATH_PARAM = "token";
 
+    private static final Logger log = LoggerFactory.getLogger(ShortenerRedirectHandler.class);
+
     private final ShortenerRepository repository;
+    private final Clock clock;
 
     ShortenerRedirectHandler(ShortenerRepository repository) {
+        this(repository, Clock.systemUTC());
+    }
+
+    /** Test seam — lets tests pin "now" for deterministic last_clicked_at values. */
+    ShortenerRedirectHandler(ShortenerRepository repository, Clock clock) {
         this.repository = repository;
+        this.clock = clock;
     }
 
     @Override
@@ -48,6 +61,15 @@ final class ShortenerRedirectHandler implements Handler {
             ctx.status(HttpStatus.GONE).result("This short URL has been removed.");
             return;
         }
+        // Best-effort click counter bump. A DB hiccup here must never block
+        // the redirect — analytics accuracy is strictly subordinate to
+        // redirect availability.
+        try {
+            repository.incrementClicks(entry.id(), OffsetDateTime.now(clock));
+        } catch (RuntimeException e) {
+            log.warn("Couldn't bump click counter for token {}: {}", entry.token(), e.toString());
+        }
+
         String url = entry.url();
         ctx.status(HttpStatus.MOVED_PERMANENTLY)
                 .header("Location", url)

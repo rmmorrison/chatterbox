@@ -90,6 +90,16 @@ public class ShortenedUrls extends TableImpl<ShortenedUrlsRecord> {
      */
     public final TableField<ShortenedUrlsRecord, Long> DELETED_BY = createField(DSL.name("deleted_by"), SQLDataType.BIGINT, this, "");
 
+    /**
+     * The column <code>public.shortened_urls.click_count</code>.
+     */
+    public final TableField<ShortenedUrlsRecord, Long> CLICK_COUNT = createField(DSL.name("click_count"), SQLDataType.BIGINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINT)), this, "");
+
+    /**
+     * The column <code>public.shortened_urls.last_clicked_at</code>.
+     */
+    public final TableField<ShortenedUrlsRecord, OffsetDateTime> LAST_CLICKED_AT = createField(DSL.name("last_clicked_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6), this, "");
+
     private ShortenedUrls(Name alias, Table<ShortenedUrlsRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }

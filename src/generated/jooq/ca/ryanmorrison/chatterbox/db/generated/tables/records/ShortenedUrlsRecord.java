@@ -118,6 +118,34 @@ public class ShortenedUrlsRecord extends UpdatableRecordImpl<ShortenedUrlsRecord
         return (Long) get(6);
     }
 
+    /**
+     * Setter for <code>public.shortened_urls.click_count</code>.
+     */
+    public void setClickCount(Long value) {
+        set(7, value);
+    }
+
+    /**
+     * Getter for <code>public.shortened_urls.click_count</code>.
+     */
+    public Long getClickCount() {
+        return (Long) get(7);
+    }
+
+    /**
+     * Setter for <code>public.shortened_urls.last_clicked_at</code>.
+     */
+    public void setLastClickedAt(OffsetDateTime value) {
+        set(8, value);
+    }
+
+    /**
+     * Getter for <code>public.shortened_urls.last_clicked_at</code>.
+     */
+    public OffsetDateTime getLastClickedAt() {
+        return (OffsetDateTime) get(8);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -141,7 +169,7 @@ public class ShortenedUrlsRecord extends UpdatableRecordImpl<ShortenedUrlsRecord
     /**
      * Create a detached, initialised ShortenedUrlsRecord
      */
-    public ShortenedUrlsRecord(Long id, String token, String url, Long createdBy, OffsetDateTime createdAt, OffsetDateTime deletedAt, Long deletedBy) {
+    public ShortenedUrlsRecord(Long id, String token, String url, Long createdBy, OffsetDateTime createdAt, OffsetDateTime deletedAt, Long deletedBy, Long clickCount, OffsetDateTime lastClickedAt) {
         super(ShortenedUrls.SHORTENED_URLS);
 
         setId(id);
@@ -151,6 +179,8 @@ public class ShortenedUrlsRecord extends UpdatableRecordImpl<ShortenedUrlsRecord
         setCreatedAt(createdAt);
         setDeletedAt(deletedAt);
         setDeletedBy(deletedBy);
+        setClickCount(clickCount);
+        setLastClickedAt(lastClickedAt);
         resetTouchedOnNotNull();
     }
 }

@@ -156,4 +156,54 @@ class ShortenerRepositorySqliteTest {
         ShortenedUrl byId = repo.findByIdIncludingDeleted(id).orElseThrow();
         assertTrue(byId.isDeleted());
     }
+
+    // -- click stats --------------------------------------------------------
+
+    @Test
+    void newRowsHaveZeroClicksAndNoLastClickTimestamp() {
+        ShortenedUrl row = repo.insert("abc123", "https://example.com/x", USER, NOW).orElseThrow();
+        assertEquals(0L, row.clickCount());
+        assertTrue(row.lastClickedAt().isEmpty());
+    }
+
+    @Test
+    void incrementClicksBumpsCounterAndStampsTimestamp() {
+        long id = repo.insert("abc123", "https://example.com/x", USER, NOW).orElseThrow().id();
+        int updated = repo.incrementClicks(id, LATER);
+        assertEquals(1, updated);
+
+        ShortenedUrl after = repo.findByToken("abc123").orElseThrow();
+        assertEquals(1L, after.clickCount());
+        assertEquals(LATER, after.lastClickedAt().orElseThrow());
+    }
+
+    @Test
+    void incrementClicksAccumulates() {
+        long id = repo.insert("abc123", "https://example.com/x", USER, NOW).orElseThrow().id();
+        for (int i = 0; i < 5; i++) {
+            repo.incrementClicks(id, LATER);
+        }
+        assertEquals(5L, repo.findByToken("abc123").orElseThrow().clickCount());
+    }
+
+    @Test
+    void incrementClicksOnUnknownIdIsSilentNoOp() {
+        // Analytics must never block a redirect — a missing id (e.g. row was
+        // deleted between read and update) is a no-op, not an error.
+        int updated = repo.incrementClicks(99_999L, LATER);
+        assertEquals(0, updated);
+    }
+
+    @Test
+    void incrementClicksWorksOnSoftDeletedRow() {
+        // Operationally we don't increment for deleted rows (the redirect
+        // handler 410s before getting here), but the storage doesn't
+        // discriminate — useful if we ever want to count would-be clicks.
+        long id = repo.insert("abc123", "https://example.com/x", USER, NOW).orElseThrow().id();
+        repo.softDelete(id, MOD, LATER);
+        int updated = repo.incrementClicks(id, LATER);
+        assertEquals(1, updated);
+        ShortenedUrl after = repo.findByTokenIncludingDeleted("abc123").orElseThrow();
+        assertEquals(1L, after.clickCount());
+    }
 }
