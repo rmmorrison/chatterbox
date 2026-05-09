@@ -22,26 +22,18 @@ class TimeParserTest {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final ZoneId UTC = ZoneOffset.UTC;
     private static final ZoneId TORONTO = ZoneId.of("America/Toronto");
-    private static final ZoneId KOLKATA = ZoneId.of("Asia/Kolkata");
 
-    /** Parse with caller=target=zone (the "/when before /timezone" baseline). */
     private static Instant parseOk(String s, ZoneId zone) {
-        var r = TimeParser.parse(s, Optional.of(zone), zone, CLOCK);
-        return ((TimeParser.Result.Ok) r).instant();
-    }
-
-    /** Parse with distinct caller and target zones (post-/timezone path). */
-    private static Instant parseOk(String s, ZoneId caller, ZoneId target) {
-        var r = TimeParser.parse(s, Optional.of(caller), target, CLOCK);
+        var r = TimeParser.parse(s, Optional.of(zone), CLOCK);
         return ((TimeParser.Result.Ok) r).instant();
     }
 
     private static String parseFailReason(String s, ZoneId zone) {
-        var r = TimeParser.parse(s, Optional.of(zone), zone, CLOCK);
+        var r = TimeParser.parse(s, Optional.of(zone), CLOCK);
         return ((TimeParser.Result.Failed) r).reason();
     }
 
-    // ---- now / relative / iso (no caller zone needed) ----
+    // ---- now / relative / iso (zone-independent or zone-optional) ----
 
     @Test
     void nowReturnsCurrentInstant() {
@@ -50,9 +42,8 @@ class TimeParserTest {
     }
 
     @Test
-    void nowWorksWithoutCallerZone() {
-        // "now" is calendar-independent — no /timezone required.
-        var r = TimeParser.parse("now", Optional.empty(), UTC, CLOCK);
+    void nowWorksWithoutZone() {
+        var r = TimeParser.parse("now", Optional.empty(), CLOCK);
         assertEquals(NOW, ((TimeParser.Result.Ok) r).instant());
     }
 
@@ -65,8 +56,8 @@ class TimeParserTest {
     }
 
     @Test
-    void relativeWorksWithoutCallerZone() {
-        var r = TimeParser.parse("in 3 hours", Optional.empty(), UTC, CLOCK);
+    void relativeWorksWithoutZone() {
+        var r = TimeParser.parse("in 3 hours", Optional.empty(), CLOCK);
         assertEquals(NOW.plusSeconds(3 * 3600), ((TimeParser.Result.Ok) r).instant());
     }
 
@@ -80,7 +71,7 @@ class TimeParserTest {
     @Test
     void relativeRejectsNonPositive() {
         assertInstanceOf(TimeParser.Result.Failed.class,
-                TimeParser.parse("in 0 hours", Optional.of(UTC), UTC, CLOCK));
+                TimeParser.parse("in 0 hours", Optional.of(UTC), CLOCK));
     }
 
     @Test
@@ -92,16 +83,17 @@ class TimeParserTest {
     }
 
     @Test
-    void isoDateTimeRespectsTargetZone() {
+    void isoDateTimeRespectsZone() {
         // Toronto is EST (UTC-5) in December — no DST.
         assertEquals(Instant.parse("2026-12-25T17:00:00Z"),
                 parseOk("2026-12-25 12:00", TORONTO));
     }
 
     @Test
-    void isoDateTimeWorksWithoutCallerZone() {
-        // ISO datetime is fully specified — no caller zone needed.
-        var r = TimeParser.parse("2026-12-25 12:00", Optional.empty(), UTC, CLOCK);
+    void isoDateTimeFallsBackToUtcWithoutZone() {
+        // ISO datetimes are fully specified — when no zone is supplied,
+        // UTC is the convention.
+        var r = TimeParser.parse("2026-12-25 12:00", Optional.empty(), CLOCK);
         assertEquals(Instant.parse("2026-12-25T12:00:00Z"), ((TimeParser.Result.Ok) r).instant());
     }
 
@@ -112,14 +104,14 @@ class TimeParserTest {
     }
 
     @Test
-    void isoDateAloneIsMidnightInTargetZone() {
+    void isoDateAloneIsMidnightInZone() {
         assertEquals(Instant.parse("2026-12-25T00:00:00Z"),
                 parseOk("2026-12-25", UTC));
     }
 
     @Test
-    void isoDateWorksWithoutCallerZone() {
-        var r = TimeParser.parse("2026-12-25", Optional.empty(), UTC, CLOCK);
+    void isoDateFallsBackToUtcWithoutZone() {
+        var r = TimeParser.parse("2026-12-25", Optional.empty(), CLOCK);
         assertEquals(Instant.parse("2026-12-25T00:00:00Z"), ((TimeParser.Result.Ok) r).instant());
     }
 
@@ -138,52 +130,68 @@ class TimeParserTest {
     }
 
     @Test
-    void todayBareIsMidnightInCallerZone() {
+    void todayBareIsMidnightInZone() {
         assertEquals(Instant.parse("2026-05-08T00:00:00Z"),
                 parseOk("today", UTC));
     }
 
     @Test
-    void todayTomorrowRequiresCallerZone() {
-        assertInstanceOf(TimeParser.Result.RequiresCallerZone.class,
-                TimeParser.parse("today",       Optional.empty(), UTC, CLOCK));
-        assertInstanceOf(TimeParser.Result.RequiresCallerZone.class,
-                TimeParser.parse("tomorrow",    Optional.empty(), UTC, CLOCK));
-        assertInstanceOf(TimeParser.Result.RequiresCallerZone.class,
-                TimeParser.parse("tomorrow 9am", Optional.empty(), UTC, CLOCK));
+    void todayTomorrowRequireZone() {
+        assertInstanceOf(TimeParser.Result.RequiresZone.class,
+                TimeParser.parse("today",        Optional.empty(), CLOCK));
+        assertInstanceOf(TimeParser.Result.RequiresZone.class,
+                TimeParser.parse("tomorrow",     Optional.empty(), CLOCK));
+        assertInstanceOf(TimeParser.Result.RequiresZone.class,
+                TimeParser.parse("tomorrow 9am", Optional.empty(), CLOCK));
     }
 
     @Test
-    void requiresCallerZoneMessageMentionsTimezoneCommand() {
-        var r = (TimeParser.Result.RequiresCallerZone)
-                TimeParser.parse("tomorrow 9am", Optional.empty(), UTC, CLOCK);
+    void requiresZoneMessageMentionsTimezoneCommand() {
+        var r = (TimeParser.Result.RequiresZone)
+                TimeParser.parse("tomorrow 9am", Optional.empty(), CLOCK);
         assertTrue(r.reason().toLowerCase().contains("/timezone"),
                 () -> "expected /timezone hint, got: " + r.reason());
     }
 
     /**
-     * The bug we shipped this branch to fix: "tomorrow 12pm" with caller
-     * Toronto and target Kolkata, invoked at Friday 11pm EDT, should pick
-     * the caller's Saturday (May 9) — not Kolkata's Sunday (May 10).
+     * The bug we shipped this branch to fix. Toronto user, Friday 23:00 EDT,
+     * "tomorrow 12pm" — interpretation must use Toronto's calendar AND
+     * Toronto's wall clock (because /timezone wins for interpretation).
+     * Result: Saturday May 9 12:00 EDT = 2026-05-09T16:00:00Z.
+     *
+     * <p>Hand-verified with a separate Java program:
+     * <pre>
+     *   ZonedDateTime.of(2026, 5, 9, 12, 0, 0, 0, ZoneId.of("America/Toronto")).toInstant()
+     *     == 2026-05-09T16:00:00Z
+     * </pre>
      */
     @Test
-    void tomorrowUsesCallerCalendarNotTargetCalendar() {
-        // Friday 23:00 EDT May 8 == Saturday 03:00 UTC May 9 == Saturday 08:30 IST May 9.
-        Instant fridayLateInToronto = Instant.parse("2026-05-09T03:00:00Z");
-        Clock c = Clock.fixed(fridayLateInToronto, ZoneOffset.UTC);
-        var r = TimeParser.parse("tomorrow 12pm", Optional.of(TORONTO), KOLKATA, c);
-        // Caller's tomorrow (Toronto) = Saturday May 9.
-        // Apply 12:00 in Kolkata = Saturday May 9 12:00 IST = Saturday May 9 06:30 UTC.
-        assertEquals(Instant.parse("2026-05-09T06:30:00Z"), ((TimeParser.Result.Ok) r).instant());
+    void tomorrowAtNoonInTorontoFromTorontoLateFridayNight() {
+        // Friday May 8 23:00 EDT == Saturday May 9 03:00 UTC.
+        Clock fridayLateInToronto = Clock.fixed(Instant.parse("2026-05-09T03:00:00Z"), ZoneOffset.UTC);
+        var r = TimeParser.parse("tomorrow 12pm", Optional.of(TORONTO), fridayLateInToronto);
+        Instant got = ((TimeParser.Result.Ok) r).instant();
+        assertEquals(Instant.parse("2026-05-09T16:00:00Z"), got,
+                "Caller is in Toronto at Friday 11pm EDT; 'tomorrow 12pm' must be Saturday noon EDT, "
+                        + "which is 16:00 UTC. Got " + got + " instead.");
     }
 
+    /**
+     * Same caller and clock as above, but the parser is given Kolkata instead
+     * of Toronto. Asserts the OLD (pre-/timezone) behaviour still works:
+     * "tomorrow" follows Kolkata's calendar (already Saturday at this instant),
+     * so "tomorrow 12pm Kolkata" lands on Sunday May 10. The handler reaches
+     * this branch only when no /timezone is set.
+     */
     @Test
-    void todayWithTimeUsesCallerCalendarAndTargetWallClock() {
-        // 14:00 UTC = 09:00 EST in Toronto = 19:30 IST in Kolkata.
-        // "today 8pm" with caller Toronto (today=May 8) and target Kolkata
-        // = May 8 20:00 IST = May 8 14:30 UTC.
-        var r = TimeParser.parse("today 8pm", Optional.of(TORONTO), KOLKATA, CLOCK);
-        assertEquals(Instant.parse("2026-05-08T14:30:00Z"), ((TimeParser.Result.Ok) r).instant());
+    void tomorrowAtNoonInKolkataFromKolkata() {
+        Clock fridayLateInToronto = Clock.fixed(Instant.parse("2026-05-09T03:00:00Z"), ZoneOffset.UTC);
+        ZoneId kolkata = ZoneId.of("Asia/Kolkata");
+        // Now in Kolkata = Saturday May 9 08:30 IST → tomorrow = Sun May 10
+        // Sun May 10 12:00 IST = Sun May 10 06:30 UTC
+        var r = TimeParser.parse("tomorrow 12pm", Optional.of(kolkata), fridayLateInToronto);
+        Instant got = ((TimeParser.Result.Ok) r).instant();
+        assertEquals(Instant.parse("2026-05-10T06:30:00Z"), got);
     }
 
     // ---- bare time ----
@@ -220,11 +228,11 @@ class TimeParserTest {
     }
 
     @Test
-    void bareTimeRequiresCallerZone() {
-        assertInstanceOf(TimeParser.Result.RequiresCallerZone.class,
-                TimeParser.parse("7pm",   Optional.empty(), UTC, CLOCK));
-        assertInstanceOf(TimeParser.Result.RequiresCallerZone.class,
-                TimeParser.parse("19:00", Optional.empty(), UTC, CLOCK));
+    void bareTimeRequiresZone() {
+        assertInstanceOf(TimeParser.Result.RequiresZone.class,
+                TimeParser.parse("7pm",   Optional.empty(), CLOCK));
+        assertInstanceOf(TimeParser.Result.RequiresZone.class,
+                TimeParser.parse("19:00", Optional.empty(), CLOCK));
     }
 
     // ---- weekday names ----
@@ -258,16 +266,16 @@ class TimeParserTest {
     @Test
     void weekdayWithUnparseableTimeFails() {
         var failed = (TimeParser.Result.Failed)
-                TimeParser.parse("monday garbage", Optional.of(UTC), UTC, CLOCK);
+                TimeParser.parse("monday garbage", Optional.of(UTC), CLOCK);
         assertTrue(failed.reason().contains("garbage"), failed.reason());
     }
 
     @Test
-    void weekdayRequiresCallerZone() {
-        assertInstanceOf(TimeParser.Result.RequiresCallerZone.class,
-                TimeParser.parse("friday",     Optional.empty(), UTC, CLOCK));
-        assertInstanceOf(TimeParser.Result.RequiresCallerZone.class,
-                TimeParser.parse("monday 9am", Optional.empty(), UTC, CLOCK));
+    void weekdayRequiresZone() {
+        assertInstanceOf(TimeParser.Result.RequiresZone.class,
+                TimeParser.parse("friday",     Optional.empty(), CLOCK));
+        assertInstanceOf(TimeParser.Result.RequiresZone.class,
+                TimeParser.parse("monday 9am", Optional.empty(), CLOCK));
     }
 
     // ---- failure paths ----
@@ -275,11 +283,11 @@ class TimeParserTest {
     @Test
     void emptyAndNullRejected() {
         assertInstanceOf(TimeParser.Result.Failed.class,
-                TimeParser.parse(null, Optional.of(UTC), UTC, CLOCK));
+                TimeParser.parse(null, Optional.of(UTC), CLOCK));
         assertInstanceOf(TimeParser.Result.Failed.class,
-                TimeParser.parse("",   Optional.of(UTC), UTC, CLOCK));
+                TimeParser.parse("",   Optional.of(UTC), CLOCK));
         assertInstanceOf(TimeParser.Result.Failed.class,
-                TimeParser.parse("  ", Optional.of(UTC), UTC, CLOCK));
+                TimeParser.parse("  ", Optional.of(UTC), CLOCK));
     }
 
     @Test
@@ -292,7 +300,7 @@ class TimeParserTest {
     @Test
     void invalidIsoDateRejected() {
         assertInstanceOf(TimeParser.Result.Failed.class,
-                TimeParser.parse("2026-13-01", Optional.of(UTC), UTC, CLOCK));
+                TimeParser.parse("2026-13-01", Optional.of(UTC), CLOCK));
     }
 
     // ---- DST sanity ----

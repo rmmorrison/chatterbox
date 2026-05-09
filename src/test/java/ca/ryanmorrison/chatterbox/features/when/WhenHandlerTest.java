@@ -8,10 +8,16 @@ import java.time.ZoneId;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Renderer-only checks for {@link WhenHandler#formatReply}. The handler's
+ * orchestration (zone resolution, repo lookup, parser dispatch) is covered
+ * indirectly via {@link ZoneResolutionTest} and {@link TimeParserTest} —
+ * the values produced by those plug straight into {@code formatReply}.
+ */
 class WhenHandlerTest {
 
     @Test
-    void replyContainsZoneAndBothTimestampStyles() {
+    void replyContainsDisplayZoneAndBothTimestampStyles() {
         Instant moment = Instant.parse("2026-12-25T17:00:00Z"); // 12pm in Toronto
         String msg = WhenHandler.formatReply(ZoneId.of("America/Toronto"), moment);
 
@@ -22,29 +28,48 @@ class WhenHandlerTest {
     }
 
     @Test
-    void wallClockLineRendersInRequestedZoneNotUtc() {
-        // 17:00 UTC = 22:30 IST in Asia/Kolkata (UTC+5:30, no DST). The literal
-        // line must show the Kolkata wall clock, not the input UTC instant.
+    void wallClockLineRendersInDisplayZoneNotUtc() {
+        // 17:00 UTC = 22:30 IST in Asia/Kolkata (UTC+5:30, no DST).
         Instant moment = Instant.parse("2026-05-08T17:00:00Z");
         String msg = WhenHandler.formatReply(ZoneId.of("Asia/Kolkata"), moment);
         assertTrue(msg.contains("**Friday, May 8, 2026 at 10:30 PM**"),
                 () -> "expected Kolkata wall clock, got: " + msg);
     }
 
+    /**
+     * The exact output for the bug-fix scenario, end-to-end of the rendering
+     * step. Caller-in-Toronto-with-stored-zone, in:Asia/Kolkata,
+     * "tomorrow 12pm" at Friday 11pm EDT resolves (in {@link TimeParserTest})
+     * to {@code 2026-05-09T16:00:00Z} (Saturday noon Toronto time).
+     * The display zone is Kolkata; that instant in Kolkata is Saturday 21:30 IST.
+     */
     @Test
-    void wallClockLineCrossesDateBoundaryWhenZoneIsAhead() {
-        // 02:00 UTC May 9 ≈ 22:00 EDT May 8 ≈ 07:30 IST May 9. The literal
-        // line must show "May 9" (Kolkata's day), not "May 8".
-        Instant moment = Instant.parse("2026-05-09T02:00:00Z");
+    void bugFixSaturdayNoonTorontoRendersAsSaturday930PmInKolkata() {
+        Instant moment = Instant.parse("2026-05-09T16:00:00Z");
         String msg = WhenHandler.formatReply(ZoneId.of("Asia/Kolkata"), moment);
-        assertTrue(msg.contains("Saturday, May 9, 2026 at 7:30 AM"),
-                () -> "expected May 9 in Kolkata, got: " + msg);
+        // Epoch second hand-verified: Instant.parse("2026-05-09T16:00:00Z").getEpochSecond() == 1778342400.
+        assertEquals(
+                "<t:1778342400:F> (<t:1778342400:R>) in Asia/Kolkata "
+                        + "→ **Saturday, May 9, 2026 at 9:30 PM**",
+                msg);
+    }
+
+    /**
+     * Same instant, but rendered with the caller's own zone as display.
+     * For a Toronto user with no in: option (or in:=Toronto), the wall-clock
+     * literal ought to read "12:00 PM" — matching what they'd expect to see
+     * when they meant "tomorrow at noon".
+     */
+    @Test
+    void bugFixSaturdayNoonRendersAsNoonInToronto() {
+        Instant moment = Instant.parse("2026-05-09T16:00:00Z");
+        String msg = WhenHandler.formatReply(ZoneId.of("America/Toronto"), moment);
+        assertTrue(msg.contains("**Saturday, May 9, 2026 at 12:00 PM**"),
+                () -> "expected Toronto noon, got: " + msg);
     }
 
     @Test
     void wallClockUsesEnglishLocaleRegardlessOfDefault() {
-        // Sanity check that month/weekday words are English even if the JVM
-        // default locale is something else. Pin and restore.
         java.util.Locale prior = java.util.Locale.getDefault();
         try {
             java.util.Locale.setDefault(java.util.Locale.FRANCE);
@@ -58,26 +83,9 @@ class WhenHandlerTest {
     }
 
     @Test
-    void timestampUsesUnixSeconds() {
-        Instant moment = Instant.ofEpochSecond(1_800_000_000L);
-        String msg = WhenHandler.formatReply(ZoneId.of("UTC"), moment);
-        assertTrue(msg.contains("<t:1800000000:F>"), msg);
-        assertTrue(msg.contains("<t:1800000000:R>"), msg);
-    }
-
-    @Test
-    void zoneIdIsCanonicalNotPretty() {
-        // We use ZoneId.getId() so users can copy-paste back into /when in:.
-        String msg = WhenHandler.formatReply(ZoneId.of("Europe/London"),
-                Instant.parse("2026-06-01T08:00:00Z"));
-        assertTrue(msg.contains("Europe/London"), msg);
-    }
-
-    @Test
     void singleLineLayout() {
         // Light formatting check so future cosmetic tweaks don't pass silently.
-        // Epoch second 1 = 1970-01-01 00:00:01 UTC. Single-line output keeps
-        // the viewer-time-then-zone-time order so it reads as a sentence.
+        // Epoch second 1 = 1970-01-01 00:00:01 UTC.
         String msg = WhenHandler.formatReply(ZoneId.of("UTC"), Instant.ofEpochSecond(1L));
         assertEquals(
                 "<t:1:F> (<t:1:R>) in UTC → **Thursday, January 1, 1970 at 12:00 AM**",

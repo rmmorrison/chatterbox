@@ -763,7 +763,7 @@ Reachable from DMs as well as guilds; no permissions required.
 
 ### When
 
-`/when at:<time> in:<timezone> [private:<bool>]` — convert a moment to
+`/when at:<time> [in:<timezone>] [private:<bool>]` — convert a moment to
 Discord timestamp markdown so every viewer sees it in their own local
 timezone. Useful for coordinating across distributed servers.
 
@@ -779,27 +779,37 @@ timezone. Useful for coordinating across distributed servers.
 | `2026-12-25` | midnight on that date |
 | `2026-12-25 18:00`, `2026-12-25T18:00` | that exact moment |
 
-`in:` is required because Discord doesn't expose user timezones to bots.
-Autocomplete shows a curated list of common zones (type a city name
-like `tor` to find `America/Toronto`); any IANA zone name (`Europe/London`)
-or offset (`+05:30`) is accepted even if not in the list.
+Two zones are at play:
 
-Relative inputs (`today`, `tomorrow`, weekday names, bare times) depend
-on the caller's *own* timezone for their calendar reference, while the
-wall-clock part of the input is interpreted in `in:`. Discord doesn't
-tell bots where users are, so the bot leans on the [`/timezone`](#timezone)
-command — set yours once, and `tomorrow 12pm in:Asia/Kolkata` resolves
-to "your tomorrow at noon Kolkata time". Without a stored caller
-timezone, the bot rejects relative inputs with a hint to set one (or
-to use an absolute form like `2026-12-25 14:00` instead). Inputs that
-don't depend on a calendar — `now`, `in N units`, fully-specified
-ISO dates and datetimes — work without a stored timezone.
+- **Interpretation** — the zone `at:` is parsed against (which calendar
+  "tomorrow" looks at, which clock "12pm" reads from). The caller's
+  stored [`/timezone`](#timezone) wins; if none is set, `in:` is the
+  fallback.
+- **Display** — the zone the bot's wall-clock literal is rendered in.
+  `in:` wins when supplied; otherwise the caller's stored timezone;
+  otherwise UTC.
+
+So a Toronto user (with `/timezone set tz:America/Toronto`) typing
+`/when at:tomorrow 12pm in:Asia/Kolkata` is asking *"my tomorrow at
+noon — what time is that for someone in Kolkata?"*. The bot computes
+Saturday 12:00 EDT and renders the literal as Saturday 21:30 IST
+("9:30 PM" Kolkata wall clock). Discord still renders the headline
+timestamp in the viewer's own locale, so the caller sees "12:00 PM
+Saturday" themselves.
+
+Calendar-relative inputs (`today` / `tomorrow` / weekday names / bare
+times) need *some* zone to interpret against. If neither `/timezone`
+nor `in:` provides one, the bot rejects with a hint to set one or to
+use an absolute form like `2026-12-25 14:00`. Inputs that don't depend
+on a calendar — `now`, `in N units`, fully-specified ISO dates and
+datetimes — work without any zone.
 
 Output is a single line that reads as a sentence:
-`<t:UNIX:F> (<t:UNIX:R>) in <zone> → **wall-clock in that zone**`. The
-Discord timestamps come first because they auto-render in the *viewer's*
-locale (so for the caller they're effectively "your time"); the bold
-trailing wall-clock is the same moment expressed in the requested zone.
+`<t:UNIX:F> (<t:UNIX:R>) in <display-zone> → **wall-clock in that zone**`.
+The Discord timestamps come first because they auto-render in the
+*viewer's* locale (so for the caller they're effectively "your time");
+the bold trailing wall-clock is the same moment expressed in the
+display zone.
 Public by default since the whole point is to share; `private:true`
 previews the parse without posting.
 

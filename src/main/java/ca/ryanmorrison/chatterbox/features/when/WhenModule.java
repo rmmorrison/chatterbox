@@ -12,14 +12,17 @@ import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import java.util.List;
 
 /**
- * {@code /when at:<text> in:<timezone> [private:<bool>]} — converts a
- * time-in-place to Discord timestamp markdown so every viewer sees it in
- * their own local zone.
+ * {@code /when at:<text> [in:<timezone>] [private:<bool>]} — converts a
+ * time to Discord timestamp markdown so every viewer sees it in their
+ * own local zone.
  *
- * <p>{@code in:} is required because Discord doesn't expose the user's
- * own timezone. Autocomplete drives a curated list of common zones; any
- * IANA name or offset is accepted. {@code at:} accepts a small but
- * forgiving grammar; see {@link TimeParser}.
+ * <p>{@code in:} is optional: when the caller has set their own timezone
+ * with {@code /timezone set}, that's what {@code at:} is interpreted in
+ * and {@code in:} only changes the wall-clock literal in the reply.
+ * When the caller hasn't set a timezone, {@code in:} drives both
+ * (and is required for relative inputs like "tomorrow"). See
+ * {@link ZoneResolution} for the precedence rules. {@code at:} accepts a
+ * small but forgiving grammar; see {@link TimeParser}.
  *
  * <p>Public reply by default — sharing is the point — with a
  * {@code private:true} escape hatch for previewing.
@@ -38,11 +41,13 @@ public final class WhenModule implements Module {
         OptionData at = new OptionData(OptionType.STRING, OPT_AT,
                 "Time to convert (e.g. `7pm`, `tomorrow 9am`, `friday 3pm`, `in 2 hours`).",
                 true, false);
-        // Required + autocompleted: Discord doesn't expose user timezones,
-        // so we have to ask. Curated list keeps the dropdown useful.
+        // Optional. Caller's stored /timezone wins for interpretation when
+        // present, so most users won't need this. When provided, it's the
+        // zone for the wall-clock literal in the reply (and the fallback
+        // for interpretation if no /timezone is set).
         OptionData in = new OptionData(OptionType.STRING, OPT_IN,
-                "Timezone the time is given in (e.g. America/Toronto).",
-                true, true);
+                "Show the wall-clock in this zone (e.g. America/Toronto). Defaults to your /timezone.",
+                false, true);
         OptionData priv = new OptionData(OptionType.BOOLEAN, OPT_PRIVATE,
                 "Show the result only to you instead of the channel.",
                 false, false);

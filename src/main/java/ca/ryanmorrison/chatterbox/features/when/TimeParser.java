@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -25,29 +26,24 @@ import java.util.regex.Pattern;
  * {@code in 3 hours}), and {@code now}. Each parser is tried in turn; the
  * first match wins.
  *
- * <h2>Two zones, two roles</h2>
- * Inputs decompose into a calendar reference (the date) and a wall clock
- * (the time of day). The parser separates these:
- * <ul>
- *   <li>{@code callerZone} — used to resolve "today", "tomorrow", weekday
- *       names, and the today-or-tomorrow rollover for bare times. This is
- *       the user's own timezone, kept by the {@code /timezone} command.</li>
- *   <li>{@code targetZone} — used to interpret wall-clock times against.
- *       This is the {@code in:} option on {@code /when}.</li>
- * </ul>
- * Inputs that don't depend on a calendar reference ({@code now}, relative
- * offsets, fully-specified ISO date / datetime) work without {@code callerZone}.
- * Inputs that <em>do</em> depend on it return {@link Result.RequiresCallerZone}
- * when it's absent, with a message pointing the user at {@code /timezone set}.
+ * <h2>Zone semantics</h2>
+ * The {@code zone} parameter is the <em>interpretation</em> zone — used to
+ * resolve relative inputs ({@code today}, {@code tomorrow}, weekday names,
+ * bare times) and to attach a wall clock to ISO inputs. The handler's
+ * <em>display</em> zone is a separate concern (see {@link ZoneResolution}).
  *
- * <h2>Conventions</h2>
+ * <p>When {@code zone} is empty:
  * <ul>
- *   <li>Bare times default to today (in {@code callerZone}); if the resolved
- *       moment is already past, roll over to tomorrow.</li>
- *   <li>Weekday names always pick the soonest strictly-future occurrence
- *       in {@code callerZone}.</li>
- *   <li>DST and offset edges are handled by {@link ZonedDateTime}.</li>
+ *   <li>Zone-independent inputs ({@code now}, relative offsets) succeed.</li>
+ *   <li>ISO datetimes/dates fall back to {@link ZoneOffset#UTC} — they're
+ *       fully specified moments, just need <em>some</em> wall-clock zone
+ *       to attach to.</li>
+ *   <li>Calendar-relative inputs return
+ *       {@link Result.RequiresZone}; the handler surfaces this as a
+ *       "set your timezone" prompt.</li>
  * </ul>
+ *
+ * <p>DST and offset edges are handled by {@link ZonedDateTime}.
  */
 public final class TimeParser {
 
@@ -58,13 +54,13 @@ public final class TimeParser {
         record Failed(String reason) implements Result {}
         /**
          * The input is calendar-relative ({@code today}, {@code tomorrow},
-         * weekday name, bare time) but no caller zone was supplied.
-         * Resolving it without one would either guess wrong (using
-         * {@code targetZone} as a stand-in, the source of the original
-         * "tomorrow in Kolkata picks Sunday when I'm in Toronto" surprise)
-         * or pick UTC, which is also rarely what the user means.
+         * weekday name, bare time) but no interpretation zone was
+         * supplied. Resolving it without one would either guess wrong
+         * (the original "tomorrow in Kolkata picks Sunday when I'm in
+         * Toronto" surprise) or pick UTC, which is also rarely what the
+         * user means.
          */
-        record RequiresCallerZone(String reason) implements Result {}
+        record RequiresZone(String reason) implements Result {}
     }
 
     /** Names recognised after "today"/"tomorrow"/"<weekday>". */
@@ -106,12 +102,12 @@ public final class TimeParser {
             "Try `7pm`, `19:00`, `tomorrow 9am`, `friday 3pm`, `in 2 hours`, "
                     + "or `2026-12-25 14:00`.";
 
-    private static final String NEEDS_TIMEZONE =
-            "I don't have your timezone on file, so this depends on which "
-                    + "calendar I should consult. Set yours with `/timezone set tz:<your zone>` "
-                    + "first, or use an absolute form like `2026-12-25 14:00`.";
+    private static final String NEEDS_ZONE =
+            "I don't know which timezone to interpret this in. Set yours with "
+                    + "`/timezone set tz:<your zone>` first, pass `in:<zone>` on the command, "
+                    + "or use an absolute form like `2026-12-25 14:00`.";
 
-    public static Result parse(String input, Optional<ZoneId> callerZone, ZoneId targetZone, Clock clock) {
+    public static Result parse(String input, Optional<ZoneId> zone, Clock clock) {
         if (input == null) return new Result.Failed("No time provided. " + EXAMPLES);
         String trimmed = input.trim();
         if (trimmed.isEmpty()) return new Result.Failed("No time provided. " + EXAMPLES);
@@ -119,13 +115,17 @@ public final class TimeParser {
         // Each parser returns null if it doesn't recognise the shape; any
         // non-null Result short-circuits the chain.
         Result r;
-        if ((r = tryNow(trimmed, clock)) != null)                                return r;
-        if ((r = tryRelative(trimmed, clock)) != null)                            return r;
-        if ((r = tryIsoDateTime(trimmed, targetZone)) != null)                    return r;
-        if ((r = tryIsoDate(trimmed, targetZone)) != null)                        return r;
-        if ((r = tryTodayTomorrow(trimmed, callerZone, targetZone, clock)) != null) return r;
-        if ((r = tryWeekday(trimmed, callerZone, targetZone, clock)) != null)     return r;
-        if ((r = tryBareTime(trimmed, callerZone, targetZone, clock)) != null)    return r;
+        if ((r = tryNow(trimmed, clock)) != null)            return r;
+        if ((r = tryRelative(trimmed, clock)) != null)       return r;
+        // ISO inputs are fully specified; if no zone provided, fall back to UTC.
+        ZoneId isoZone = zone.orElse(ZoneOffset.UTC);
+        if ((r = tryIsoDateTime(trimmed, isoZone)) != null)  return r;
+        if ((r = tryIsoDate(trimmed, isoZone)) != null)      return r;
+        // Calendar-relative inputs require a zone; without one we can't decide
+        // whose calendar to consult.
+        if ((r = tryTodayTomorrow(trimmed, zone, clock)) != null) return r;
+        if ((r = tryWeekday(trimmed, zone, clock)) != null)       return r;
+        if ((r = tryBareTime(trimmed, zone, clock)) != null)      return r;
 
         return new Result.Failed("Couldn't parse `" + input + "`. " + EXAMPLES);
     }
@@ -160,7 +160,7 @@ public final class TimeParser {
         return new Result.Ok(clock.instant().plusSeconds(seconds));
     }
 
-    private static Result tryIsoDateTime(String s, ZoneId targetZone) {
+    private static Result tryIsoDateTime(String s, ZoneId zone) {
         if (!ISO_DATETIME.matcher(s).matches()) return null;
         // The space-separator form is common in input; the ISO parser wants 'T'.
         String normalised = s.replace(' ', 'T');
@@ -168,24 +168,23 @@ public final class TimeParser {
         if (normalised.length() == 16) normalised = normalised + ":00";
         try {
             LocalDateTime ldt = LocalDateTime.parse(normalised, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-            return new Result.Ok(ldt.atZone(targetZone).toInstant());
+            return new Result.Ok(ldt.atZone(zone).toInstant());
         } catch (DateTimeParseException e) {
             return new Result.Failed("`" + s + "` isn't a valid date/time.");
         }
     }
 
-    private static Result tryIsoDate(String s, ZoneId targetZone) {
+    private static Result tryIsoDate(String s, ZoneId zone) {
         if (!ISO_DATE.matcher(s).matches()) return null;
         try {
             LocalDate date = LocalDate.parse(s, DateTimeFormatter.ISO_LOCAL_DATE);
-            return new Result.Ok(date.atStartOfDay(targetZone).toInstant());
+            return new Result.Ok(date.atStartOfDay(zone).toInstant());
         } catch (DateTimeParseException e) {
             return new Result.Failed("`" + s + "` isn't a valid date.");
         }
     }
 
-    private static Result tryTodayTomorrow(String s, Optional<ZoneId> callerZone,
-                                           ZoneId targetZone, Clock clock) {
+    private static Result tryTodayTomorrow(String s, Optional<ZoneId> zoneOpt, Clock clock) {
         String lower = s.toLowerCase(Locale.ROOT);
         int offsetDays;
         String rest;
@@ -201,22 +200,16 @@ public final class TimeParser {
             return null;
         }
 
-        if (callerZone.isEmpty()) return new Result.RequiresCallerZone(NEEDS_TIMEZONE);
-        ZoneId calendar = callerZone.get();
+        if (zoneOpt.isEmpty()) return new Result.RequiresZone(NEEDS_ZONE);
+        ZoneId zone = zoneOpt.get();
 
-        LocalDate date = ZonedDateTime.now(clock.withZone(calendar)).toLocalDate().plusDays(offsetDays);
-        if (rest.isEmpty()) {
-            // No wall-clock time given — use midnight in the *caller's* zone.
-            // The target zone is irrelevant for a time-less moment.
-            return new Result.Ok(date.atStartOfDay(calendar).toInstant());
-        }
-        LocalTime time = parseLocalTime(rest);
+        LocalDate date = ZonedDateTime.now(clock.withZone(zone)).toLocalDate().plusDays(offsetDays);
+        LocalTime time = rest.isEmpty() ? LocalTime.MIDNIGHT : parseLocalTime(rest);
         if (time == null) return new Result.Failed("`" + rest + "` isn't a valid time.");
-        return new Result.Ok(ZonedDateTime.of(date, time, targetZone).toInstant());
+        return new Result.Ok(ZonedDateTime.of(date, time, zone).toInstant());
     }
 
-    private static Result tryWeekday(String s, Optional<ZoneId> callerZone,
-                                     ZoneId targetZone, Clock clock) {
+    private static Result tryWeekday(String s, Optional<ZoneId> zoneOpt, Clock clock) {
         String lower = s.toLowerCase(Locale.ROOT);
         // First token might be a weekday; the rest is an optional time string.
         int sp = lower.indexOf(' ');
@@ -224,41 +217,36 @@ public final class TimeParser {
         DayOfWeek dow = WEEKDAYS.get(head);
         if (dow == null) return null;
 
-        if (callerZone.isEmpty()) return new Result.RequiresCallerZone(NEEDS_TIMEZONE);
-        ZoneId calendar = callerZone.get();
+        if (zoneOpt.isEmpty()) return new Result.RequiresZone(NEEDS_ZONE);
+        ZoneId zone = zoneOpt.get();
 
         String rest = sp < 0 ? "" : lower.substring(sp + 1).trim();
         LocalTime time = rest.isEmpty() ? LocalTime.MIDNIGHT : parseLocalTime(rest);
         if (time == null) return new Result.Failed("`" + rest + "` isn't a valid time.");
 
-        ZoneId wallClockZone = rest.isEmpty() ? calendar : targetZone;
-        ZonedDateTime now = ZonedDateTime.now(clock.withZone(calendar));
+        ZonedDateTime now = ZonedDateTime.now(clock.withZone(zone));
         LocalDate today = now.toLocalDate();
         // Strictly-future rule: even if today is the requested weekday, prefer
         // the future moment. If a time is given and today's that weekday with
         // the time still ahead, today wins; otherwise advance.
-        ZonedDateTime candidate = ZonedDateTime.of(today, time, wallClockZone);
+        ZonedDateTime candidate = ZonedDateTime.of(today, time, zone);
         int daysUntil = (dow.getValue() - today.getDayOfWeek().getValue() + 7) % 7;
         if (daysUntil == 0 && !candidate.isAfter(now)) daysUntil = 7;
-        candidate = ZonedDateTime.of(today.plusDays(daysUntil), time, wallClockZone);
+        candidate = ZonedDateTime.of(today.plusDays(daysUntil), time, zone);
         return new Result.Ok(candidate.toInstant());
     }
 
-    private static Result tryBareTime(String s, Optional<ZoneId> callerZone,
-                                      ZoneId targetZone, Clock clock) {
+    private static Result tryBareTime(String s, Optional<ZoneId> zoneOpt, Clock clock) {
         LocalTime time = parseLocalTime(s);
         if (time == null) return null;
 
-        if (callerZone.isEmpty()) return new Result.RequiresCallerZone(NEEDS_TIMEZONE);
-        ZoneId calendar = callerZone.get();
+        if (zoneOpt.isEmpty()) return new Result.RequiresZone(NEEDS_ZONE);
+        ZoneId zone = zoneOpt.get();
 
-        ZonedDateTime now = ZonedDateTime.now(clock.withZone(calendar));
-        ZonedDateTime candidate = ZonedDateTime.of(now.toLocalDate(), time, targetZone);
-        // "Tonight's 7pm" semantics: if the time has passed in real time,
-        // jump forward a day in the caller's calendar.
-        if (!candidate.isAfter(now)) {
-            candidate = ZonedDateTime.of(now.toLocalDate().plusDays(1), time, targetZone);
-        }
+        ZonedDateTime now = ZonedDateTime.now(clock.withZone(zone));
+        ZonedDateTime candidate = ZonedDateTime.of(now.toLocalDate(), time, zone);
+        // "Tonight's 7pm" semantics: if the time has passed today, jump to tomorrow.
+        if (!candidate.isAfter(now)) candidate = candidate.plusDays(1);
         return new Result.Ok(candidate.toInstant());
     }
 
