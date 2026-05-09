@@ -832,3 +832,32 @@ Autocomplete on `tz:` shares the curated list with `/when`'s `in:`
 option (typing a city name like `tor` surfaces `America/Toronto`); any
 IANA name or offset is accepted. Replies are ephemeral throughout —
 no need to clutter the channel with someone's preference setting.
+
+### Weather
+
+`/weather location:<text> [units:<metric|imperial>] [private:<bool>]` —
+current conditions plus a 3-day forecast for any location
+[wttr.in](https://wttr.in) recognises (city, country, postal code,
+`lat,long`, etc.).
+
+Output is a Discord embed:
+
+- Title: "Weather in {city}, {region}, {country}" (resolved by wttr.in's
+  geocoder; if that comes back empty the embed falls back to the
+  caller's literal location string).
+- Description: condition emoji + temperature + feels-like, plus a
+  one-line summary of wind, humidity, UV.
+- Field: 3-day forecast as one line per day (emoji, weekday, high/low,
+  noon-ish description).
+- Footer: "via wttr.in".
+
+Units default to **metric** (°C, km/h); pass `units:imperial` for °F /
+mph. wttr.in returns both, so it's a render-time switch.
+
+No API key, no DB, no SSRF concerns (hostname is hard-coded). Ten-second
+timeout, response-size cap, and a small failure-mapping layer that
+distinguishes unknown locations (HTTP 500 with a "location not found"
+body — wttr.in's odd convention for typos) from rate-limit (HTTP 429,
+~30 req/hour per IP on the free tier) from generic upstream errors.
+Every failure mode produces a deterministic ephemeral message; raw
+exceptions are never surfaced.
