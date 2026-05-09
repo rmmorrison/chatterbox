@@ -3,7 +3,6 @@ package ca.ryanmorrison.chatterbox.features.when;
 import org.junit.jupiter.api.Test;
 
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -17,48 +16,46 @@ class ZoneResolutionTest {
 
     @Test
     void storedWinsForInterpretationWhenBothSupplied() {
-        // The bug fix: caller has stored Toronto, asks in:Kolkata.
-        // "12pm" must be interpreted as Toronto noon, NOT Kolkata noon.
         var r = ZoneResolution.resolve(Optional.of(TORONTO), Optional.of(KOLKATA));
         assertEquals(Optional.of(TORONTO), r.interpretZone());
-        assertEquals(KOLKATA, r.displayZone());
     }
 
     @Test
     void inWinsForDisplayWhenBothSupplied() {
-        // The other half of the bug fix: in: changes only what the
-        // wall-clock literal in the reply shows.
         var r = ZoneResolution.resolve(Optional.of(TORONTO), Optional.of(KOLKATA));
-        assertEquals(KOLKATA, r.displayZone());
+        assertEquals(Optional.of(KOLKATA), r.displayZone());
     }
 
     @Test
-    void storedAlonePicksItForBoth() {
+    void storedAlonePicksItForInterpretAndOmitsDisplay() {
+        // No in: → no wall-clock literal in the reply (would be redundant for the caller).
         var r = ZoneResolution.resolve(Optional.of(TORONTO), Optional.empty());
         assertEquals(Optional.of(TORONTO), r.interpretZone());
-        assertEquals(TORONTO, r.displayZone());
+        assertTrue(r.displayZone().isEmpty(),
+                () -> "expected empty displayZone when no in:, got " + r.displayZone());
     }
 
     @Test
     void inAlonePicksItForBoth() {
-        // No /timezone set; in: drives both. (Pre-/timezone behaviour.)
+        // No /timezone set; in: drives interpretation and display.
         var r = ZoneResolution.resolve(Optional.empty(), Optional.of(KOLKATA));
         assertEquals(Optional.of(KOLKATA), r.interpretZone());
-        assertEquals(KOLKATA, r.displayZone());
+        assertEquals(Optional.of(KOLKATA), r.displayZone());
     }
 
     @Test
-    void neitherLeavesInterpretationEmptyAndDisplayInUtc() {
+    void neitherLeavesBothEmpty() {
+        // No information at all — parser will reject calendar-relative inputs;
+        // pure-relative inputs (now / in N) still produce just-timestamp output.
         var r = ZoneResolution.resolve(Optional.empty(), Optional.empty());
         assertTrue(r.interpretZone().isEmpty());
-        assertEquals(ZoneOffset.UTC, r.displayZone());
+        assertTrue(r.displayZone().isEmpty());
     }
 
     @Test
     void threeDistinctZonesNotInvolvedAreNotConfused() {
-        // Sanity: the helper returns exactly the inputs in their roles, no shuffling.
         var r = ZoneResolution.resolve(Optional.of(TORONTO), Optional.of(TOKYO));
         assertEquals(Optional.of(TORONTO), r.interpretZone());
-        assertEquals(TOKYO, r.displayZone());
+        assertEquals(Optional.of(TOKYO),   r.displayZone());
     }
 }

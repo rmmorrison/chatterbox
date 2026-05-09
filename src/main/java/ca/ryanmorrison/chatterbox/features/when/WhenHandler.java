@@ -120,20 +120,27 @@ final class WhenHandler extends ListenerAdapter {
             DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy 'at' h:mm a", Locale.ENGLISH);
 
     /**
-     * Builds the user-facing reply as a single line:
+     * Builds the user-facing reply.
+     *
+     * <p>When {@code displayZone} is empty, the reply is just the Discord
+     * timestamp markdown — Discord auto-localizes {@code <t:UNIX:F>} to
+     * each viewer's locale, so a wall-clock literal in the caller's own
+     * zone would just be redundant noise. When {@code displayZone} is
+     * present (caller passed {@code in:}), the literal renders in that
+     * zone — the explicit "show me what this is over there" path.
+     *
      * <pre>
-     *   &lt;t:UNIX:F&gt; (&lt;t:UNIX:R&gt;) in Asia/Kolkata → **Saturday, May 9, 2026 at 9:30 PM**
+     *   no display: &lt;t:UNIX:F&gt; (&lt;t:UNIX:R&gt;)
+     *   display zone: &lt;t:UNIX:F&gt; (&lt;t:UNIX:R&gt;) in Asia/Kolkata → **Saturday, May 9, 2026 at 9:30 PM**
      * </pre>
-     * The Discord timestamps come first because they auto-render in the
-     * viewer's locale (so for the caller they're effectively "your time"),
-     * and the bold trailing wall-clock is the same moment expressed in the
-     * display zone.
      */
-    static String formatReply(ZoneId displayZone, Instant instant) {
+    static String formatReply(Optional<ZoneId> displayZone, Instant instant) {
         long epoch = instant.getEpochSecond();
-        String literal = LITERAL_FORMAT.format(instant.atZone(displayZone));
-        return "<t:" + epoch + ":F> (<t:" + epoch + ":R>) in "
-                + displayZone.getId() + " → **" + literal + "**";
+        String base = "<t:" + epoch + ":F> (<t:" + epoch + ":R>)";
+        if (displayZone.isEmpty()) return base;
+        ZoneId zone = displayZone.get();
+        String literal = LITERAL_FORMAT.format(instant.atZone(zone));
+        return base + " in " + zone.getId() + " → **" + literal + "**";
     }
 
     private static String stringOption(SlashCommandInteractionEvent event, String name) {

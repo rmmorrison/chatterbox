@@ -7,7 +7,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -29,19 +28,14 @@ import java.util.regex.Pattern;
  * <h2>Zone semantics</h2>
  * The {@code zone} parameter is the <em>interpretation</em> zone — used to
  * resolve relative inputs ({@code today}, {@code tomorrow}, weekday names,
- * bare times) and to attach a wall clock to ISO inputs. The handler's
- * <em>display</em> zone is a separate concern (see {@link ZoneResolution}).
+ * bare times) and to attach a wall clock to ISO inputs.
  *
- * <p>When {@code zone} is empty:
- * <ul>
- *   <li>Zone-independent inputs ({@code now}, relative offsets) succeed.</li>
- *   <li>ISO datetimes/dates fall back to {@link ZoneOffset#UTC} — they're
- *       fully specified moments, just need <em>some</em> wall-clock zone
- *       to attach to.</li>
- *   <li>Calendar-relative inputs return
- *       {@link Result.RequiresZone}; the handler surfaces this as a
- *       "set your timezone" prompt.</li>
- * </ul>
+ * <p>When {@code zone} is empty, only zone-independent inputs ({@code now},
+ * relative offsets) succeed. Everything else returns
+ * {@link Result.RequiresZone} — including ISO datetimes and dates, which
+ * could in principle default to UTC but in practice mislead callers who
+ * meant their own local zone. The handler surfaces this as a "set your
+ * timezone" prompt.
  *
  * <p>DST and offset edges are handled by {@link ZonedDateTime}.
  */
@@ -53,12 +47,11 @@ public final class TimeParser {
         record Ok(Instant instant) implements Result {}
         record Failed(String reason) implements Result {}
         /**
-         * The input is calendar-relative ({@code today}, {@code tomorrow},
-         * weekday name, bare time) but no interpretation zone was
-         * supplied. Resolving it without one would either guess wrong
-         * (the original "tomorrow in Kolkata picks Sunday when I'm in
-         * Toronto" surprise) or pick UTC, which is also rarely what the
-         * user means.
+         * The input requires a zone to interpret unambiguously, but none
+         * was supplied. Anything that names a wall clock or a calendar
+         * day falls into this bucket — without a zone we'd have to guess
+         * (defaulting to UTC mostly produces "wrong localized value"
+         * complaints from callers who meant their own zone).
          */
         record RequiresZone(String reason) implements Result {}
     }
@@ -103,9 +96,9 @@ public final class TimeParser {
                     + "or `2026-12-25 14:00`.";
 
     private static final String NEEDS_ZONE =
-            "I don't know which timezone to interpret this in. Set yours with "
-                    + "`/timezone set tz:<your zone>` first, pass `in:<zone>` on the command, "
-                    + "or use an absolute form like `2026-12-25 14:00`.";
+            "I don't know your timezone, so I can't safely interpret this. "
+                    + "Set yours with `/timezone set tz:<your zone>` (one-time), "
+                    + "or pass `in:<zone>` on this command for a one-off.";
 
     public static Result parse(String input, Optional<ZoneId> zone, Clock clock) {
         if (input == null) return new Result.Failed("No time provided. " + EXAMPLES);
@@ -113,16 +106,14 @@ public final class TimeParser {
         if (trimmed.isEmpty()) return new Result.Failed("No time provided. " + EXAMPLES);
 
         // Each parser returns null if it doesn't recognise the shape; any
-        // non-null Result short-circuits the chain.
+        // non-null Result short-circuits the chain. Only `now` and relative
+        // offsets work without a zone — everything else names a wall clock
+        // and/or a calendar day, both of which need a zone to be unambiguous.
         Result r;
-        if ((r = tryNow(trimmed, clock)) != null)            return r;
-        if ((r = tryRelative(trimmed, clock)) != null)       return r;
-        // ISO inputs are fully specified; if no zone provided, fall back to UTC.
-        ZoneId isoZone = zone.orElse(ZoneOffset.UTC);
-        if ((r = tryIsoDateTime(trimmed, isoZone)) != null)  return r;
-        if ((r = tryIsoDate(trimmed, isoZone)) != null)      return r;
-        // Calendar-relative inputs require a zone; without one we can't decide
-        // whose calendar to consult.
+        if ((r = tryNow(trimmed, clock)) != null)                 return r;
+        if ((r = tryRelative(trimmed, clock)) != null)            return r;
+        if ((r = tryIsoDateTime(trimmed, zone)) != null)          return r;
+        if ((r = tryIsoDate(trimmed, zone)) != null)              return r;
         if ((r = tryTodayTomorrow(trimmed, zone, clock)) != null) return r;
         if ((r = tryWeekday(trimmed, zone, clock)) != null)       return r;
         if ((r = tryBareTime(trimmed, zone, clock)) != null)      return r;
@@ -160,8 +151,10 @@ public final class TimeParser {
         return new Result.Ok(clock.instant().plusSeconds(seconds));
     }
 
-    private static Result tryIsoDateTime(String s, ZoneId zone) {
+    private static Result tryIsoDateTime(String s, Optional<ZoneId> zoneOpt) {
         if (!ISO_DATETIME.matcher(s).matches()) return null;
+        if (zoneOpt.isEmpty()) return new Result.RequiresZone(NEEDS_ZONE);
+        ZoneId zone = zoneOpt.get();
         // The space-separator form is common in input; the ISO parser wants 'T'.
         String normalised = s.replace(' ', 'T');
         // Add seconds if missing — ISO_LOCAL_DATE_TIME insists on them in some forms.
@@ -174,8 +167,10 @@ public final class TimeParser {
         }
     }
 
-    private static Result tryIsoDate(String s, ZoneId zone) {
+    private static Result tryIsoDate(String s, Optional<ZoneId> zoneOpt) {
         if (!ISO_DATE.matcher(s).matches()) return null;
+        if (zoneOpt.isEmpty()) return new Result.RequiresZone(NEEDS_ZONE);
+        ZoneId zone = zoneOpt.get();
         try {
             LocalDate date = LocalDate.parse(s, DateTimeFormatter.ISO_LOCAL_DATE);
             return new Result.Ok(date.atStartOfDay(zone).toInstant());

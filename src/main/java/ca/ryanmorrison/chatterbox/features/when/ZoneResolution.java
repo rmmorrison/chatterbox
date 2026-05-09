@@ -1,7 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.when;
 
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.Optional;
 
 /**
@@ -11,7 +10,10 @@ import java.util.Optional;
  *       {@code at:} string. "tomorrow" / "12pm" / "friday" attach to
  *       <em>this</em> zone's calendar and wall clock.</li>
  *   <li><b>Display zone</b> — the zone the bot's wall-clock literal is
- *       rendered in, alongside the Discord {@code <t:UNIX:F>} markdown.</li>
+ *       rendered in, alongside the Discord {@code <t:UNIX:F>} markdown.
+ *       Empty means "don't render a wall-clock literal at all" — Discord
+ *       will localize the timestamp for each viewer regardless, so the
+ *       extra line would just be redundant for the caller.</li>
  * </ol>
  *
  * <h2>Resolution rules</h2>
@@ -24,25 +26,20 @@ import java.util.Optional;
  * in Kolkata"</em>, not <em>"tomorrow noon Kolkata wall clock"</em>.
  *
  * <p>If the caller hasn't set a personal timezone, {@code in:} falls back
- * to also driving interpretation (the pre-{@code /timezone} behaviour).
- * If neither is supplied, interpretation is empty — the parser then
- * accepts only zone-independent forms (now, relative offsets) and rejects
- * calendar-relative ones with {@link TimeParser.Result.RequiresCallerZone}.
+ * to driving interpretation too. If neither is supplied, interpretation
+ * is empty — the parser then accepts only zone-independent forms (now,
+ * relative offsets) and rejects anything else with
+ * {@link TimeParser.Result.RequiresZone}.
  *
- * <p>Display falls back to caller's stored zone, then to UTC for the
- * "no zone information at all" path so the wall-clock literal still
- * renders something coherent.
+ * <p>Display is purely opt-in: the wall-clock literal renders only when
+ * the caller explicitly passes {@code in:}. With no {@code in:}, the
+ * reply is just the Discord markdown, which auto-localizes per viewer.
  */
 final class ZoneResolution {
 
     private ZoneResolution() {}
 
-    /**
-     * @param interpretZone zone to parse {@code at:} against; empty when
-     *                      neither the caller nor {@code in:} provides one
-     * @param displayZone   zone the bot renders the wall-clock literal in
-     */
-    record Resolved(Optional<ZoneId> interpretZone, ZoneId displayZone) {}
+    record Resolved(Optional<ZoneId> interpretZone, Optional<ZoneId> displayZone) {}
 
     /**
      * @param storedZone caller's preference (from {@code /timezone set}),
@@ -52,7 +49,6 @@ final class ZoneResolution {
      */
     static Resolved resolve(Optional<ZoneId> storedZone, Optional<ZoneId> inOption) {
         Optional<ZoneId> interpret = storedZone.or(() -> inOption);
-        ZoneId display = inOption.or(() -> storedZone).orElse(ZoneOffset.UTC);
-        return new Resolved(interpret, display);
+        return new Resolved(interpret, inOption);
     }
 }

@@ -90,11 +90,12 @@ class TimeParserTest {
     }
 
     @Test
-    void isoDateTimeFallsBackToUtcWithoutZone() {
-        // ISO datetimes are fully specified — when no zone is supplied,
-        // UTC is the convention.
+    void isoDateTimeRequiresZone() {
+        // ISO datetimes name a wall clock — without a zone we'd have to
+        // guess UTC, which produces "wrong localized value" complaints
+        // from callers who meant their own zone. Reject and ask instead.
         var r = TimeParser.parse("2026-12-25 12:00", Optional.empty(), CLOCK);
-        assertEquals(Instant.parse("2026-12-25T12:00:00Z"), ((TimeParser.Result.Ok) r).instant());
+        assertInstanceOf(TimeParser.Result.RequiresZone.class, r);
     }
 
     @Test
@@ -110,9 +111,10 @@ class TimeParserTest {
     }
 
     @Test
-    void isoDateFallsBackToUtcWithoutZone() {
+    void isoDateRequiresZone() {
+        // Same logic — "midnight on Dec 25" needs a zone to be a real moment.
         var r = TimeParser.parse("2026-12-25", Optional.empty(), CLOCK);
-        assertEquals(Instant.parse("2026-12-25T00:00:00Z"), ((TimeParser.Result.Ok) r).instant());
+        assertInstanceOf(TimeParser.Result.RequiresZone.class, r);
     }
 
     // ---- today / tomorrow ----
