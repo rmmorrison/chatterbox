@@ -58,9 +58,16 @@ public final class TriviaModule implements Module {
                 false, false)
                 .setRequiredRange(TriviaHandler.MIN_ROUNDS, TriviaHandler.MAX_ROUNDS);
 
+        OptionData lobby = new OptionData(OptionType.INTEGER,
+                TriviaHandler.OPT_LOBBY,
+                "Seconds to wait for players to join before starting (default "
+                        + TriviaHandler.DEFAULT_LOBBY_SECS + ").",
+                false, false)
+                .setRequiredRange(TriviaHandler.MIN_LOBBY_SECONDS, TriviaHandler.MAX_LOBBY_SECONDS);
+
         return List.of(Commands.slash(TriviaHandler.COMMAND,
-                        "Play a trivia game. First correct click wins each round.")
-                .addOptions(difficulty, category, numRounds));
+                        "Start a trivia session. Players opt in during a lobby, then play together.")
+                .addOptions(difficulty, category, numRounds, lobby));
     }
 
     @Override

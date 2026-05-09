@@ -13,19 +13,27 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Owns the in-memory map of in-flight trivia games and rounds, plus the
- * timeout scheduler that auto-resolves abandoned rounds.
+ * Owns the in-memory state for trivia: the per-channel "one game at a
+ * time" lock, the active games map, the active rounds map, and the
+ * timeout scheduler that closes lobby phases and answer windows.
  *
- * <p>Concurrency model: every round-state transition goes through
- * {@link ConcurrentHashMap#compute}, which is atomic per key. That gives
- * us "first correct click wins" without explicit locking — when a round
- * is resolved (correct answer or timeout) it is removed from the map
- * atomically; any subsequent click on the same buttons sees
- * {@link Outcome#NOT_FOUND}. Game-level state is mutated only by the
- * single thread that resolved the round, so no further locking is needed.
+ * <p>Concurrency model:
+ * <ul>
+ *   <li><b>Per-channel session lock</b>: {@link #tryClaimChannel} uses
+ *       {@code putIfAbsent} so two concurrent {@code /trivia} invocations
+ *       in the same channel can't both create games.</li>
+ *   <li><b>Round resolution</b>: {@link #consumeRound} atomically removes
+ *       a round from the map. Both the answer-button path (when all
+ *       joined players have answered) and the timeout path call
+ *       {@code consumeRound}; only one wins, so the round is resolved
+ *       exactly once.</li>
+ *   <li><b>Per-answer state</b>: {@link #recordAnswer} uses
+ *       {@link ConcurrentHashMap#compute} so concurrent button clicks
+ *       don't race on the answers map.</li>
+ * </ul>
  *
- * <p>Round and game IDs are short alphanumeric tokens (8 chars) so they
- * fit comfortably under Discord's 100-char {@code custom_id} limit.
+ * <p>IDs are short alphanumeric tokens so they fit comfortably in
+ * Discord's 100-char {@code custom_id} limit alongside their prefix.
  */
 final class TriviaRounds {
 
@@ -36,6 +44,8 @@ final class TriviaRounds {
     private final Map<String, TriviaRound> rounds = new ConcurrentHashMap<>();
     private final Map<String, ScheduledFuture<?>> timeouts = new ConcurrentHashMap<>();
     private final Map<String, TriviaGame> games = new ConcurrentHashMap<>();
+    /** channelId → gameId; enforces "one game per channel". */
+    private final Map<Long, String> channelClaims = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler;
 
     TriviaRounds() {
@@ -49,7 +59,7 @@ final class TriviaRounds {
 
     private static ScheduledExecutorService defaultScheduler() {
         AtomicInteger n = new AtomicInteger();
-        return Executors.newScheduledThreadPool(1, r -> {
+        return Executors.newScheduledThreadPool(2, r -> {
             Thread t = new Thread(r, "trivia-timeout-" + n.incrementAndGet());
             t.setDaemon(true);
             return t;
@@ -65,6 +75,30 @@ final class TriviaRounds {
         return new String(out);
     }
 
+    // -- per-channel session locking ---------------------------------------
+
+    /**
+     * Atomically claim {@code channelId} for {@code gameId}. Returns true
+     * if the channel was free; false if another game already owns it.
+     */
+    boolean tryClaimChannel(long channelId, String gameId) {
+        return channelClaims.putIfAbsent(channelId, gameId) == null;
+    }
+
+    /** Release the channel claim — call when the game ends or aborts. */
+    void releaseChannel(long channelId, String gameId) {
+        // remove(K, V) only removes if the value still matches.
+        channelClaims.remove(channelId, gameId);
+    }
+
+    Optional<TriviaGame> activeGameInChannel(long channelId) {
+        String gid = channelClaims.get(channelId);
+        if (gid == null) return Optional.empty();
+        return game(gid);
+    }
+
+    // -- game registry -----------------------------------------------------
+
     void registerGame(TriviaGame game) {
         games.put(game.gameId(), game);
     }
@@ -77,10 +111,17 @@ final class TriviaRounds {
         games.remove(gameId);
     }
 
+    // -- timeout scheduling ------------------------------------------------
+
+    /** Schedule a one-shot task; returns the future for cancellation. */
+    ScheduledFuture<?> schedule(Runnable task, long delaySeconds) {
+        return scheduler.schedule(task, delaySeconds, TimeUnit.SECONDS);
+    }
+
     /**
-     * Register a freshly-built round and schedule its timeout.
-     * {@code onTimeout} runs only if the round is still present at
-     * deadline (i.e. nobody won first).
+     * Register a freshly-built round and schedule its answer-window
+     * timeout. {@code onTimeout} runs only if the round is still present
+     * at deadline (i.e. not already resolved by all-answered).
      */
     void register(TriviaRound round, long timeoutSeconds, Runnable onTimeout) {
         rounds.put(round.roundId(), round);
@@ -99,42 +140,73 @@ final class TriviaRounds {
     }
 
     /**
-     * Atomic answer attempt.
+     * Atomically remove a round from the active set, cancelling its
+     * timeout. Returns the removed round (for resolution work) or empty
+     * if it was already consumed by a concurrent caller.
      *
-     * <p>Returns the outcome plus a snapshot of the round (taken inside
-     * the compute lambda). For {@link Outcome#CORRECT_FIRST} the round
-     * has been removed from the map; for {@link Outcome#WRONG} the
-     * snapshot already includes the new wrong-answerer.
+     * <p>This is the synchronisation point shared by the all-answered
+     * early-end path and the timeout path.
      */
-    Result attempt(String roundId, long userId, int choiceIndex) {
-        Outcome[] outcome = new Outcome[]{ Outcome.NOT_FOUND };
-        TriviaRound[] snapshot = new TriviaRound[1];
+    Optional<TriviaRound> consumeRound(String roundId) {
+        TriviaRound[] removed = new TriviaRound[1];
         rounds.compute(roundId, (k, current) -> {
-            if (current == null) {
-                outcome[0] = Outcome.NOT_FOUND;
-                return null;
-            }
-            if (current.wrongAnswerers().contains(userId)) {
-                outcome[0] = Outcome.ALREADY_ANSWERED;
-                snapshot[0] = current;
-                return current;
-            }
-            if (choiceIndex == current.correctIndex()) {
-                outcome[0] = Outcome.CORRECT_FIRST;
-                snapshot[0] = current;
-                return null; // remove — round is over.
-            }
-            outcome[0] = Outcome.WRONG;
-            TriviaRound next = current.withWrongAnswerer(userId);
-            snapshot[0] = next;
-            return next;
+            if (current == null) return null;
+            removed[0] = current;
+            return null;
         });
-        if (outcome[0] == Outcome.CORRECT_FIRST) {
+        if (removed[0] != null) {
             ScheduledFuture<?> t = timeouts.remove(roundId);
             if (t != null) t.cancel(false);
         }
-        return new Result(outcome[0], Optional.ofNullable(snapshot[0]));
+        return Optional.ofNullable(removed[0]);
     }
+
+    /**
+     * Record one player's answer.
+     *
+     * <p>Outcomes:
+     * <ul>
+     *   <li>{@link AttemptOutcome#NOT_FOUND} — round already resolved.</li>
+     *   <li>{@link AttemptOutcome#NOT_JOINED} — clicker isn't a player in
+     *       this session.</li>
+     *   <li>{@link AttemptOutcome#ALREADY_ANSWERED} — that user already
+     *       picked.</li>
+     *   <li>{@link AttemptOutcome#RECORDED} — answer accepted; the
+     *       round is still in flight.</li>
+     *   <li>{@link AttemptOutcome#RECORDED_LAST} — answer accepted and
+     *       it was the last outstanding answer; the caller should close
+     *       the round (call {@link #consumeRound}).</li>
+     * </ul>
+     */
+    AttemptResult recordAnswer(String roundId, long userId, int choiceIndex) {
+        AttemptOutcome[] outcome = new AttemptOutcome[]{ AttemptOutcome.NOT_FOUND };
+        TriviaRound[] snapshot = new TriviaRound[1];
+        rounds.compute(roundId, (k, current) -> {
+            if (current == null) {
+                outcome[0] = AttemptOutcome.NOT_FOUND;
+                return null;
+            }
+            if (!current.joinedPlayers().contains(userId)) {
+                outcome[0] = AttemptOutcome.NOT_JOINED;
+                snapshot[0] = current;
+                return current;
+            }
+            if (current.answers().containsKey(userId)) {
+                outcome[0] = AttemptOutcome.ALREADY_ANSWERED;
+                snapshot[0] = current;
+                return current;
+            }
+            TriviaRound next = current.withAnswer(userId, choiceIndex);
+            snapshot[0] = next;
+            outcome[0] = next.allJoinedAnswered()
+                    ? AttemptOutcome.RECORDED_LAST
+                    : AttemptOutcome.RECORDED;
+            return next;
+        });
+        return new AttemptResult(outcome[0], Optional.ofNullable(snapshot[0]));
+    }
+
+    // -- shutdown ----------------------------------------------------------
 
     /** Stop the scheduler and forget all in-flight state. */
     void stop() {
@@ -147,13 +219,18 @@ final class TriviaRounds {
         rounds.clear();
         timeouts.clear();
         games.clear();
+        channelClaims.clear();
     }
 
-    enum Outcome { CORRECT_FIRST, WRONG, ALREADY_ANSWERED, NOT_FOUND }
+    // -- types -------------------------------------------------------------
 
-    record Result(Outcome outcome, Optional<TriviaRound> round) {}
+    enum AttemptOutcome {
+        NOT_FOUND, NOT_JOINED, ALREADY_ANSWERED, RECORDED, RECORDED_LAST
+    }
 
-    // -- choice shuffling ---------------------------------------------------
+    record AttemptResult(AttemptOutcome outcome, Optional<TriviaRound> round) {}
+
+    // -- choice shuffling --------------------------------------------------
 
     /**
      * Build the display order for a question. Multiple-choice questions

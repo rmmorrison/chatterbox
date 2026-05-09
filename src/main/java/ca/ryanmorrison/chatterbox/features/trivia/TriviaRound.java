@@ -1,29 +1,21 @@
 package ca.ryanmorrison.chatterbox.features.trivia;
 
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * Immutable snapshot of one in-flight trivia round inside a
  * {@link TriviaGame}.
  *
- * <p>Field semantics:
- * <ul>
- *   <li>{@code roundId} — short opaque id baked into each button's
- *       {@code custom_id}; lookups in {@link TriviaRounds} key on this.</li>
- *   <li>{@code gameId} — back-reference so a button click can find the
- *       owning game without scanning.</li>
- *   <li>{@code roundNumber} / {@code totalRounds} — 1-based progress
- *       indicator shown in the embed.</li>
- *   <li>{@code shuffledChoices} — labels in display order;
- *       {@code correctIndex} indexes into this list.</li>
- *   <li>{@code messageId} / {@code channelId} — the public message that
- *       carries the question + buttons; needed for edit-on-resolve.</li>
- *   <li>{@code wrongAnswerers} — users who already burned their one shot
- *       with a wrong guess.</li>
- * </ul>
+ * <p>All joined players get one shot per round. The round resolves when
+ * either every joined player has answered (early end) or its timer fires.
+ * {@code answers} maps userId → chosen choice index; the per-player
+ * outcome (correct / wrong-with-pick / no-answer) is computed at
+ * resolution time from this map plus {@link #joinedPlayers} and
+ * {@link #correctIndex}.
  */
 record TriviaRound(
         String roundId,
@@ -35,20 +27,26 @@ record TriviaRound(
         TriviaQuestion question,
         List<String> shuffledChoices,
         int correctIndex,
-        Set<Long> wrongAnswerers) {
+        Set<Long> joinedPlayers,
+        Map<Long, Integer> answers) {
 
-    TriviaRound withWrongAnswerer(long userId) {
-        LinkedHashSet<Long> next = new LinkedHashSet<>(wrongAnswerers);
-        next.add(userId);
+    TriviaRound withAnswer(long userId, int choiceIndex) {
+        LinkedHashMap<Long, Integer> next = new LinkedHashMap<>(answers);
+        next.put(userId, choiceIndex);
         return new TriviaRound(roundId, gameId, roundNumber, totalRounds,
                 messageId, channelId, question,
-                shuffledChoices, correctIndex, Collections.unmodifiableSet(next));
+                shuffledChoices, correctIndex, joinedPlayers,
+                Collections.unmodifiableMap(next));
     }
 
     TriviaRound withMessage(long messageId, long channelId) {
         return new TriviaRound(roundId, gameId, roundNumber, totalRounds,
                 messageId, channelId, question,
-                shuffledChoices, correctIndex, wrongAnswerers);
+                shuffledChoices, correctIndex, joinedPlayers, answers);
+    }
+
+    boolean allJoinedAnswered() {
+        return answers.size() >= joinedPlayers.size();
     }
 
     String correctAnswerLabel() {

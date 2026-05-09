@@ -5,17 +5,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,7 +27,7 @@ class TriviaRoundsTest {
 
     @BeforeEach
     void setUp() {
-        scheduler = Executors.newScheduledThreadPool(1);
+        scheduler = Executors.newScheduledThreadPool(2);
         rounds = new TriviaRounds(scheduler);
     }
 
@@ -45,12 +46,35 @@ class TriviaRoundsTest {
                 List.of("Toronto", "Vancouver", "Montreal"));
     }
 
-    private static TriviaRound buildRound(String roundId, String gameId,
-                                          int roundNumber, int totalRounds,
-                                          int correctIdx, List<String> labels) {
-        return new TriviaRound(roundId, gameId, roundNumber, totalRounds,
-                100L, 200L, sampleMultiple(), labels, correctIdx, Collections.emptySet());
+    private static TriviaRound buildRound(String roundId, Set<Long> joinedPlayers, int correctIdx) {
+        return new TriviaRound(roundId, "g1", 1, 5, 100L, 200L,
+                sampleMultiple(),
+                List.of("Ottawa", "Toronto", "Vancouver", "Montreal"),
+                correctIdx, joinedPlayers,
+                Collections.unmodifiableMap(new HashMap<>()));
     }
+
+    // -- per-channel session lock -----------------------------------------
+
+    @Test
+    void firstClaimWinsTheChannel() {
+        assertTrue(rounds.tryClaimChannel(200L, "g1"));
+        assertFalse(rounds.tryClaimChannel(200L, "g2"),
+                "second concurrent /trivia in the same channel must be rejected");
+    }
+
+    @Test
+    void releaseOnlyClearsMatchingClaim() {
+        rounds.tryClaimChannel(200L, "g1");
+        rounds.releaseChannel(200L, "g2"); // wrong gameId — should be a no-op
+        assertFalse(rounds.tryClaimChannel(200L, "g3"),
+                "claim should still be held by g1");
+        rounds.releaseChannel(200L, "g1");
+        assertTrue(rounds.tryClaimChannel(200L, "g4"),
+                "channel should be free after the right release");
+    }
+
+    // -- shuffling ---------------------------------------------------------
 
     @Test
     void shuffleMultipleHasAllAnswersAndCorrectIndex() {
@@ -76,72 +100,130 @@ class TriviaRoundsTest {
         assertEquals(1, TriviaRounds.shuffle(qFalse).correctIndex());
     }
 
+    // -- recordAnswer state machine ---------------------------------------
+
     @Test
-    void firstCorrectAnswerWins() {
-        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
-                List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
-        rounds.register(round, 60, () -> { /* won't fire */ });
-
-        assertEquals(TriviaRounds.Outcome.WRONG, rounds.attempt("r1", 1L, 1).outcome());
-
-        TriviaRounds.Result correct = rounds.attempt("r1", 2L, 0);
-        assertEquals(TriviaRounds.Outcome.CORRECT_FIRST, correct.outcome());
-        assertEquals("Ottawa", correct.round().orElseThrow().correctAnswerLabel());
-
-        assertEquals(TriviaRounds.Outcome.NOT_FOUND,
-                rounds.attempt("r1", 3L, 0).outcome());
+    void nonJoinedClickRejected() {
+        TriviaRound round = buildRound("r1", Set.of(1L, 2L), 0);
+        rounds.register(round, 60, () -> {});
+        TriviaRounds.AttemptResult r = rounds.recordAnswer("r1", 99L, 0);
+        assertEquals(TriviaRounds.AttemptOutcome.NOT_JOINED, r.outcome());
     }
 
     @Test
-    void wrongAnswerLocksOutThatUser() {
-        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
-                List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
+    void firstAnswerRecordsAndMarksRecorded() {
+        TriviaRound round = buildRound("r1", Set.of(1L, 2L, 3L), 0);
+        rounds.register(round, 60, () -> {});
+        TriviaRounds.AttemptResult r = rounds.recordAnswer("r1", 1L, 1);
+        assertEquals(TriviaRounds.AttemptOutcome.RECORDED, r.outcome());
+        assertEquals(1, r.round().orElseThrow().answers().size());
+    }
+
+    @Test
+    void duplicateAnswerSameUserIsRejected() {
+        TriviaRound round = buildRound("r1", Set.of(1L, 2L, 3L), 0);
+        rounds.register(round, 60, () -> {});
+        rounds.recordAnswer("r1", 1L, 1);
+        TriviaRounds.AttemptResult r = rounds.recordAnswer("r1", 1L, 0);
+        assertEquals(TriviaRounds.AttemptOutcome.ALREADY_ANSWERED, r.outcome());
+        // Original (wrong) answer is preserved.
+        assertEquals(1, r.round().orElseThrow().answers().get(1L));
+    }
+
+    @Test
+    void lastOutstandingAnswerSignalsRecordedLast() {
+        TriviaRound round = buildRound("r1", Set.of(1L, 2L), 0);
+        rounds.register(round, 60, () -> {});
+        assertEquals(TriviaRounds.AttemptOutcome.RECORDED,
+                rounds.recordAnswer("r1", 1L, 0).outcome());
+        TriviaRounds.AttemptResult last = rounds.recordAnswer("r1", 2L, 1);
+        assertEquals(TriviaRounds.AttemptOutcome.RECORDED_LAST, last.outcome(),
+                "last joined player to answer should signal early-end");
+    }
+
+    @Test
+    void recordedLastFromConcurrentClicksFiresExactlyOnce() throws Exception {
+        TriviaRound round = buildRound("r1", Set.of(1L, 2L, 3L), 0);
         rounds.register(round, 60, () -> {});
 
-        assertEquals(TriviaRounds.Outcome.WRONG, rounds.attempt("r1", 1L, 1).outcome());
-        assertEquals(TriviaRounds.Outcome.ALREADY_ANSWERED,
-                rounds.attempt("r1", 1L, 0).outcome());
-        assertEquals(TriviaRounds.Outcome.CORRECT_FIRST,
-                rounds.attempt("r1", 2L, 0).outcome());
+        int contestants = 3;
+        var pool = Executors.newFixedThreadPool(contestants);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger lastCount = new AtomicInteger();
+        var futures = new java.util.concurrent.Future<?>[contestants];
+        long[] users = {1L, 2L, 3L};
+        for (int i = 0; i < contestants; i++) {
+            final long userId = users[i];
+            futures[i] = pool.submit(() -> {
+                try { start.await(); } catch (InterruptedException e) { return; }
+                if (rounds.recordAnswer("r1", userId, 0).outcome()
+                        == TriviaRounds.AttemptOutcome.RECORDED_LAST) {
+                    lastCount.incrementAndGet();
+                }
+            });
+        }
+        start.countDown();
+        for (var f : futures) f.get(2, TimeUnit.SECONDS);
+        pool.shutdown();
+        assertEquals(1, lastCount.get(),
+                "exactly one click should be tagged as the round-closer");
     }
 
     @Test
     void unknownRoundIdReturnsNotFound() {
-        assertEquals(TriviaRounds.Outcome.NOT_FOUND,
-                rounds.attempt("nope", 1L, 0).outcome());
+        assertEquals(TriviaRounds.AttemptOutcome.NOT_FOUND,
+                rounds.recordAnswer("nope", 1L, 0).outcome());
+    }
+
+    // -- consumeRound (the resolution synchroniser) -----------------------
+
+    @Test
+    void consumeRoundReturnsRoundOnceThenEmpty() {
+        TriviaRound round = buildRound("r1", Set.of(1L), 0);
+        rounds.register(round, 60, () -> {});
+        assertTrue(rounds.consumeRound("r1").isPresent());
+        assertTrue(rounds.consumeRound("r1").isEmpty(),
+                "second consume should see the round already gone");
     }
 
     @Test
-    void timeoutRunnableFiresAndRemovesRound() throws Exception {
-        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
-                List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
-
-        CountDownLatch latch = new CountDownLatch(1);
-        rounds.register(round, 0, latch::countDown);
-
-        assertTrue(latch.await(2, TimeUnit.SECONDS), "timeout runnable should fire");
-        assertEquals(TriviaRounds.Outcome.NOT_FOUND,
-                rounds.attempt("r1", 1L, 0).outcome());
-    }
-
-    @Test
-    void winningClickCancelsTimeout() throws Exception {
-        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
-                List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
-
-        AtomicInteger timeoutFires = new AtomicInteger();
-        rounds.register(round, 1, timeoutFires::incrementAndGet);
-
-        assertEquals(TriviaRounds.Outcome.CORRECT_FIRST,
-                rounds.attempt("r1", 1L, 0).outcome());
-
+    void consumeRoundCancelsTheTimeoutCallback() throws Exception {
+        TriviaRound round = buildRound("r1", Set.of(1L), 0);
+        AtomicInteger fires = new AtomicInteger();
+        rounds.register(round, 1, fires::incrementAndGet);
+        rounds.consumeRound("r1");
         Thread.sleep(1500);
-        assertEquals(0, timeoutFires.get(),
-                "timeout should be cancelled when a player wins first");
+        assertEquals(0, fires.get(),
+                "timeout should not fire after consumeRound succeeded");
     }
 
     @Test
-    void roundIdsAreEightCharsAndSomewhatRandom() {
+    void timeoutAndConsumeAreMutuallyExclusive() throws Exception {
+        // If the timeout removes the round first, the runnable fires AND
+        // consumeRound sees nothing. If consumeRound wins first, the timeout
+        // removal returns null and the runnable doesn't fire. Either way,
+        // exactly one resolution path runs.
+        TriviaRound round = buildRound("r1", Set.of(1L), 0);
+        AtomicInteger fires = new AtomicInteger();
+        CountDownLatch latch = new CountDownLatch(1);
+        rounds.register(round, 0, () -> { fires.incrementAndGet(); latch.countDown(); });
+        // Race: try to consume just as the timer fires. Won't be reliable
+        // every time but verifies the contract whichever side wins.
+        boolean timedOut = latch.await(2, TimeUnit.SECONDS);
+        var consumed = rounds.consumeRound("r1");
+        if (timedOut) {
+            assertEquals(1, fires.get());
+            assertTrue(consumed.isEmpty());
+        } else {
+            assertTrue(consumed.isPresent());
+            assertEquals(0, fires.get());
+        }
+    }
+
+    // -- ids + game registry ----------------------------------------------
+
+    @Test
+    void idsAreEightCharsAndSomewhatRandom() {
         String a = rounds.newId();
         String b = rounds.newId();
         assertEquals(8, a.length());
@@ -150,56 +232,20 @@ class TriviaRoundsTest {
     }
 
     @Test
-    void concurrentClicksProduceExactlyOneWinner() throws Exception {
-        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
-                List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
-        rounds.register(round, 60, () -> {});
-
-        int contestants = 20;
-        ExecutorService pool = Executors.newFixedThreadPool(contestants);
-        CountDownLatch start = new CountDownLatch(1);
-        AtomicInteger winners = new AtomicInteger();
-        Future<?>[] futures = new Future<?>[contestants];
-
-        for (int i = 0; i < contestants; i++) {
-            final long userId = 1000L + i;
-            futures[i] = pool.submit(() -> {
-                try {
-                    start.await();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-                if (rounds.attempt("r1", userId, 0).outcome()
-                        == TriviaRounds.Outcome.CORRECT_FIRST) {
-                    winners.incrementAndGet();
-                }
-            });
-        }
-        start.countDown();
-        for (Future<?> f : futures) f.get(2, TimeUnit.SECONDS);
-        pool.shutdown();
-
-        assertEquals(1, winners.get(),
-                "exactly one concurrent click should win — atomic CAS contract");
-    }
-
-    // -- game registry ------------------------------------------------------
-
-    @Test
     void registerAndLookupGameById() {
         TriviaGame game = new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), 5, "tok");
+                TriviaFilter.any(), 5, 30, 20, "tok");
         rounds.registerGame(game);
         assertEquals(game, rounds.game("g1").orElseThrow());
     }
 
     @Test
-    void removeGameForgetsIt() {
+    void activeGameInChannelLooksUpViaClaim() {
         TriviaGame game = new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), 5, null);
+                TriviaFilter.any(), 5, 30, 20, null);
+        rounds.tryClaimChannel(200L, "g1");
         rounds.registerGame(game);
-        rounds.removeGame("g1");
-        assertTrue(rounds.game("g1").isEmpty());
+        assertEquals(game, rounds.activeGameInChannel(200L).orElseThrow());
+        assertTrue(rounds.activeGameInChannel(999L).isEmpty());
     }
 }

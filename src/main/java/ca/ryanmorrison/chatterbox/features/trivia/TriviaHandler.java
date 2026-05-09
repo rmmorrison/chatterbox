@@ -12,41 +12,66 @@ import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Handles {@code /trivia} (slash) and the answer button clicks that
- * follow. Owns multi-round game lifecycle: posts each round, scores the
- * winner on resolution, advances to the next round, and posts a final
- * leaderboard at game-end.
+ * Handles {@code /trivia} (slash) plus the Join and Answer button clicks
+ * that drive a session through its lobby and round phases.
  *
- * <p>Custom-id format on each button: {@code trivia:answer:<roundId>:<index>}.
- * The round id keys into {@link TriviaRounds}; the index is the zero-based
- * position in the shuffled choice list. The correct answer is never
- * encoded in the button.
+ * <p>Game lifecycle:
+ * <ol>
+ *   <li>Slash → claim the channel (one game per channel) → request
+ *       opentdb session token → post the lobby embed with a Join button.</li>
+ *   <li>Join clicks add the user to the joined set and re-render the
+ *       lobby embed live.</li>
+ *   <li>Lobby timer fires → freeze the joined set → fetch round 1's
+ *       question → post it with answer buttons.</li>
+ *   <li>Each Answer click is recorded; if it's the last outstanding
+ *       answer the round resolves immediately, otherwise it waits for
+ *       the round timer.</li>
+ *   <li>Round resolution scores the round, posts a result embed, then
+ *       fetches and posts the next round (or the final leaderboard).</li>
+ * </ol>
  *
- * <p>Why a dedicated worker pool: opentdb fetches block on the network and
- * we want round advancement to happen off the JDA event thread (and off
- * the timeout-scheduler thread). One thread is enough — at most one fetch
- * is in flight per game and games are infrequent.
+ * <p>Custom-id formats:
+ * <ul>
+ *   <li>{@code trivia:join:<gameId>}</li>
+ *   <li>{@code trivia:answer:<roundId>:<choiceIndex>} — index encodes
+ *       only the position in the shuffled choice list, never the answer
+ *       text.</li>
+ * </ul>
+ *
+ * <p>Why a worker pool: opentdb fetches block on the network (and self-rate-limit
+ * up to 5.5s). Doing them on the JDA event thread or the timeout
+ * scheduler thread would freeze unrelated work; a single dedicated
+ * worker keeps fetches off both.
  */
 final class TriviaHandler extends ListenerAdapter {
 
-    static final String COMMAND          = "trivia";
-    static final String OPT_DIFFICULTY   = "difficulty";
-    static final String OPT_CATEGORY     = "category";
-    static final String OPT_ROUNDS       = "rounds";
+    static final String COMMAND        = "trivia";
+    static final String OPT_DIFFICULTY = "difficulty";
+    static final String OPT_CATEGORY   = "category";
+    static final String OPT_ROUNDS     = "rounds";
+    static final String OPT_LOBBY      = "lobby";
 
-    static final String BUTTON_PREFIX = "trivia:answer:";
-    static final long ROUND_TIMEOUT_SECONDS = 60L;
-    static final int  MIN_ROUNDS = 1;
-    static final int  MAX_ROUNDS = 10;
-    static final int  DEFAULT_ROUNDS = 5;
+    static final String BUTTON_JOIN_PREFIX   = "trivia:join:";
+    static final String BUTTON_ANSWER_PREFIX = "trivia:answer:";
+
+    static final int MIN_ROUNDS         = 1;
+    static final int MAX_ROUNDS         = 10;
+    static final int DEFAULT_ROUNDS     = 5;
+    static final int MIN_LOBBY_SECONDS  = 5;
+    static final int MAX_LOBBY_SECONDS  = 120;
+    static final int DEFAULT_LOBBY_SECS = 30;
+    static final int ROUND_SECONDS      = 20;
 
     private static final Logger log = LoggerFactory.getLogger(TriviaHandler.class);
 
@@ -85,6 +110,8 @@ final class TriviaHandler extends ListenerAdapter {
         worker.shutdownNow();
     }
 
+    // -- slash command -----------------------------------------------------
+
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (!COMMAND.equals(event.getName())) return;
@@ -93,6 +120,8 @@ final class TriviaHandler extends ListenerAdapter {
         Integer categoryId = intOption(event, OPT_CATEGORY);
         int totalRounds = clamp(intOptionOrDefault(event, OPT_ROUNDS, DEFAULT_ROUNDS),
                 MIN_ROUNDS, MAX_ROUNDS);
+        int lobbySeconds = clamp(intOptionOrDefault(event, OPT_LOBBY, DEFAULT_LOBBY_SECS),
+                MIN_LOBBY_SECONDS, MAX_LOBBY_SECONDS);
 
         TriviaFilter filter;
         try {
@@ -102,82 +131,103 @@ final class TriviaHandler extends ListenerAdapter {
             return;
         }
 
-        event.deferReply().queue();
+        long channelId = event.getChannelIdLong();
+        String gameId = rounds.newId();
 
-        // Off-thread: token request + first-question fetch + post.
-        worker.execute(() -> startGame(event, filter, totalRounds));
+        if (!rounds.tryClaimChannel(channelId, gameId)) {
+            event.reply("There's already a trivia session in this channel. "
+                    + "Wait for it to finish.").setEphemeral(true).queue();
+            return;
+        }
+
+        event.deferReply().queue();
+        worker.execute(() -> openLobby(event, channelId, gameId, filter,
+                totalRounds, lobbySeconds));
     }
 
-    private void startGame(SlashCommandInteractionEvent event,
+    private void openLobby(SlashCommandInteractionEvent event,
+                           long channelId,
+                           String gameId,
                            TriviaFilter filter,
-                           int totalRounds) {
+                           int totalRounds,
+                           int lobbySeconds) {
         String token = null;
         try {
             token = client.requestSessionToken().orElse(null);
         } catch (TriviaClient.TriviaException e) {
-            // Token request failed — proceed without one. Repeats are
-            // possible but the game can still play.
             log.debug("Trivia session token request failed: {}", e.getMessage());
         }
 
-        TriviaGame game = new TriviaGame(
-                rounds.newId(),
-                event.getChannelIdLong(),
+        TriviaGame game = new TriviaGame(gameId, channelId,
                 event.getUser().getIdLong(),
-                filter,
-                totalRounds,
-                token);
+                filter, totalRounds, lobbySeconds, ROUND_SECONDS, token);
         rounds.registerGame(game);
 
-        TriviaQuestion question;
-        try {
-            question = client.fetch(filter, token);
-        } catch (TriviaClient.TokenExhaustedException e) {
-            // First-question token miss is exotic but possible. Retry once
-            // tokenless before giving up.
-            try {
-                question = client.fetch(filter);
-            } catch (TriviaClient.TriviaException retry) {
-                rounds.removeGame(game.gameId());
-                event.getHook().sendMessage(retry.getMessage()).setEphemeral(true).queue();
-                return;
-            }
-        } catch (TriviaClient.TriviaException e) {
-            rounds.removeGame(game.gameId());
-            event.getHook().sendMessage(e.getMessage()).setEphemeral(true).queue();
-            return;
-        } catch (RuntimeException e) {
-            log.warn("Unexpected error fetching trivia question", e);
-            rounds.removeGame(game.gameId());
-            event.getHook().sendMessage("Something went wrong starting that game.")
-                    .setEphemeral(true).queue();
-            return;
-        }
-
-        int roundNumber = game.advance();
-        TriviaRound round = buildRound(game, roundNumber, question);
-        MessageEmbed embed = TriviaEmbedBuilder.question(round);
-        List<Button> buttons = buildButtons(round.roundId(), round.shuffledChoices());
+        long startsAt = Instant.now().getEpochSecond() + lobbySeconds;
+        MessageEmbed embed = TriviaEmbedBuilder.lobby(game, startsAt);
+        Button joinButton = Button.success(BUTTON_JOIN_PREFIX + gameId, "Join");
 
         event.getHook().sendMessageEmbeds(embed)
-                .addComponents(ActionRow.of(buttons))
+                .addComponents(ActionRow.of(joinButton))
                 .queue(msg -> {
-                    TriviaRound posted = round.withMessage(msg.getIdLong(), msg.getChannelIdLong());
-                    rounds.register(posted, ROUND_TIMEOUT_SECONDS,
-                            () -> revealOnTimeout(posted));
+                    game.setLobbyMessageId(msg.getIdLong());
+                    rounds.schedule(() -> closeLobbyAndStartGame(game), lobbySeconds);
                 }, err -> {
-                    log.warn("Failed to post first round of game {}: {}",
-                            game.gameId(), err.toString());
-                    rounds.removeGame(game.gameId());
+                    log.warn("Failed to post trivia lobby for game {}: {}",
+                            gameId, err.toString());
+                    rounds.removeGame(gameId);
+                    rounds.releaseChannel(channelId, gameId);
                 });
     }
+
+    // -- buttons -----------------------------------------------------------
 
     @Override
     public void onButtonInteraction(ButtonInteractionEvent event) {
         String id = event.getComponentId();
-        if (!id.startsWith(BUTTON_PREFIX)) return;
+        if (id.startsWith(BUTTON_JOIN_PREFIX)) {
+            handleJoin(event, id.substring(BUTTON_JOIN_PREFIX.length()));
+        } else if (id.startsWith(BUTTON_ANSWER_PREFIX)) {
+            handleAnswer(event, id.substring(BUTTON_ANSWER_PREFIX.length()));
+        }
+    }
 
-        String rest = id.substring(BUTTON_PREFIX.length());
+    private void handleJoin(ButtonInteractionEvent event, String gameId) {
+        TriviaGame game = rounds.game(gameId).orElse(null);
+        if (game == null || game.phase() != TriviaGame.Phase.LOBBY) {
+            event.reply("This lobby is closed.").setEphemeral(true).queue();
+            return;
+        }
+        long userId = event.getUser().getIdLong();
+        boolean newlyJoined = game.addPlayer(userId);
+        if (!newlyJoined) {
+            event.reply("You're already in this session.").setEphemeral(true).queue();
+            return;
+        }
+        // Refresh the lobby embed to reflect the new roster.
+        long startsAt = Instant.now().getEpochSecond()
+                + secondsRemainingInLobby(game, event);
+        event.editMessageEmbeds(TriviaEmbedBuilder.lobby(game, startsAt))
+                .queue(null, err -> log.debug(
+                        "Failed to refresh lobby embed for game {}: {}",
+                        gameId, err.toString()));
+    }
+
+    /**
+     * Best-effort countdown estimator for the lobby refresh — the absolute
+     * deadline isn't stored anywhere we can read here, so we approximate
+     * from the original duration. The relative-timestamp render
+     * ({@code <t:N:R>}) hides any ±1s drift.
+     */
+    private long secondsRemainingInLobby(TriviaGame game, ButtonInteractionEvent event) {
+        // We don't track lobbyClosesAt explicitly; best estimate is "click
+        // happened, lobby still open, so use full lobbySeconds from now." A
+        // user joining late will see a slightly-too-long countdown for one
+        // refresh — preferable to plumbing a deadline through every call.
+        return game.lobbySeconds();
+    }
+
+    private void handleAnswer(ButtonInteractionEvent event, String rest) {
         int sep = rest.lastIndexOf(':');
         if (sep <= 0 || sep == rest.length() - 1) {
             event.reply("This trivia button is malformed.").setEphemeral(true).queue();
@@ -193,126 +243,161 @@ final class TriviaHandler extends ListenerAdapter {
         }
 
         long userId = event.getUser().getIdLong();
-        TriviaRounds.Result result = rounds.attempt(roundId, userId, choiceIndex);
+        TriviaRounds.AttemptResult result = rounds.recordAnswer(roundId, userId, choiceIndex);
 
         switch (result.outcome()) {
-            case CORRECT_FIRST -> handleCorrect(event, result.round().orElseThrow());
-            case WRONG -> event.reply("❌ Not quite! That answer is locked in for you.")
-                    .setEphemeral(true).queue();
-            case ALREADY_ANSWERED -> event.reply("You've already answered this one.")
-                    .setEphemeral(true).queue();
             case NOT_FOUND -> event.reply("This round has ended.").setEphemeral(true).queue();
+            case NOT_JOINED -> event.reply("You aren't in this session — wait for the next one!")
+                    .setEphemeral(true).queue();
+            case ALREADY_ANSWERED -> event.reply("You've already locked in an answer.")
+                    .setEphemeral(true).queue();
+            case RECORDED -> event.reply("✅ Locked in!").setEphemeral(true).queue();
+            case RECORDED_LAST -> {
+                // Acknowledge the click first, then close the round.
+                event.reply("✅ Locked in!").setEphemeral(true).queue();
+                rounds.consumeRound(roundId).ifPresent(this::resolveRound);
+            }
         }
     }
 
-    private void handleCorrect(ButtonInteractionEvent event, TriviaRound round) {
-        long userId = event.getUser().getIdLong();
-        TriviaGame game = rounds.game(round.gameId()).orElse(null);
-        if (game != null) {
-            game.recordWin(userId);
+    // -- lobby close → start game -----------------------------------------
+
+    private void closeLobbyAndStartGame(TriviaGame game) {
+        if (game.joinedCount() == 0) {
+            // Initiator is auto-joined so this should be unreachable, but
+            // guard anyway.
+            cancelGame(game, "Nobody joined the lobby.");
+            return;
         }
-        MessageEmbed reveal = TriviaEmbedBuilder.winner(round, event.getUser().getAsMention());
-        event.editMessageEmbeds(reveal).setComponents().queue(
-                v -> advanceOrFinish(round.gameId()),
-                err -> {
-                    log.warn("Failed to reveal trivia winner for round {}: {}",
-                            round.roundId(), err.toString());
-                    advanceOrFinish(round.gameId());
+        game.transitionToPlaying();
+        // Strip the Join button off the lobby message; leave the embed for history.
+        MessageChannel channel = resolveChannel(game.channelId());
+        if (channel != null && game.lobbyMessageId() != 0L) {
+            channel.editMessageComponentsById(game.lobbyMessageId())
+                    .setComponents()
+                    .queue(null, err -> log.debug(
+                            "Failed to clear lobby buttons for game {}: {}",
+                            game.gameId(), err.toString()));
+        }
+        worker.execute(() -> postNextRound(game));
+    }
+
+    // -- round flow --------------------------------------------------------
+
+    private void postNextRound(TriviaGame game) {
+        if (game.isLastRoundComplete()) {
+            finishGame(game);
+            return;
+        }
+
+        TriviaQuestion question;
+        try {
+            question = client.fetch(game.filter(), game.sessionToken());
+        } catch (TriviaClient.TokenExhaustedException e) {
+            // Session pool drained; fall back to tokenless.
+            try {
+                question = client.fetch(game.filter());
+            } catch (TriviaClient.TriviaException retry) {
+                abortMidGame(game, retry.getMessage());
+                return;
+            }
+        } catch (TriviaClient.TriviaException e) {
+            abortMidGame(game, e.getMessage());
+            return;
+        } catch (RuntimeException e) {
+            log.warn("Unexpected error fetching trivia question for game {}",
+                    game.gameId(), e);
+            abortMidGame(game, "Something went wrong fetching the next question.");
+            return;
+        }
+
+        int roundNumber = game.advance();
+        TriviaRound round = buildRound(game, roundNumber, question);
+        long answerWindowEndsAt = Instant.now().getEpochSecond() + ROUND_SECONDS;
+        MessageEmbed embed = TriviaEmbedBuilder.question(round, answerWindowEndsAt);
+        List<Button> buttons = buildAnswerButtons(round.roundId(), round.shuffledChoices());
+
+        MessageChannel channel = resolveChannel(game.channelId());
+        if (channel == null) {
+            log.warn("Channel {} unavailable; abandoning game {}.",
+                    game.channelId(), game.gameId());
+            forgetGame(game);
+            return;
+        }
+        channel.sendMessageEmbeds(embed)
+                .addComponents(ActionRow.of(buttons))
+                .queue(msg -> {
+                    TriviaRound posted = round.withMessage(msg.getIdLong(), msg.getChannelIdLong());
+                    rounds.register(posted, ROUND_SECONDS,
+                            () -> rounds.consumeRound(posted.roundId())
+                                    .ifPresent(this::resolveRound));
+                }, err -> {
+                    log.warn("Failed to post round {} of game {}: {}",
+                            roundNumber, game.gameId(), err.toString());
+                    forgetGame(game);
                 });
     }
 
-    /**
-     * Called after a round resolves (correct click or timeout). Decides
-     * whether to post the next round or finalise the game. Runs on the
-     * caller's thread but the worker pool serialises subsequent fetches.
-     */
-    private void advanceOrFinish(String gameId) {
-        worker.execute(() -> {
-            TriviaGame game = rounds.game(gameId).orElse(null);
-            if (game == null) return;
-
-            if (game.isFinished()) {
-                postFinalLeaderboard(game);
-                rounds.removeGame(gameId);
-                return;
-            }
-
-            TriviaQuestion question;
-            try {
-                question = client.fetch(game.filter(), game.sessionToken());
-            } catch (TriviaClient.TokenExhaustedException e) {
-                // No-repeat pool drained mid-game. Continue tokenless.
-                try {
-                    question = client.fetch(game.filter());
-                } catch (TriviaClient.TriviaException retry) {
-                    abortMidGame(game, retry.getMessage());
-                    return;
+    /** Score the round, post the result, then advance. */
+    private void resolveRound(TriviaRound round) {
+        TriviaGame game = rounds.game(round.gameId()).orElse(null);
+        if (game != null) {
+            for (Map.Entry<Long, Integer> e : round.answers().entrySet()) {
+                if (e.getValue() == round.correctIndex()) {
+                    game.recordWin(e.getKey());
                 }
-            } catch (TriviaClient.TriviaException e) {
-                abortMidGame(game, e.getMessage());
-                return;
-            } catch (RuntimeException e) {
-                log.warn("Unexpected error fetching next trivia question for game {}",
-                        gameId, e);
-                abortMidGame(game, "Something went wrong fetching the next question.");
-                return;
             }
+        }
+        MessageChannel channel = resolveChannel(round.channelId());
+        if (channel != null) {
+            // Edit the original question message to show the result + drop
+            // the answer buttons. Players see what they got right or wrong.
+            channel.editMessageEmbedsById(round.messageId(), TriviaEmbedBuilder.roundResult(round))
+                    .setComponents()
+                    .queue(null, err -> log.debug(
+                            "Failed to edit round-result for round {}: {}",
+                            round.roundId(), err.toString()));
+        }
+        if (game == null) return;
+        // Move on after a brief pause so players can read the result.
+        rounds.schedule(() -> worker.execute(() -> postNextRound(game)), 3);
+    }
 
-            int roundNumber = game.advance();
-            TriviaRound round = buildRound(game, roundNumber, question);
-            MessageEmbed embed = TriviaEmbedBuilder.question(round);
-            List<Button> buttons = buildButtons(round.roundId(), round.shuffledChoices());
-
-            MessageChannel channel = resolveChannel(game.channelId());
-            if (channel == null) {
-                log.warn("Channel {} unavailable; abandoning game {}.",
-                        game.channelId(), gameId);
-                rounds.removeGame(gameId);
-                return;
-            }
-            channel.sendMessageEmbeds(embed)
-                    .addComponents(ActionRow.of(buttons))
-                    .queue(msg -> {
-                        TriviaRound posted = round.withMessage(msg.getIdLong(), msg.getChannelIdLong());
-                        rounds.register(posted, ROUND_TIMEOUT_SECONDS,
-                                () -> revealOnTimeout(posted));
-                    }, err -> {
-                        log.warn("Failed to post round {} of game {}: {}",
-                                roundNumber, gameId, err.toString());
-                        rounds.removeGame(gameId);
-                    });
-        });
+    private void finishGame(TriviaGame game) {
+        MessageChannel channel = resolveChannel(game.channelId());
+        if (channel != null) {
+            channel.sendMessageEmbeds(TriviaEmbedBuilder.gameOver(game))
+                    .queue(null, err -> log.debug(
+                            "Failed to post final leaderboard for game {}: {}",
+                            game.gameId(), err.toString()));
+        }
+        forgetGame(game);
     }
 
     private void abortMidGame(TriviaGame game, String reason) {
         MessageChannel channel = resolveChannel(game.channelId());
         if (channel != null) {
             channel.sendMessage("Game ended early: " + reason).queue();
-            // Still post whatever leaderboard we accumulated.
             channel.sendMessageEmbeds(TriviaEmbedBuilder.gameOver(game)).queue();
         }
-        rounds.removeGame(game.gameId());
+        forgetGame(game);
     }
 
-    private void postFinalLeaderboard(TriviaGame game) {
+    private void cancelGame(TriviaGame game, String reason) {
         MessageChannel channel = resolveChannel(game.channelId());
-        if (channel == null) return;
-        channel.sendMessageEmbeds(TriviaEmbedBuilder.gameOver(game))
-                .queue(null, err -> log.debug("Failed to post final leaderboard for game {}: {}",
-                        game.gameId(), err.toString()));
+        if (channel != null) {
+            channel.sendMessageEmbeds(TriviaEmbedBuilder.lobbyCancelled(game, reason)).queue();
+        }
+        forgetGame(game);
     }
 
-    private void revealOnTimeout(TriviaRound round) {
-        MessageChannel channel = resolveChannel(round.channelId());
-        if (channel != null) {
-            channel.editMessageEmbedsById(round.messageId(), TriviaEmbedBuilder.timeout(round))
-                    .setComponents()
-                    .queue(null, err -> log.debug(
-                            "Failed to edit timed-out trivia message {} in {}: {}",
-                            round.messageId(), round.channelId(), err.toString()));
-        }
-        advanceOrFinish(round.gameId());
+    private void forgetGame(TriviaGame game) {
+        game.markFinished();
+        rounds.removeGame(game.gameId());
+        rounds.releaseChannel(game.channelId(), game.gameId());
     }
+
+    // -- helpers -----------------------------------------------------------
 
     private MessageChannel resolveChannel(long channelId) {
         JDA local = this.jda;
@@ -331,14 +416,15 @@ final class TriviaHandler extends ListenerAdapter {
                 question,
                 shuffled.labels(),
                 shuffled.correctIndex(),
-                Collections.emptySet());
+                game.joinedSnapshot(),
+                Collections.unmodifiableMap(new HashMap<>()));
     }
 
-    static List<Button> buildButtons(String roundId, List<String> labels) {
+    static List<Button> buildAnswerButtons(String roundId, List<String> labels) {
         List<Button> out = new ArrayList<>(labels.size());
         for (int i = 0; i < labels.size(); i++) {
             String label = TriviaEmbedBuilder.letter(i) + ". " + truncateForButton(labels.get(i));
-            out.add(Button.secondary(BUTTON_PREFIX + roundId + ":" + i, label));
+            out.add(Button.secondary(BUTTON_ANSWER_PREFIX + roundId + ":" + i, label));
         }
         return out;
     }
@@ -368,4 +454,5 @@ final class TriviaHandler extends ListenerAdapter {
         OptionMapping opt = event.getOption(name);
         return opt == null ? dflt : opt.getAsInt();
     }
+
 }

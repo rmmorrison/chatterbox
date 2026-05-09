@@ -45,10 +45,20 @@ final class TriviaClient {
     static final String BASE_URL = "https://opentdb.com";
     static final int MAX_RESPONSE_BYTES = 256 * 1024;
     static final Duration HTTP_TIMEOUT = Duration.ofSeconds(10);
+    /**
+     * Open Trivia DB caps each IP at one request per ~5 seconds; busting that
+     * yields 429s with no Retry-After. We pad to 5.5s for safety and gate
+     * every outbound call (token + question fetches alike) so the client
+     * self-paces regardless of how fast the game flows.
+     */
+    static final long MIN_FETCH_INTERVAL_MS = 5_500L;
 
     private final HttpClient http;
     private final String baseUrl;
     private final ObjectMapper mapper;
+    private final Object fetchGate = new Object();
+    /** Earliest epoch-ms a future fetch is allowed to leave the gate. */
+    private long nextFetchAllowedAt = 0L;
 
     TriviaClient() {
         this(HttpClient.newBuilder()
@@ -127,6 +137,7 @@ final class TriviaClient {
     }
 
     private <T> T sendJson(URI uri, Class<T> type) throws TriviaException {
+        waitForRateLimitGate();
         HttpRequest req = HttpRequest.newBuilder(uri)
                 .timeout(HTTP_TIMEOUT)
                 .header("Accept", "application/json")
@@ -187,6 +198,29 @@ final class TriviaClient {
                 decode(entry.question()),
                 decode(entry.correctAnswer()),
                 List.copyOf(wrong));
+    }
+
+    /**
+     * Pace outbound calls so any two are at least {@link #MIN_FETCH_INTERVAL_MS}
+     * apart. Reserves the next slot inside the lock then sleeps outside it so
+     * concurrent callers stack rather than block each other on the monitor.
+     */
+    private void waitForRateLimitGate() throws TriviaException {
+        long waitMs;
+        synchronized (fetchGate) {
+            long now = System.currentTimeMillis();
+            long start = Math.max(now, nextFetchAllowedAt);
+            waitMs = start - now;
+            nextFetchAllowedAt = start + MIN_FETCH_INTERVAL_MS;
+        }
+        if (waitMs > 0) {
+            try {
+                Thread.sleep(waitMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new TriviaException("Request was interrupted.");
+            }
+        }
     }
 
     private static String decode(String s) {

@@ -959,10 +959,10 @@ No SSRF surface: hostname is hard-coded `query1.finance.yahoo.com`.
 
 ### Trivia
 
-`/trivia [difficulty] [category] [rounds]` — runs a multi-round trivia
-game in the channel using questions from
+`/trivia [difficulty] [category] [rounds] [lobby]` — runs a multi-round
+trivia session in the channel using questions from
 [Open Trivia DB](https://opentdb.com) (no API key required).
-**First user to click the correct answer wins each round.**
+**Players opt in during a lobby phase, then play together each round.**
 
 Options:
 
@@ -970,40 +970,54 @@ Options:
 | --- | --- | --- | --- |
 | `difficulty` | Easy / Medium / Hard | any | Forwarded to opentdb's `difficulty` filter. |
 | `category` | one of 24 opentdb categories (General Knowledge, Film, Geography, History, Science & Nature, Sports, …) | any | Forwarded to opentdb's `category` filter. |
-| `rounds` | integer 1–10 | 5 | How many questions the game runs through. |
+| `rounds` | integer 1–10 | 5 | How many questions the session runs through. |
+| `lobby` | integer 5–120 (seconds) | 30 | How long the lobby stays open for players to join. |
 
-How a game plays:
+**One session per channel.** A second `/trivia` invocation in a channel
+that already has an active session is rejected with a brief ephemeral
+reply ("There's already a trivia session in this channel — wait for it
+to finish.").
 
-- For each round, the bot posts an embed with the question, lettered
-  choices (A/B/C/D for multiple-choice, or `True` / `False` for boolean
-  questions), and one button per choice. Choices are shuffled per round
-  so the correct position varies; button `custom_id`s encode only the
-  round id and the zero-based choice index, never the answer.
-- Anyone can click. The first correct click resolves the round — the
-  embed flips green, mentions the winner, and the buttons are removed.
-  The bot then automatically posts the next round.
-- A wrong click locks that user out of the round (one shot each) and
-  gets an ephemeral "❌ Not quite!" reply. Other users can keep trying.
-- If 60 seconds pass with no correct answer, the round auto-resolves
-  grey ("no winner") and the game continues to the next round.
-- After the last round, a final leaderboard embed posts in the same
-  channel — sorted descending, ties share rank, users with zero correct
-  answers are omitted. If everyone scored zero, the embed says so
-  cheerfully instead.
+How a session plays:
 
-To avoid duplicate questions within a single game, the bot requests an
-opentdb session token at game start and threads it through each fetch;
-opentdb won't return the same question twice for that token. Token
-exhaustion mid-game falls back to tokenless fetches automatically.
+1. The bot posts a **🎲 Trivia lobby** embed showing the initiator,
+   settings, the joined players list, and a relative-timestamp
+   countdown. The embed has a single **Join** button. The initiator is
+   auto-joined; everyone else clicks Join. The roster updates live each
+   time someone joins.
+2. When the lobby timer expires, the join roster freezes and round 1
+   posts. Each round shows the question with answer buttons (A/B/C/D for
+   multiple-choice, True/False for boolean) and a footer with the
+   answer-window deadline.
+3. **Each joined player gets one click per round.** Clicks from
+   non-joined users are rejected ("you aren't in this session — wait
+   for the next one"). The round resolves when the timer (20 seconds)
+   elapses **or** every joined player has clicked, whichever comes first.
+4. The round-result embed reveals the correct answer and a per-player
+   breakdown — ✅ for correct, ❌ with the wrong pick spelled out, ⏰
+   for non-answerers. Each correct answer is worth one point, scored at
+   round end.
+5. After the last round, a final leaderboard embed posts. All joined
+   players appear (zero-scorers at the bottom), sorted descending, with
+   tied scores sharing rank. If everyone scored zero, the embed says so
+   cheerfully.
 
-State is in-memory only — there is no cross-game persistence or
-all-time leaderboard. Games in flight at the moment of a bot restart
-are forgotten; clicks on the orphaned buttons get a polite "this round
-has ended" reply.
+Button `custom_id`s encode only the round id and the zero-based choice
+index, never the answer text — so the correct option isn't leaked to
+clients inspecting the components.
 
-Failure modes map to ephemeral text replies. Open Trivia DB enforces a
-soft rate limit of 1 request per ~5 seconds per IP; breaches surface as
-"Open Trivia DB is rate-limiting us. Try again in a few seconds." A
-filter that matches no questions returns "No more trivia questions
-matched that filter" — usually a sign the category + difficulty combo
-is too narrow.
+To avoid duplicate questions within a single session, the bot requests
+an opentdb session token at game start and threads it through each
+fetch. Token exhaustion mid-game falls back to tokenless fetches
+automatically.
+
+**Rate limiting.** Open Trivia DB caps each IP at one request per
+~5 seconds. The client self-paces at 5.5s between any two outbound
+calls (token + question fetches alike) so back-to-back games and
+fast-resolving rounds can't bust the limit. With the lobby + answer-window
+defaults a single session naturally stays well under the cap.
+
+State is in-memory only — there is no cross-session persistence or
+all-time leaderboard. Sessions in flight at the moment of a bot restart
+are forgotten; clicks on orphaned buttons get a polite "this round has
+ended" reply.
