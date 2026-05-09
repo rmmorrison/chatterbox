@@ -10,8 +10,10 @@ import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Handles {@code /when at:<text> in:<zone> [private:<bool>]}.
@@ -85,13 +87,34 @@ final class WhenHandler extends ListenerAdapter {
     }
 
     /**
+     * Wall-clock rendering for the requested zone. Pinned to {@link Locale#ENGLISH}
+     * so the output looks the same regardless of where the bot is running.
+     */
+    private static final DateTimeFormatter LITERAL_FORMAT =
+            DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy 'at' h:mm a", Locale.ENGLISH);
+
+    /**
      * Builds the user-facing reply: header echoing what we parsed, then the
-     * absolute and relative timestamps. Discord renders both in each viewer's
-     * local timezone, which is the whole point of the command.
+     * resolved moment as a literal wall-clock in the requested zone, and
+     * finally the Discord {@code <t:UNIX:STYLE>} markdown. The wall-clock
+     * line is the load-bearing fix for two real-world surprises:
+     * <ol>
+     *   <li>{@code at:now in:Asia/Kolkata} renders the {@code <t:UNIX:F>}
+     *       in the <em>viewer's</em> timezone (that's how Discord works),
+     *       which doesn't actually answer "what time is it in Kolkata?".
+     *       The wall-clock line does.</li>
+     *   <li>{@code at:tomorrow 1am in:Asia/Kolkata} computes "tomorrow"
+     *       relative to the named zone (consistent rule; we don't know the
+     *       caller's own zone). When the caller is in a very different
+     *       zone the resolved date can be a day off from what they pictured.
+     *       Showing the literal date makes that mismatch visible at a
+     *       glance instead of buried in a Unix timestamp.</li>
+     * </ol>
      */
     static String formatReply(String at, ZoneId zone, Instant instant) {
         long epoch = instant.getEpochSecond();
-        return "🕒 *\"" + at + "\" in " + zone.getId() + "*\n"
+        String literal = LITERAL_FORMAT.format(instant.atZone(zone));
+        return "🕒 *\"" + at + "\" in " + zone.getId() + "* → **" + literal + "**\n"
                 + "<t:" + epoch + ":F> (<t:" + epoch + ":R>)";
     }
 

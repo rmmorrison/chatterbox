@@ -784,7 +784,17 @@ Autocomplete shows a curated list of common zones (type a city name
 like `tor` to find `America/Toronto`); any IANA zone name (`Europe/London`)
 or offset (`+05:30`) is accepted even if not in the list.
 
-Output includes both an absolute timestamp (`<t:UNIX:F>` — long date/time
-in viewer's locale) and a relative one (`<t:UNIX:R>` — "in 2 hours",
-"3 days ago", etc.). Public by default since the whole point is to share;
-`private:true` previews the parse without posting.
+Relative words (`now`, `today`, `tomorrow`, weekday names) are interpreted
+**in the named zone**, not in the caller's own zone — the bot doesn't
+know where the caller is. So `tomorrow 1am in:Asia/Kolkata` always means
+"the next Kolkata calendar day at 01:00 IST", regardless of where the
+caller is sitting. The reply spells out the resolved date in plain text
+so any mismatch with the caller's mental model is visible at a glance;
+fall back to absolute forms (`2026-12-25 14:00`) when ambiguity matters.
+
+Output includes the resolved moment as a literal wall-clock in the
+requested zone, then the same instant as Discord timestamp markdown —
+both an absolute (`<t:UNIX:F>` — long date/time in viewer's locale) and
+a relative (`<t:UNIX:R>` — "in 2 hours", "3 days ago"). Public by
+default since the whole point is to share; `private:true` previews the
+parse without posting.
