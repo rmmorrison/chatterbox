@@ -760,3 +760,31 @@ Safeguards:
 Public reply by default — when a service is down, the channel usually
 wants to commiserate together — but `private:true` keeps it ephemeral.
 Reachable from DMs as well as guilds; no permissions required.
+
+### When
+
+`/when at:<time> in:<timezone> [private:<bool>]` — convert a moment to
+Discord timestamp markdown so every viewer sees it in their own local
+timezone. Useful for coordinating across distributed servers.
+
+`at:` accepts a small but forgiving grammar:
+
+| Input | Interpreted as |
+| --- | --- |
+| `now` | current instant |
+| `7pm`, `19:00`, `7:30pm` | today at that time (rolls to tomorrow if already past) |
+| `today 14:30`, `tomorrow 9am` | the named day at that time |
+| `friday`, `monday 7pm` | next occurrence of that weekday |
+| `in 30m`, `in 3 hours`, `in 2 days`, `in 1 week` | relative offset from now |
+| `2026-12-25` | midnight on that date |
+| `2026-12-25 18:00`, `2026-12-25T18:00` | that exact moment |
+
+`in:` is required because Discord doesn't expose user timezones to bots.
+Autocomplete shows a curated list of common zones (type a city name
+like `tor` to find `America/Toronto`); any IANA zone name (`Europe/London`)
+or offset (`+05:30`) is accepted even if not in the list.
+
+Output includes both an absolute timestamp (`<t:UNIX:F>` — long date/time
+in viewer's locale) and a relative one (`<t:UNIX:R>` — "in 2 hours",
+"3 days ago", etc.). Public by default since the whole point is to share;
+`private:true` previews the parse without posting.
