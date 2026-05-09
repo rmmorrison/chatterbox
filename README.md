@@ -895,3 +895,51 @@ extract are suppressed so a Wikipedia article that happens to contain
 `@everyone` can't ping the channel.
 
 Hostname is hard-coded `en.wikipedia.org`, so no SSRF surface to defend.
+
+### Stock
+
+`/stock symbol:<text> [private:<bool>]` — current quote for a NYSE,
+NASDAQ, or TSX-listed security via Yahoo Finance's
+[`v8/finance/chart`](https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1d&range=1d)
+endpoint. No API key required.
+
+Symbol convention follows Yahoo:
+
+| Exchange | Format | Example |
+| --- | --- | --- |
+| NASDAQ | bare ticker | `AAPL` |
+| NYSE | bare ticker | `KO` |
+| TSX | `.TO` suffix | `SHOP.TO`, `RY.TO` |
+
+Output is a Discord embed:
+
+- Title: company name + ticker, hyperlinked to the Yahoo Finance quote page.
+- Description: current price + change (absolute and %, prefixed with
+  ▲/▼/▬), day's high/low, 52-week high/low, and volume formatted with
+  thousands separators.
+- Embed colour reflects the day's change — green up, red down, grey flat.
+- Footer: exchange + currency + "via Yahoo Finance · prices may be
+  delayed", with the quote timestamp rendered as a Discord
+  `<t:UNIX:R>` so each viewer sees freshness in their own timezone.
+
+Failure modes map to ephemeral text replies — bad symbols get a
+"couldn't find … try the Yahoo format" hint (Yahoo's structured
+"may be delisted" message is preserved when present), rate limits
+(HTTP 429) get a friendly "try again in a minute", other upstream
+errors come through as "HTTP N", and timeouts/network errors produce
+"couldn't reach Yahoo Finance".
+
+**Caveats worth knowing:**
+
+- Yahoo's `v8/finance/chart` endpoint is not officially documented or
+  supported. It's been stable for years and is widely used by Discord
+  bots, but Yahoo could change or block it without notice. Swapping to
+  a key-based provider (Alpha Vantage, Finnhub, etc.) would be a
+  single-file change if that ever happens.
+- Free Yahoo quotes are typically delayed ~15 minutes by exchange policy.
+  The footer notes this so callers aren't surprised.
+- Yahoo blanket-403s bot-shaped User-Agents (same WAF behaviour we
+  worked around for `/isitdown`); the client sends a Chrome-shaped UA
+  to get through.
+
+No SSRF surface: hostname is hard-coded `query1.finance.yahoo.com`.
