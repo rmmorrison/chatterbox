@@ -45,14 +45,16 @@ class TriviaRoundsTest {
                 List.of("Toronto", "Vancouver", "Montreal"));
     }
 
-    private static TriviaRound buildRound(String roundId, TriviaQuestion q, int correctIdx, List<String> labels) {
-        return new TriviaRound(roundId, 100L, 200L, q, labels, correctIdx, Collections.emptySet());
+    private static TriviaRound buildRound(String roundId, String gameId,
+                                          int roundNumber, int totalRounds,
+                                          int correctIdx, List<String> labels) {
+        return new TriviaRound(roundId, gameId, roundNumber, totalRounds,
+                100L, 200L, sampleMultiple(), labels, correctIdx, Collections.emptySet());
     }
 
     @Test
     void shuffleMultipleHasAllAnswersAndCorrectIndex() {
         TriviaQuestion q = sampleMultiple();
-        // Deterministic shuffle for the assertion.
         TriviaRounds.Shuffled s = TriviaRounds.shuffleWith(q, new Random(42));
         assertEquals(4, s.labels().size());
         assertTrue(s.labels().contains("Ottawa"));
@@ -76,35 +78,29 @@ class TriviaRoundsTest {
 
     @Test
     void firstCorrectAnswerWins() {
-        TriviaRound round = buildRound("r1", sampleMultiple(), 0,
+        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
                 List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
-        rounds.register(round, 60, () -> { /* won't fire in this test */ });
+        rounds.register(round, 60, () -> { /* won't fire */ });
 
-        // Wrong guess from user A.
-        TriviaRounds.Result wrong = rounds.attempt("r1", 1L, 1);
-        assertEquals(TriviaRounds.Outcome.WRONG, wrong.outcome());
+        assertEquals(TriviaRounds.Outcome.WRONG, rounds.attempt("r1", 1L, 1).outcome());
 
-        // Correct guess from user B.
         TriviaRounds.Result correct = rounds.attempt("r1", 2L, 0);
         assertEquals(TriviaRounds.Outcome.CORRECT_FIRST, correct.outcome());
         assertEquals("Ottawa", correct.round().orElseThrow().correctAnswerLabel());
 
-        // Round is gone — subsequent clicks see NOT_FOUND.
-        TriviaRounds.Result late = rounds.attempt("r1", 3L, 0);
-        assertEquals(TriviaRounds.Outcome.NOT_FOUND, late.outcome());
+        assertEquals(TriviaRounds.Outcome.NOT_FOUND,
+                rounds.attempt("r1", 3L, 0).outcome());
     }
 
     @Test
     void wrongAnswerLocksOutThatUser() {
-        TriviaRound round = buildRound("r1", sampleMultiple(), 0,
+        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
                 List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
         rounds.register(round, 60, () -> {});
 
         assertEquals(TriviaRounds.Outcome.WRONG, rounds.attempt("r1", 1L, 1).outcome());
-        // Same user tries again — even with the correct answer — they're locked out.
         assertEquals(TriviaRounds.Outcome.ALREADY_ANSWERED,
                 rounds.attempt("r1", 1L, 0).outcome());
-        // Round is still live; another user can still play.
         assertEquals(TriviaRounds.Outcome.CORRECT_FIRST,
                 rounds.attempt("r1", 2L, 0).outcome());
     }
@@ -117,35 +113,28 @@ class TriviaRoundsTest {
 
     @Test
     void timeoutRunnableFiresAndRemovesRound() throws Exception {
-        TriviaRound round = buildRound("r1", sampleMultiple(), 0,
+        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
                 List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
 
         CountDownLatch latch = new CountDownLatch(1);
-        // Schedule with effectively-zero delay so the test doesn't sit around.
-        // ScheduledExecutorService accepts 0 as "as-soon-as-possible".
         rounds.register(round, 0, latch::countDown);
 
         assertTrue(latch.await(2, TimeUnit.SECONDS), "timeout runnable should fire");
-        // Round should have been removed atomically before the runnable ran,
-        // so subsequent clicks are NOT_FOUND.
         assertEquals(TriviaRounds.Outcome.NOT_FOUND,
                 rounds.attempt("r1", 1L, 0).outcome());
     }
 
     @Test
     void winningClickCancelsTimeout() throws Exception {
-        TriviaRound round = buildRound("r1", sampleMultiple(), 0,
+        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
                 List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
 
         AtomicInteger timeoutFires = new AtomicInteger();
-        rounds.register(round, 1 /* second */, timeoutFires::incrementAndGet);
+        rounds.register(round, 1, timeoutFires::incrementAndGet);
 
-        // Win immediately.
         assertEquals(TriviaRounds.Outcome.CORRECT_FIRST,
                 rounds.attempt("r1", 1L, 0).outcome());
 
-        // Wait past the timeout deadline. The timeout runnable must NOT fire,
-        // because the winning click cancelled it.
         Thread.sleep(1500);
         assertEquals(0, timeoutFires.get(),
                 "timeout should be cancelled when a player wins first");
@@ -153,16 +142,16 @@ class TriviaRoundsTest {
 
     @Test
     void roundIdsAreEightCharsAndSomewhatRandom() {
-        String a = rounds.newRoundId();
-        String b = rounds.newRoundId();
+        String a = rounds.newId();
+        String b = rounds.newId();
         assertEquals(8, a.length());
         assertEquals(8, b.length());
-        assertNotEquals(a, b, "ids should differ between calls (statistically)");
+        assertNotEquals(a, b);
     }
 
     @Test
     void concurrentClicksProduceExactlyOneWinner() throws Exception {
-        TriviaRound round = buildRound("r1", sampleMultiple(), 0,
+        TriviaRound round = buildRound("r1", "g1", 1, 5, 0,
                 List.of("Ottawa", "Toronto", "Vancouver", "Montreal"));
         rounds.register(round, 60, () -> {});
 
@@ -193,5 +182,24 @@ class TriviaRoundsTest {
 
         assertEquals(1, winners.get(),
                 "exactly one concurrent click should win — atomic CAS contract");
+    }
+
+    // -- game registry ------------------------------------------------------
+
+    @Test
+    void registerAndLookupGameById() {
+        TriviaGame game = new TriviaGame("g1", 200L, 99L,
+                TriviaFilter.any(), 5, "tok");
+        rounds.registerGame(game);
+        assertEquals(game, rounds.game("g1").orElseThrow());
+    }
+
+    @Test
+    void removeGameForgetsIt() {
+        TriviaGame game = new TriviaGame("g1", 200L, 99L,
+                TriviaFilter.any(), 5, null);
+        rounds.registerGame(game);
+        rounds.removeGame("g1");
+        assertTrue(rounds.game("g1").isEmpty());
     }
 }

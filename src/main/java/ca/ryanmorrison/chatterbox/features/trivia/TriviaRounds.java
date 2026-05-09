@@ -13,18 +13,19 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Owns the in-memory map of in-flight trivia rounds and the timeout
- * scheduler that auto-resolves abandoned ones.
+ * Owns the in-memory map of in-flight trivia games and rounds, plus the
+ * timeout scheduler that auto-resolves abandoned rounds.
  *
- * <p>Concurrency model: every state transition goes through
- * {@link ConcurrentHashMap#compute}, which is atomic per key. That gives us
- * "first correct click wins" without explicit locking — when a round is
- * resolved (correct answer or timeout) it is removed from the map atomically;
- * any subsequent click on the same buttons sees {@link Outcome#NOT_FOUND}.
+ * <p>Concurrency model: every round-state transition goes through
+ * {@link ConcurrentHashMap#compute}, which is atomic per key. That gives
+ * us "first correct click wins" without explicit locking — when a round
+ * is resolved (correct answer or timeout) it is removed from the map
+ * atomically; any subsequent click on the same buttons sees
+ * {@link Outcome#NOT_FOUND}. Game-level state is mutated only by the
+ * single thread that resolved the round, so no further locking is needed.
  *
- * <p>Round IDs are short alphanumeric tokens (8 chars) so they fit
- * comfortably under Discord's 100-char {@code custom_id} limit alongside
- * the prefix.
+ * <p>Round and game IDs are short alphanumeric tokens (8 chars) so they
+ * fit comfortably under Discord's 100-char {@code custom_id} limit.
  */
 final class TriviaRounds {
 
@@ -34,13 +35,14 @@ final class TriviaRounds {
 
     private final Map<String, TriviaRound> rounds = new ConcurrentHashMap<>();
     private final Map<String, ScheduledFuture<?>> timeouts = new ConcurrentHashMap<>();
+    private final Map<String, TriviaGame> games = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler;
 
     TriviaRounds() {
         this(defaultScheduler());
     }
 
-    /** Test seam — supply a {@code DeterministicScheduler}-style executor. */
+    /** Test seam — supply a controllable scheduler. */
     TriviaRounds(ScheduledExecutorService scheduler) {
         this.scheduler = scheduler;
     }
@@ -54,8 +56,8 @@ final class TriviaRounds {
         });
     }
 
-    /** Generate a fresh round id. Collisions are astronomically unlikely. */
-    String newRoundId() {
+    /** Generate a fresh id; collisions are astronomically unlikely. */
+    String newId() {
         char[] out = new char[ID_LENGTH];
         for (int i = 0; i < ID_LENGTH; i++) {
             out[i] = ID_ALPHABET[ThreadLocalRandom.current().nextInt(ID_ALPHABET.length)];
@@ -63,10 +65,22 @@ final class TriviaRounds {
         return new String(out);
     }
 
+    void registerGame(TriviaGame game) {
+        games.put(game.gameId(), game);
+    }
+
+    Optional<TriviaGame> game(String gameId) {
+        return Optional.ofNullable(games.get(gameId));
+    }
+
+    void removeGame(String gameId) {
+        games.remove(gameId);
+    }
+
     /**
-     * Register a freshly-built round and schedule its timeout. {@code onTimeout}
-     * runs only if the round is still present at deadline (i.e. nobody won
-     * first); already-resolved rounds are silently skipped.
+     * Register a freshly-built round and schedule its timeout.
+     * {@code onTimeout} runs only if the round is still present at
+     * deadline (i.e. nobody won first).
      */
     void register(TriviaRound round, long timeoutSeconds, Runnable onTimeout) {
         rounds.put(round.roundId(), round);
@@ -84,18 +98,13 @@ final class TriviaRounds {
         return Optional.ofNullable(rounds.get(roundId));
     }
 
-    int activeCount() {
-        return rounds.size();
-    }
-
     /**
      * Atomic answer attempt.
      *
-     * <p>Returns the outcome plus a snapshot of the round (taken inside the
-     * compute lambda, so it reflects the state the click was evaluated
-     * against). For {@link Outcome#CORRECT_FIRST} the round has been removed
-     * from the map; for {@link Outcome#WRONG} the snapshot already includes
-     * the new wrong-answerer.
+     * <p>Returns the outcome plus a snapshot of the round (taken inside
+     * the compute lambda). For {@link Outcome#CORRECT_FIRST} the round
+     * has been removed from the map; for {@link Outcome#WRONG} the
+     * snapshot already includes the new wrong-answerer.
      */
     Result attempt(String roundId, long userId, int choiceIndex) {
         Outcome[] outcome = new Outcome[]{ Outcome.NOT_FOUND };
@@ -127,7 +136,7 @@ final class TriviaRounds {
         return new Result(outcome[0], Optional.ofNullable(snapshot[0]));
     }
 
-    /** Stop the timeout scheduler and forget all in-flight rounds. */
+    /** Stop the scheduler and forget all in-flight state. */
     void stop() {
         scheduler.shutdownNow();
         try {
@@ -137,6 +146,7 @@ final class TriviaRounds {
         }
         rounds.clear();
         timeouts.clear();
+        games.clear();
     }
 
     enum Outcome { CORRECT_FIRST, WRONG, ALREADY_ANSWERED, NOT_FOUND }
@@ -146,19 +156,15 @@ final class TriviaRounds {
     // -- choice shuffling ---------------------------------------------------
 
     /**
-     * Build the display order for a question. Multiple-choice questions are
-     * shuffled; true/false is forced to {@code [True, False]} for a stable
-     * left-to-right reading order. Returns a record so callers can pick out
-     * the correct index without re-searching the list.
+     * Build the display order for a question. Multiple-choice questions
+     * are shuffled; true/false is forced to {@code [True, False]} for a
+     * stable left-to-right reading order.
      */
     static Shuffled shuffle(TriviaQuestion question) {
         if (question.type() == TriviaQuestion.Type.BOOLEAN) {
-            // Normalise booleans to "True" / "False" regardless of how
-            // opentdb capitalised them in the wire format (it lowercases).
             return new Shuffled(List.of("True", "False"),
                     "true".equalsIgnoreCase(question.correctAnswer()) ? 0 : 1);
         }
-        // Combine + shuffle. LinkedHashSet keeps a stable post-shuffle order.
         var combined = new java.util.ArrayList<String>();
         combined.add(question.correctAnswer());
         combined.addAll(question.incorrectAnswers());
@@ -169,7 +175,7 @@ final class TriviaRounds {
 
     record Shuffled(List<String> labels, int correctIndex) {}
 
-    // Visible for tests so they can substitute deterministic shuffles.
+    /** Visible for tests so they can substitute deterministic shuffles. */
     static Shuffled shuffleWith(TriviaQuestion question, java.util.Random rng) {
         if (question.type() == TriviaQuestion.Type.BOOLEAN) {
             return new Shuffled(List.of("True", "False"),

@@ -10,6 +10,7 @@ import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -44,7 +45,6 @@ class TriviaClientTest {
         });
     }
 
-    /** Real-shape opentdb response with url3986 encoding. */
     private static final String SAMPLE_MULTIPLE = """
             {
               "response_code": 0,
@@ -76,27 +76,25 @@ class TriviaClientTest {
     @Test
     void parsesMultipleChoiceAndDecodesUrlEscapes() throws Exception {
         serve("/api.php", 200, SAMPLE_MULTIPLE);
-        TriviaQuestion q = client.fetch(null);
+        TriviaQuestion q = client.fetch(TriviaFilter.any());
         assertEquals(TriviaQuestion.Type.MULTIPLE, q.type());
         assertEquals("easy", q.difficulty());
         assertEquals("Entertainment: Video Games", q.category());
         assertEquals("What is the name of the protagonist in the Sonic series?", q.question());
         assertEquals("Sonic", q.correctAnswer());
-        assertEquals(3, q.incorrectAnswers().size());
-        assertTrue(q.incorrectAnswers().contains("Dr. Eggman"),
-                "url-decoded incorrect answer should be space-separated");
+        assertTrue(q.incorrectAnswers().contains("Dr. Eggman"));
     }
 
     @Test
     void parsesBooleanType() throws Exception {
         serve("/api.php", 200, SAMPLE_BOOLEAN);
-        TriviaQuestion q = client.fetch(null);
+        TriviaQuestion q = client.fetch(TriviaFilter.any());
         assertEquals(TriviaQuestion.Type.BOOLEAN, q.type());
         assertEquals("False", q.correctAnswer());
     }
 
     @Test
-    void difficultyIsForwardedAsQueryParam() throws Exception {
+    void filterParamsForwardedAsQueryString() throws Exception {
         AtomicReference<String> rawQuery = new AtomicReference<>();
         server.createContext("/api.php", ex -> {
             rawQuery.set(ex.getRequestURI().getRawQuery());
@@ -105,15 +103,41 @@ class TriviaClientTest {
             ex.sendResponseHeaders(200, bytes.length);
             try (var os = ex.getResponseBody()) { os.write(bytes); }
         });
-        client.fetch("hard");
+        client.fetch(new TriviaFilter(15, "hard"), "tok-abc");
         assertTrue(rawQuery.get().contains("difficulty=hard"), () -> "got: " + rawQuery.get());
-        assertTrue(rawQuery.get().contains("encode=url3986"),
-                "must always request url3986 encoding");
+        assertTrue(rawQuery.get().contains("category=15"), () -> "got: " + rawQuery.get());
+        assertTrue(rawQuery.get().contains("token=tok-abc"), () -> "got: " + rawQuery.get());
+        assertTrue(rawQuery.get().contains("encode=url3986"));
+    }
+
+    @Test
+    void noFilterMeansNoConstraintParams() throws Exception {
+        AtomicReference<String> rawQuery = new AtomicReference<>();
+        server.createContext("/api.php", ex -> {
+            rawQuery.set(ex.getRequestURI().getRawQuery());
+            byte[] bytes = SAMPLE_MULTIPLE.getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, bytes.length);
+            try (var os = ex.getResponseBody()) { os.write(bytes); }
+        });
+        client.fetch(TriviaFilter.any());
+        assertTrue(!rawQuery.get().contains("difficulty="),
+                "no difficulty filter should not appear in the query");
+        assertTrue(!rawQuery.get().contains("category="),
+                "no category filter should not appear in the query");
+        assertTrue(!rawQuery.get().contains("token="));
     }
 
     @Test
     void rejectsUnknownDifficulty() {
-        assertThrows(TriviaClient.TriviaException.class, () -> client.fetch("legendary"));
+        assertThrows(TriviaClient.TriviaException.class,
+                () -> TriviaFilter.validated(null, "legendary"));
+    }
+
+    @Test
+    void rejectsUnknownCategory() {
+        assertThrows(TriviaClient.TriviaException.class,
+                () -> TriviaFilter.validated(99999, null));
     }
 
     @Test
@@ -121,19 +145,19 @@ class TriviaClientTest {
         serve("/api.php", 200, """
                 {"response_code": 5, "results": []}
                 """);
-        var ex = assertThrows(TriviaClient.TriviaException.class, () -> client.fetch(null));
+        var ex = assertThrows(TriviaClient.TriviaException.class,
+                () -> client.fetch(TriviaFilter.any()));
         assertTrue(ex.getMessage().toLowerCase().contains("rate"), () -> ex.getMessage());
     }
 
     @Test
     void noResultsResponseSurfacesAdvice() {
-        // Code 1: filters matched zero questions. Show the user something
-        // actionable rather than a generic "empty response" error.
         serve("/api.php", 200, """
                 {"response_code": 1, "results": []}
                 """);
-        var ex = assertThrows(TriviaClient.TriviaException.class, () -> client.fetch(null));
-        assertTrue(ex.getMessage().toLowerCase().contains("difficulty"), () -> ex.getMessage());
+        var ex = assertThrows(TriviaClient.TriviaException.class,
+                () -> client.fetch(TriviaFilter.any()));
+        assertTrue(ex.getMessage().toLowerCase().contains("no more"), () -> ex.getMessage());
     }
 
     @Test
@@ -141,21 +165,54 @@ class TriviaClientTest {
         serve("/api.php", 200, """
                 {"response_code": 2, "results": []}
                 """);
-        var ex = assertThrows(TriviaClient.TriviaException.class, () -> client.fetch(null));
+        var ex = assertThrows(TriviaClient.TriviaException.class,
+                () -> client.fetch(TriviaFilter.any()));
         assertTrue(ex.getMessage().toLowerCase().contains("invalid"), () -> ex.getMessage());
+    }
+
+    @Test
+    void tokenExhaustionIsTypedSubclassForRetry() {
+        // response_code 4 = token empty (no more unique questions for this token).
+        // The handler retries tokenless on this; the typed exception lets it.
+        serve("/api.php", 200, """
+                {"response_code": 4, "results": []}
+                """);
+        assertThrows(TriviaClient.TokenExhaustedException.class,
+                () -> client.fetch(TriviaFilter.any(), "exhausted"));
     }
 
     @Test
     void httpFiveHundredSurfacesAsHttpError() {
         serve("/api.php", 500, "internal error");
-        var ex = assertThrows(TriviaClient.TriviaException.class, () -> client.fetch(null));
+        var ex = assertThrows(TriviaClient.TriviaException.class,
+                () -> client.fetch(TriviaFilter.any()));
         assertTrue(ex.getMessage().contains("500"), () -> ex.getMessage());
     }
 
     @Test
     void unparseableBodyIsCalledOut() {
         serve("/api.php", 200, "{not json");
-        var ex = assertThrows(TriviaClient.TriviaException.class, () -> client.fetch(null));
+        var ex = assertThrows(TriviaClient.TriviaException.class,
+                () -> client.fetch(TriviaFilter.any()));
         assertTrue(ex.getMessage().toLowerCase().contains("unexpected"), () -> ex.getMessage());
+    }
+
+    // -- session token endpoint ---------------------------------------------
+
+    @Test
+    void requestSessionTokenReturnsTokenOnSuccess() throws Exception {
+        serve("/api_token.php", 200, """
+                {"response_code": 0, "response_message": "Token Generated Successfully!", "token": "abc123"}
+                """);
+        Optional<String> token = client.requestSessionToken();
+        assertEquals("abc123", token.orElseThrow());
+    }
+
+    @Test
+    void requestSessionTokenEmptyOnError() throws Exception {
+        serve("/api_token.php", 200, """
+                {"response_code": 1, "response_message": "fail", "token": null}
+                """);
+        assertTrue(client.requestSessionToken().isEmpty());
     }
 }

@@ -2,6 +2,7 @@ package ca.ryanmorrison.chatterbox.features.trivia;
 
 import ca.ryanmorrison.chatterbox.features.trivia.dto.TriviaResponse;
 import ca.ryanmorrison.chatterbox.features.trivia.dto.TriviaResultEntry;
+import ca.ryanmorrison.chatterbox.features.trivia.dto.TriviaTokenResponse;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -17,23 +18,27 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Talks to <a href="https://opentdb.com">Open Trivia DB</a>'s
  * {@code /api.php} endpoint. No API key.
  *
  * <p>Always requests {@code encode=url3986} so we don't have to deal with
- * the bare HTML-entity flavour of opentdb's default response (which arrives
- * as {@code &quot;}, {@code &#039;}, etc.). URL decoding happens here so
- * callers receive plain text.
+ * the bare HTML-entity flavour of opentdb's default response. URL decoding
+ * happens here so callers receive plain text.
  *
  * <p>Open Trivia DB enforces a soft rate limit — 1 request per 5 seconds
- * per IP — and surfaces breaches as {@code response_code: 5}. We translate
- * that into a {@link TriviaException} the handler can show verbatim.
+ * per IP — and surfaces breaches as {@code response_code: 5}.
+ *
+ * <p>Session tokens (see {@link #requestSessionToken}) are optional but
+ * recommended: a fetch call passing a token won't repeat any question
+ * served against that token until it's reset (response_code 4) or expired
+ * server-side (response_code 3) — useful so a single multi-round game
+ * doesn't repeat itself.
  *
  * <p>Posture mirrors {@code StockClient} / {@code WikiClient}: 10s timeout,
- * 1 MB response cap, all failures funnelled into {@link TriviaException}.
+ * 256 KB response cap, all failures funnelled into {@link TriviaException}.
  */
 final class TriviaClient {
 
@@ -64,18 +69,18 @@ final class TriviaClient {
     }
 
     /**
-     * Fetch a single random question, optionally constrained by difficulty.
-     * {@code difficulty} accepts {@code "easy"}, {@code "medium"},
-     * {@code "hard"} or null for any.
+     * Fetch a single random question matching {@code filter}. If
+     * {@code sessionToken} is non-null, opentdb won't repeat questions
+     * already served against it within this session.
      */
-    TriviaQuestion fetch(String difficulty) throws TriviaException {
+    TriviaQuestion fetch(TriviaFilter filter, String sessionToken) throws TriviaException {
         StringBuilder qs = new StringBuilder("/api.php?amount=1&encode=url3986");
-        if (difficulty != null && !difficulty.isBlank()) {
-            String d = difficulty.trim().toLowerCase(Locale.ROOT);
-            if (!d.equals("easy") && !d.equals("medium") && !d.equals("hard")) {
-                throw new TriviaException("Difficulty must be easy, medium, or hard.");
-            }
-            qs.append("&difficulty=").append(d);
+        if (filter != null) {
+            if (filter.difficulty() != null) qs.append("&difficulty=").append(filter.difficulty());
+            if (filter.categoryId() != null) qs.append("&category=").append(filter.categoryId());
+        }
+        if (sessionToken != null && !sessionToken.isBlank()) {
+            qs.append("&token=").append(sessionToken);
         }
         URI uri;
         try {
@@ -83,6 +88,45 @@ final class TriviaClient {
         } catch (IllegalArgumentException e) {
             throw new TriviaException("Failed to build trivia request.");
         }
+        TriviaResponse parsed = sendJson(uri, TriviaResponse.class);
+        return switch (parsed.responseCode()) {
+            case 0 -> firstResult(parsed);
+            case 1 -> throw new TriviaException(
+                    "No more trivia questions matched that filter.");
+            case 2 -> throw new TriviaException("Open Trivia DB rejected our request as invalid.");
+            case 3, 4 -> throw new TokenExhaustedException();
+            case 5 -> throw new TriviaException(
+                    "Open Trivia DB is rate-limiting us. Try again in a few seconds.");
+            default -> throw new TriviaException(
+                    "Open Trivia DB returned response_code " + parsed.responseCode() + ".");
+        };
+    }
+
+    /** Convenience overload: same as {@link #fetch(TriviaFilter, String)} with no session token. */
+    TriviaQuestion fetch(TriviaFilter filter) throws TriviaException {
+        return fetch(filter, null);
+    }
+
+    /**
+     * Request a fresh session token. Pass it back to {@link #fetch} so the
+     * same question isn't returned twice within one game. Tokens last 6
+     * hours server-side.
+     */
+    Optional<String> requestSessionToken() throws TriviaException {
+        URI uri;
+        try {
+            uri = URI.create(baseUrl + "/api_token.php?command=request");
+        } catch (IllegalArgumentException e) {
+            throw new TriviaException("Failed to build token request.");
+        }
+        TriviaTokenResponse parsed = sendJson(uri, TriviaTokenResponse.class);
+        if (parsed.responseCode() != 0 || parsed.token() == null || parsed.token().isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(parsed.token());
+    }
+
+    private <T> T sendJson(URI uri, Class<T> type) throws TriviaException {
         HttpRequest req = HttpRequest.newBuilder(uri)
                 .timeout(HTTP_TIMEOUT)
                 .header("Accept", "application/json")
@@ -111,25 +155,11 @@ final class TriviaClient {
         if (body.length == 0) {
             throw new TriviaException("Open Trivia DB returned an empty response.");
         }
-        TriviaResponse parsed;
         try {
-            parsed = mapper.readValue(body, TriviaResponse.class);
+            return mapper.readValue(body, type);
         } catch (IOException e) {
             throw new TriviaException("Open Trivia DB returned an unexpected response.");
         }
-        // Map response_code → exception messages. Code 0 with a populated
-        // result is the only happy path; everything else is something the
-        // user (or operator) should know about.
-        return switch (parsed.responseCode()) {
-            case 0 -> firstResult(parsed);
-            case 1 -> throw new TriviaException(
-                    "No trivia questions matched that filter. Try a different difficulty.");
-            case 2 -> throw new TriviaException("Open Trivia DB rejected our request as invalid.");
-            case 5 -> throw new TriviaException(
-                    "Open Trivia DB is rate-limiting us. Try again in a few seconds.");
-            default -> throw new TriviaException(
-                    "Open Trivia DB returned response_code " + parsed.responseCode() + ".");
-        };
     }
 
     private TriviaQuestion firstResult(TriviaResponse parsed) throws TriviaException {
@@ -160,9 +190,6 @@ final class TriviaClient {
     }
 
     private static String decode(String s) {
-        // RFC 3986 percent-decoding; Java's URLDecoder also un-pluses, but
-        // url3986-encoded content from opentdb doesn't contain raw '+' in
-        // ways that would conflict.
         return URLDecoder.decode(s, StandardCharsets.UTF_8);
     }
 
@@ -171,7 +198,16 @@ final class TriviaClient {
     }
 
     /** User-safe checked exception for any fetch/parse failure. */
-    static final class TriviaException extends Exception {
+    static class TriviaException extends Exception {
         TriviaException(String message) { super(message); }
+    }
+
+    /**
+     * Signals that the session token has been exhausted (response_code 4)
+     * or expired (response_code 3). The handler should request a fresh
+     * token and retry — or fall back to an untoked request.
+     */
+    static final class TokenExhaustedException extends TriviaException {
+        TokenExhaustedException() { super("Open Trivia DB session token expired."); }
     }
 }
