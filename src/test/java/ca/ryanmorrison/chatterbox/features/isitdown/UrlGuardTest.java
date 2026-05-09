@@ -39,9 +39,26 @@ class UrlGuardTest {
     }
 
     @Test
-    void missingSchemeRejected() {
-        var rejected = (UrlGuard.ParsedUrl.Rejected) UrlGuard.parse("example.com");
-        assertTrue(rejected.reason().toLowerCase().contains("scheme"));
+    void bareHostnameDefaultsToHttps() {
+        var ok = (UrlGuard.ParsedUrl.Ok) UrlGuard.parse("reddit.com");
+        assertEquals("https", ok.uri().getScheme());
+        assertEquals("reddit.com", ok.uri().getHost());
+    }
+
+    @Test
+    void bareHostnameWithPathDefaultsToHttps() {
+        var ok = (UrlGuard.ParsedUrl.Ok) UrlGuard.parse("reddit.com/r/java");
+        assertEquals("https", ok.uri().getScheme());
+        assertEquals("reddit.com", ok.uri().getHost());
+        assertEquals("/r/java", ok.uri().getPath());
+    }
+
+    @Test
+    void bareHostnameWithPortDefaultsToHttps() {
+        var ok = (UrlGuard.ParsedUrl.Ok) UrlGuard.parse("example.com:8443/foo");
+        assertEquals("https", ok.uri().getScheme());
+        assertEquals("example.com", ok.uri().getHost());
+        assertEquals(8443, ok.uri().getPort());
     }
 
     @Test

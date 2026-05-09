@@ -49,7 +49,21 @@ final class IsItDownChecker {
     static final int CONNECT_TIMEOUT = 4;
     /** Hard cap on bytes read from the response body; sites that ignore Range are still bounded. */
     static final int MAX_RESPONSE_BYTES = 4 * 1024;
-    static final String USER_AGENT = "Chatterbox/0.1 (+isitdown check)";
+
+    /**
+     * Browser-shaped {@code User-Agent}. A bot-flavoured UA gets blanket-403'd
+     * by Cloudflare and similar WAFs even on pages that are otherwise public,
+     * which produces false negatives for {@code /isitdown}. Pretending to be
+     * Chrome on Windows is the lowest-friction workaround. Update when the
+     * version drifts far enough that sniffing tools start flagging it as old.
+     */
+    static final String USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    + "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+    /** Browser-shaped Accept header so content-type-sniffing WAFs don't trip on a bare wildcard. */
+    static final String ACCEPT =
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
+    static final String ACCEPT_LANGUAGE = "en-US,en;q=0.9";
 
     private final HttpClient http;
     private final int requestTimeoutSeconds;
@@ -78,7 +92,18 @@ final class IsItDownChecker {
         HttpRequest req = HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofSeconds(requestTimeoutSeconds))
                 .header("User-Agent", USER_AGENT)
-                .header("Accept", "*/*")
+                .header("Accept", ACCEPT)
+                .header("Accept-Language", ACCEPT_LANGUAGE)
+                // Sec-Fetch-* are sent by every real browser navigation; their
+                // absence is a common Cloudflare WAF heuristic for bots. Cheap
+                // to include and broadly improves compatibility. (Sites that
+                // fingerprint at TLS level — Reddit, some banks — will still
+                // detect us regardless; that's a known limitation.)
+                .header("Sec-Fetch-Site", "none")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-User", "?1")
+                .header("Sec-Fetch-Dest", "document")
+                .header("Upgrade-Insecure-Requests", "1")
                 // Most servers honour Range and return only 1 KB; the rest get
                 // capped client-side via MAX_RESPONSE_BYTES below.
                 .header("Range", "bytes=0-" + (MAX_RESPONSE_BYTES - 1))

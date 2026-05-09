@@ -60,6 +60,13 @@ final class UrlGuard {
             trimmed = trimmed.substring(1, trimmed.length() - 1).trim();
         }
         if (trimmed.isEmpty()) return new ParsedUrl.Rejected("URL is empty.");
+        // Bare hostnames like "reddit.com" are common; default to https. Anything
+        // already containing "://" keeps its scheme — including disallowed ones,
+        // which the scheme check below rejects with a more useful message than
+        // silently coercing them to https.
+        if (!trimmed.contains("://")) {
+            trimmed = "https://" + trimmed;
+        }
         if (trimmed.length() > MAX_URL_LENGTH) {
             return new ParsedUrl.Rejected("URL is too long (max " + MAX_URL_LENGTH + " characters).");
         }
