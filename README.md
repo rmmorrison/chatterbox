@@ -792,9 +792,10 @@ caller is sitting. The reply spells out the resolved date in plain text
 so any mismatch with the caller's mental model is visible at a glance;
 fall back to absolute forms (`2026-12-25 14:00`) when ambiguity matters.
 
-Output includes the resolved moment as a literal wall-clock in the
-requested zone, then the same instant as Discord timestamp markdown —
-both an absolute (`<t:UNIX:F>` — long date/time in viewer's locale) and
-a relative (`<t:UNIX:R>` — "in 2 hours", "3 days ago"). Public by
-default since the whole point is to share; `private:true` previews the
-parse without posting.
+Output is a single line that reads as a sentence:
+`<t:UNIX:F> (<t:UNIX:R>) in <zone> → **wall-clock in that zone**`. The
+Discord timestamps come first because they auto-render in the *viewer's*
+locale (so for the caller they're effectively "your time"); the bold
+trailing wall-clock is the same moment expressed in the requested zone.
+Public by default since the whole point is to share; `private:true`
+previews the parse without posting.

@@ -69,7 +69,7 @@ final class WhenHandler extends ListenerAdapter {
         }
 
         Instant instant = ((TimeParser.Result.Ok) parsed).instant();
-        event.reply(formatReply(at, resolvedZone.get(), instant))
+        event.reply(formatReply(resolvedZone.get(), instant))
                 .setEphemeral(ephemeral)
                 .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
                 .queue();
@@ -94,28 +94,23 @@ final class WhenHandler extends ListenerAdapter {
             DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy 'at' h:mm a", Locale.ENGLISH);
 
     /**
-     * Builds the user-facing reply: header echoing what we parsed, then the
-     * resolved moment as a literal wall-clock in the requested zone, and
-     * finally the Discord {@code <t:UNIX:STYLE>} markdown. The wall-clock
-     * line is the load-bearing fix for two real-world surprises:
-     * <ol>
-     *   <li>{@code at:now in:Asia/Kolkata} renders the {@code <t:UNIX:F>}
-     *       in the <em>viewer's</em> timezone (that's how Discord works),
-     *       which doesn't actually answer "what time is it in Kolkata?".
-     *       The wall-clock line does.</li>
-     *   <li>{@code at:tomorrow 1am in:Asia/Kolkata} computes "tomorrow"
-     *       relative to the named zone (consistent rule; we don't know the
-     *       caller's own zone). When the caller is in a very different
-     *       zone the resolved date can be a day off from what they pictured.
-     *       Showing the literal date makes that mismatch visible at a
-     *       glance instead of buried in a Unix timestamp.</li>
-     * </ol>
+     * Builds the user-facing reply as a single line:
+     * <pre>
+     *   &lt;t:UNIX:F&gt; (&lt;t:UNIX:R&gt;) in Asia/Kolkata → **Saturday, May 9, 2026 at 8:00 AM**
+     * </pre>
+     * The Discord timestamps come first because they auto-render in the
+     * viewer's locale (so for the caller they're effectively "your time"),
+     * and the bold trailing wall-clock is the same moment expressed in
+     * the requested zone. Reading left-to-right works as a sentence:
+     * "this moment [your view] in &lt;zone&gt; is [their wall clock]." That
+     * eliminates the ambiguity of the earlier two-clock layout where the
+     * caller had to figure out which clock was which.
      */
-    static String formatReply(String at, ZoneId zone, Instant instant) {
+    static String formatReply(ZoneId zone, Instant instant) {
         long epoch = instant.getEpochSecond();
         String literal = LITERAL_FORMAT.format(instant.atZone(zone));
-        return "🕒 *\"" + at + "\" in " + zone.getId() + "* → **" + literal + "**\n"
-                + "<t:" + epoch + ":F> (<t:" + epoch + ":R>)";
+        return "<t:" + epoch + ":F> (<t:" + epoch + ":R>) in "
+                + zone.getId() + " → **" + literal + "**";
     }
 
     private static String stringOption(SlashCommandInteractionEvent event, String name) {
