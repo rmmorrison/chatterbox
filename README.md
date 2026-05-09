@@ -760,3 +760,75 @@ Safeguards:
 Public reply by default — when a service is down, the channel usually
 wants to commiserate together — but `private:true` keeps it ephemeral.
 Reachable from DMs as well as guilds; no permissions required.
+
+### When
+
+`/when at:<time> [in:<timezone>] [private:<bool>]` — convert a moment to
+Discord timestamp markdown so every viewer sees it in their own local
+timezone. Useful for coordinating across distributed servers.
+
+`at:` accepts a small but forgiving grammar:
+
+| Input | Interpreted as |
+| --- | --- |
+| `now` | current instant |
+| `7pm`, `19:00`, `7:30pm` | today at that time (rolls to tomorrow if already past) |
+| `today 14:30`, `tomorrow 9am` | the named day at that time |
+| `friday`, `monday 7pm` | next occurrence of that weekday |
+| `in 30m`, `in 3 hours`, `in 2 days`, `in 1 week` | relative offset from now |
+| `2026-12-25` | midnight on that date |
+| `2026-12-25 18:00`, `2026-12-25T18:00` | that exact moment |
+
+Two zones are at play, and they're separated:
+
+- **Interpretation** — the zone `at:` is parsed against (which calendar
+  "tomorrow" looks at, which clock "12pm" reads from). The caller's
+  stored [`/timezone`](#timezone) wins; if none is set, `in:` is the
+  fallback.
+- **Display** — the zone the bot's wall-clock literal is rendered in.
+  Driven *only* by `in:`, and opt-in: with no `in:` provided, the reply
+  is just the Discord timestamp markdown (which auto-localizes for each
+  viewer anyway, so a literal in the caller's own zone would just be
+  redundant).
+
+So a Toronto user (with `/timezone set tz:America/Toronto`) typing
+`/when at:tomorrow 12pm in:Asia/Kolkata` is asking *"my tomorrow at
+noon — what time is that for someone in Kolkata?"*. The bot computes
+Saturday 12:00 EDT and the literal renders as Saturday 21:30 IST
+("9:30 PM" Kolkata wall clock). Discord still renders the headline
+timestamp in the viewer's own locale, so the caller sees "12:00 PM
+Saturday" themselves.
+
+Anything that names a wall clock or a calendar day — bare times,
+weekday references, today/tomorrow, or ISO datetimes — needs some
+interpretation zone. If neither `/timezone` nor `in:` provides one,
+the bot refuses with a pointer to `/timezone set`. Only zone-independent
+inputs (`now`, `in N units`) succeed without a stored timezone.
+
+Output:
+
+- With `in:` provided: bold wall-clock literal in that zone leads, then
+  the Discord timestamp markdown for the same instant —
+  `**Sunday, May 10, 2026 at 9:00 AM** in Europe/London — <t:UNIX:F> (<t:UNIX:R>)`.
+  Leading with the literal makes the answer-to-the-explicit-question the
+  first thing on screen; the Discord timestamp follows for sharing
+  (Discord renders it in each viewer's own locale).
+- Without `in:`: just `<t:UNIX:F> (<t:UNIX:R>)` — Discord auto-localizes
+  for each viewer.
+
+Public by default since the whole point is to share; `private:true`
+previews the parse without posting.
+
+### Timezone
+
+`/timezone set tz:<zone>` / `/timezone show` / `/timezone clear` —
+manage your personal IANA timezone preference. Used by [`/when`](#when)
+to disambiguate relative-day inputs (today, tomorrow, weekday names,
+bare times) which would otherwise have no consistent calendar to pin
+to. Stored once per user and applied across every guild — your
+timezone follows you, not a server.
+
+Autocomplete on `tz:` shares the curated list with `/when`'s `in:`
+option (typing a city name like `tor` surfaces `America/Toronto`); any
+IANA name or offset is accepted. Replies are ephemeral throughout —
+no need to clutter the channel with someone's preference setting.

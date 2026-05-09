@@ -10,6 +10,7 @@ import ca.ryanmorrison.chatterbox.db.generated.tables.RuntimeConfig;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShortenedUrls;
 import ca.ryanmorrison.chatterbox.db.generated.tables.ShoutHistory;
 import ca.ryanmorrison.chatterbox.db.generated.tables.Shouts;
+import ca.ryanmorrison.chatterbox.db.generated.tables.UserTimezones;
 
 
 /**
@@ -47,4 +48,9 @@ public class Tables {
      * The table <code>public.shouts</code>.
      */
     public static final Shouts SHOUTS = Shouts.SHOUTS;
+
+    /**
+     * The table <code>public.user_timezones</code>.
+     */
+    public static final UserTimezones USER_TIMEZONES = UserTimezones.USER_TIMEZONES;
 }
