@@ -101,8 +101,10 @@ class TriviaEmbedBuilderTest {
 
         String footer = embed.getFooter().getText();
         assertTrue(footer.contains("Easy"), footer);
-        assertTrue(footer.contains("<t:1500000:R>"),
-                "answer-window deadline should render as a relative timestamp");
+        // Discord doesn't render <t:N:R> in footers, only in descriptions and
+        // field values — keep the live countdown out of the footer.
+        assertTrue(embed.getDescription().contains("<t:1500000:R>"),
+                "answer-window deadline must live in the description so it renders");
     }
 
     @Test

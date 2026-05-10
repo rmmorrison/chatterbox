@@ -52,16 +52,21 @@ final class TriviaEmbedBuilder {
     /** Live-round embed: the prompt with lettered choices and player roster. */
     static MessageEmbed question(TriviaRound round, long answerWindowEndsAtEpochSeconds) {
         TriviaQuestion q = round.question();
+        // Discord renders <t:N:R> in descriptions and field values but NOT
+        // in footers — keep the live countdown in the description so it
+        // shows up as a real countdown rather than literal text.
+        String description = q.question()
+                + "\n\n⏱️ Closes <t:" + answerWindowEndsAtEpochSeconds + ":R>"
+                + " or when everyone has picked.";
         return new EmbedBuilder()
                 .setTitle(roundTitle(round))
                 .setColor(COLOR_LIVE)
-                .setDescription(q.question())
+                .setDescription(description)
                 .addField("Choices", choiceList(round.shuffledChoices()), false)
                 .addField("Players (" + round.joinedPlayers().size() + ")",
                         mentionList(round.joinedPlayers()), false)
                 .setFooter("Difficulty: " + capitalise(q.difficulty())
-                        + " · Answer window closes <t:" + answerWindowEndsAtEpochSeconds + ":R>"
-                        + " or when everyone has picked.")
+                        + " · Source: Open Trivia DB")
                 .build();
     }
 
