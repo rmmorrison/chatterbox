@@ -1,8 +1,8 @@
 package ca.ryanmorrison.chatterbox.features.trivia;
 
+import ca.ryanmorrison.chatterbox.features.trivia.dto.CategoryListResponse;
 import ca.ryanmorrison.chatterbox.features.trivia.dto.TriviaResponse;
 import ca.ryanmorrison.chatterbox.features.trivia.dto.TriviaResultEntry;
-import ca.ryanmorrison.chatterbox.features.trivia.dto.TriviaTokenResponse;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -18,24 +18,15 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Talks to <a href="https://opentdb.com">Open Trivia DB</a>'s
- * {@code /api.php} endpoint. No API key.
+ * {@code /api.php} and {@code /api_category.php} endpoints. No API key.
  *
- * <p>Always requests {@code encode=url3986} so we don't have to deal with
- * the bare HTML-entity flavour of opentdb's default response. URL decoding
- * happens here so callers receive plain text.
- *
- * <p>Open Trivia DB enforces a soft rate limit — 1 request per 5 seconds
- * per IP — and surfaces breaches as {@code response_code: 5}.
- *
- * <p>Session tokens (see {@link #requestSessionToken}) are optional but
- * recommended: a fetch call passing a token won't repeat any question
- * served against that token until it's reset (response_code 4) or expired
- * server-side (response_code 3) — useful so a single multi-round game
- * doesn't repeat itself.
+ * <p>Always requests {@code encode=url3986} for question fetches so we
+ * don't have to deal with the bare HTML-entity flavour of opentdb's
+ * default response. URL decoding happens here so callers receive plain
+ * text.
  *
  * <p>Posture mirrors {@code StockClient} / {@code WikiClient}: 10s timeout,
  * 256 KB response cap, all failures funnelled into {@link TriviaException}.
@@ -45,20 +36,10 @@ final class TriviaClient {
     static final String BASE_URL = "https://opentdb.com";
     static final int MAX_RESPONSE_BYTES = 256 * 1024;
     static final Duration HTTP_TIMEOUT = Duration.ofSeconds(10);
-    /**
-     * Open Trivia DB caps each IP at one request per ~5 seconds; busting that
-     * yields 429s with no Retry-After. We pad to 5.5s for safety and gate
-     * every outbound call (token + question fetches alike) so the client
-     * self-paces regardless of how fast the game flows.
-     */
-    static final long MIN_FETCH_INTERVAL_MS = 5_500L;
 
     private final HttpClient http;
     private final String baseUrl;
     private final ObjectMapper mapper;
-    private final Object fetchGate = new Object();
-    /** Earliest epoch-ms a future fetch is allowed to leave the gate. */
-    private long nextFetchAllowedAt = 0L;
 
     TriviaClient() {
         this(HttpClient.newBuilder()
@@ -80,32 +61,23 @@ final class TriviaClient {
 
     /**
      * Fetch a single random question. Convenience wrapper around
-     * {@link #fetchBatch} for callers that want exactly one. Throws if the
-     * batch comes back short.
+     * {@link #fetchBatch} for callers that want exactly one.
      */
-    TriviaQuestion fetch(TriviaFilter filter, String sessionToken) throws TriviaException {
-        List<TriviaQuestion> batch = fetchBatch(filter, sessionToken, 1);
-        return batch.get(0);
-    }
-
-    /** Convenience overload: same as {@link #fetch(TriviaFilter, String)} with no session token. */
     TriviaQuestion fetch(TriviaFilter filter) throws TriviaException {
-        return fetch(filter, null);
+        return fetchBatch(filter, 1).get(0);
     }
 
     /**
      * Fetch {@code amount} random questions in one round-trip. opentdb
-     * supports {@code amount} in the range 1–50; this client clamps to
-     * 1–50 and trusts the upstream behaviour.
+     * supports {@code amount} in 1–50; the API guarantees that questions
+     * within a single response are distinct, so a session that pre-loads
+     * its full round set in one call won't see repeats.
      *
-     * <p>If opentdb returns <em>fewer</em> than requested (rare — usually
-     * means the filter is unusually narrow), this throws so the caller
-     * can abort cleanly rather than silently shrink the game. opentdb's
-     * {@code response_code: 1} ("no results") becomes the same friendly
-     * "no questions matched" message either way.
+     * <p>If opentdb returns fewer than requested (rare — usually means
+     * the filter is unusually narrow), this throws so the caller can
+     * abort cleanly rather than silently shrinking the game.
      */
-    List<TriviaQuestion> fetchBatch(TriviaFilter filter, String sessionToken, int amount)
-            throws TriviaException {
+    List<TriviaQuestion> fetchBatch(TriviaFilter filter, int amount) throws TriviaException {
         if (amount < 1 || amount > 50) {
             throw new TriviaException("Trivia batch size must be 1–50.");
         }
@@ -114,9 +86,6 @@ final class TriviaClient {
         if (filter != null) {
             if (filter.difficulty() != null) qs.append("&difficulty=").append(filter.difficulty());
             if (filter.categoryId() != null) qs.append("&category=").append(filter.categoryId());
-        }
-        if (sessionToken != null && !sessionToken.isBlank()) {
-            qs.append("&token=").append(sessionToken);
         }
         URI uri;
         try {
@@ -130,7 +99,6 @@ final class TriviaClient {
             case 1 -> throw new TriviaException(
                     "No more trivia questions matched that filter.");
             case 2 -> throw new TriviaException("Open Trivia DB rejected our request as invalid.");
-            case 3, 4 -> throw new TokenExhaustedException();
             case 5 -> throw new TriviaException(
                     "Open Trivia DB is rate-limiting us. Try again in a few seconds.");
             default -> throw new TriviaException(
@@ -138,32 +106,27 @@ final class TriviaClient {
         };
     }
 
-    /** Convenience overload — no session token. */
-    List<TriviaQuestion> fetchBatch(TriviaFilter filter, int amount) throws TriviaException {
-        return fetchBatch(filter, null, amount);
-    }
-
     /**
-     * Request a fresh session token. Pass it back to {@link #fetch} so the
-     * same question isn't returned twice within one game. Tokens last 6
-     * hours server-side.
+     * Fetch the full category list from {@code /api_category.php}. Names
+     * arrive plain (no url encoding) and are returned in opentdb's order.
+     * The list is small and stable enough for a feature module to cache
+     * indefinitely; this client doesn't cache anything itself.
      */
-    Optional<String> requestSessionToken() throws TriviaException {
+    List<CategoryListResponse.Category> fetchCategories() throws TriviaException {
         URI uri;
         try {
-            uri = URI.create(baseUrl + "/api_token.php?command=request");
+            uri = URI.create(baseUrl + "/api_category.php");
         } catch (IllegalArgumentException e) {
-            throw new TriviaException("Failed to build token request.");
+            throw new TriviaException("Failed to build category request.");
         }
-        TriviaTokenResponse parsed = sendJson(uri, TriviaTokenResponse.class);
-        if (parsed.responseCode() != 0 || parsed.token() == null || parsed.token().isBlank()) {
-            return Optional.empty();
+        CategoryListResponse parsed = sendJson(uri, CategoryListResponse.class);
+        if (parsed.triviaCategories() == null || parsed.triviaCategories().isEmpty()) {
+            throw new TriviaException("Open Trivia DB returned no categories.");
         }
-        return Optional.of(parsed.token());
+        return parsed.triviaCategories();
     }
 
     private <T> T sendJson(URI uri, Class<T> type) throws TriviaException {
-        waitForRateLimitGate();
         HttpRequest req = HttpRequest.newBuilder(uri)
                 .timeout(HTTP_TIMEOUT)
                 .header("Accept", "application/json")
@@ -185,6 +148,10 @@ final class TriviaClient {
         byte[] body = resp.body() == null ? new byte[0] : resp.body();
         if (body.length > MAX_RESPONSE_BYTES) {
             throw new TriviaException("Open Trivia DB response was too large.");
+        }
+        if (status == 429) {
+            throw new TriviaException(
+                    "Open Trivia DB is rate-limiting us. Try again in a few seconds.");
         }
         if (status / 100 != 2) {
             throw new TriviaException("Open Trivia DB returned HTTP " + status + ".");
@@ -241,29 +208,6 @@ final class TriviaClient {
                 List.copyOf(wrong));
     }
 
-    /**
-     * Pace outbound calls so any two are at least {@link #MIN_FETCH_INTERVAL_MS}
-     * apart. Reserves the next slot inside the lock then sleeps outside it so
-     * concurrent callers stack rather than block each other on the monitor.
-     */
-    private void waitForRateLimitGate() throws TriviaException {
-        long waitMs;
-        synchronized (fetchGate) {
-            long now = System.currentTimeMillis();
-            long start = Math.max(now, nextFetchAllowedAt);
-            waitMs = start - now;
-            nextFetchAllowedAt = start + MIN_FETCH_INTERVAL_MS;
-        }
-        if (waitMs > 0) {
-            try {
-                Thread.sleep(waitMs);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new TriviaException("Request was interrupted.");
-            }
-        }
-    }
-
     private static String decode(String s) {
         return URLDecoder.decode(s, StandardCharsets.UTF_8);
     }
@@ -275,14 +219,5 @@ final class TriviaClient {
     /** User-safe checked exception for any fetch/parse failure. */
     static class TriviaException extends Exception {
         TriviaException(String message) { super(message); }
-    }
-
-    /**
-     * Signals that the session token has been exhausted (response_code 4)
-     * or expired (response_code 3). The handler should request a fresh
-     * token and retry — or fall back to an untoked request.
-     */
-    static final class TokenExhaustedException extends TriviaException {
-        TokenExhaustedException() { super("Open Trivia DB session token expired."); }
     }
 }

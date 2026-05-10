@@ -35,6 +35,10 @@ final class TriviaGame {
     private final long channelId;
     private final long initiatorId;
     private final TriviaFilter filter;
+    /** Resolved at game-construction time so the embed footer can render
+     *  "Geography" rather than "Category #22"; null if the cache couldn't
+     *  resolve (lookup failed or the id wasn't in the live list). */
+    private final String categoryName;
     private final List<TriviaQuestion> questions;
     private final int lobbySeconds;
     private final int roundSeconds;
@@ -50,12 +54,14 @@ final class TriviaGame {
     private int currentRoundNumber;
 
     TriviaGame(String gameId, long channelId, long initiatorId,
-               TriviaFilter filter, List<TriviaQuestion> questions,
+               TriviaFilter filter, String categoryName,
+               List<TriviaQuestion> questions,
                int lobbySeconds, int roundSeconds) {
         this.gameId = gameId;
         this.channelId = channelId;
         this.initiatorId = initiatorId;
         this.filter = filter;
+        this.categoryName = categoryName;
         this.questions = List.copyOf(questions);
         this.lobbySeconds = lobbySeconds;
         this.roundSeconds = roundSeconds;
@@ -68,6 +74,8 @@ final class TriviaGame {
     long channelId() { return channelId; }
     long initiatorId() { return initiatorId; }
     TriviaFilter filter() { return filter; }
+    /** Display name resolved from {@link TriviaCategoryCache}, or null. */
+    String categoryName() { return categoryName; }
     int totalRounds() { return questions.size(); }
     int lobbySeconds() { return lobbySeconds; }
     int roundSeconds() { return roundSeconds; }

@@ -10,23 +10,24 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 
 import java.util.List;
-import java.util.Map;
 
 /**
- * {@code /trivia [difficulty] [category] [rounds]} — runs a multi-round
- * trivia game in the channel, sourcing questions from
+ * {@code /trivia [difficulty] [category] [rounds] [lobby]} — runs a
+ * multi-round trivia session in the channel, sourcing questions from
  * <a href="https://opentdb.com">Open Trivia DB</a> (no API key).
  *
- * <p>Each round posts publicly with answer buttons; first user to click
- * the correct answer wins that round. After {@code rounds} rounds (default
- * {@value TriviaHandler#DEFAULT_ROUNDS}, max {@value TriviaHandler#MAX_ROUNDS}),
- * a leaderboard embed posts in the same channel. Rounds that nobody
- * answers within {@value TriviaHandler#ROUND_TIMEOUT_SECONDS} seconds
- * auto-resolve and the game continues to the next round.
+ * <p>Lobby: configurable via {@code lobby:<seconds>} (default 30, range
+ * 5–120). Players opt in by clicking Join; when the lobby closes the
+ * roster is frozen and rounds run with all joined players answering
+ * simultaneously. Each round resolves on the 20s timer or when every
+ * joined player has answered.
  *
- * <p>State is in-memory only. Games in flight at the time of a bot
- * restart are forgotten — clicks on the orphaned buttons get a polite
- * "round has ended" reply.
+ * <p>Categories are autocomplete-driven and lazy-loaded from
+ * {@code /api_category.php} on first use; nothing is hardcoded.
+ *
+ * <p>Per-channel single session: a second {@code /trivia} in the same
+ * channel while a session is active is rejected with a brief ephemeral
+ * reply.
  */
 public final class TriviaModule implements Module {
 
@@ -43,13 +44,12 @@ public final class TriviaModule implements Module {
                 .addChoice("Medium", "medium")
                 .addChoice("Hard", "hard");
 
+        // Autocomplete-driven so categories come from the live opentdb
+        // list and nothing is baked into the slash registration.
         OptionData category = new OptionData(OptionType.INTEGER,
                 TriviaHandler.OPT_CATEGORY,
                 "Restrict to a single Open Trivia DB category.",
-                false, false);
-        for (Map.Entry<String, Integer> entry : TriviaCategories.all().entrySet()) {
-            category.addChoice(entry.getKey(), entry.getValue());
-        }
+                false, true);
 
         OptionData numRounds = new OptionData(OptionType.INTEGER,
                 TriviaHandler.OPT_ROUNDS,
@@ -73,7 +73,9 @@ public final class TriviaModule implements Module {
     @Override
     public List<EventListener> listeners(InitContext ctx) {
         if (handler == null) {
-            handler = new TriviaHandler(new TriviaClient(), new TriviaRounds());
+            TriviaClient client = new TriviaClient();
+            TriviaCategoryCache cache = new TriviaCategoryCache(client);
+            handler = new TriviaHandler(client, new TriviaRounds(), cache);
         }
         return List.of(handler);
     }

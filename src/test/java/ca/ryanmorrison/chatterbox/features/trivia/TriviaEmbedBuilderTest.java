@@ -42,7 +42,7 @@ class TriviaEmbedBuilderTest {
         var qs = new java.util.ArrayList<TriviaQuestion>();
         for (int i = 0; i < totalRounds; i++) qs.add(sampleMultiple());
         return new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), qs, 30, 20);
+                TriviaFilter.any(), null, qs, 30, 20);
     }
 
     // -- lobby --------------------------------------------------------------
@@ -168,7 +168,7 @@ class TriviaEmbedBuilderTest {
         var qs = new java.util.ArrayList<TriviaQuestion>();
         for (int i = 0; i < totalRounds; i++) qs.add(sampleMultiple());
         TriviaGame game = new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), qs, 30, 20);
+                TriviaFilter.any(), null, qs, 30, 20);
         // Ensure every winner is also a joined player.
         for (long userId : wins) game.addPlayer(userId);
         for (long userId : wins) game.recordWin(userId);
@@ -218,14 +218,28 @@ class TriviaEmbedBuilderTest {
     }
 
     @Test
-    void footerCarriesFilterSummaryWhenSet() {
+    void footerCarriesFilterSummaryFromResolvedName() {
         var qs = new java.util.ArrayList<TriviaQuestion>();
         for (int i = 0; i < 5; i++) qs.add(sampleMultiple());
+        // Pre-resolved name passed through from TriviaCategoryCache.
         TriviaGame game = new TriviaGame("g1", 200L, 99L,
-                new TriviaFilter(15, "hard"), qs, 30, 20);
+                new TriviaFilter(15, "hard"), "Video Games", qs, 30, 20);
         game.recordWin(99L);
         String footer = TriviaEmbedBuilder.gameOver(game).getFooter().getText();
         assertTrue(footer.contains("Hard"), footer);
         assertTrue(footer.contains("Video Games"), footer);
+    }
+
+    @Test
+    void footerFallsBackToGenericLabelWhenCategoryNameUnresolved() {
+        var qs = new java.util.ArrayList<TriviaQuestion>();
+        for (int i = 0; i < 5; i++) qs.add(sampleMultiple());
+        // categoryId set but no resolved name → "Category #N" fallback so
+        // the embed never silently drops the filter that the user picked.
+        TriviaGame game = new TriviaGame("g1", 200L, 99L,
+                new TriviaFilter(15, "hard"), null, qs, 30, 20);
+        game.recordWin(99L);
+        String footer = TriviaEmbedBuilder.gameOver(game).getFooter().getText();
+        assertTrue(footer.contains("Category #15"), footer);
     }
 }

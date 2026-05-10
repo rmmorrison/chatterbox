@@ -133,13 +133,8 @@ final class TriviaEmbedBuilder {
         TriviaFilter f = game.filter();
         if (f != null) {
             if (f.difficulty() != null) sb.append(" · ").append(capitalise(f.difficulty()));
-            if (f.categoryId() != null) {
-                String name = TriviaCategories.all().entrySet().stream()
-                        .filter(e -> e.getValue().equals(f.categoryId()))
-                        .map(Map.Entry::getKey)
-                        .findFirst().orElse(null);
-                if (name != null) sb.append(" · ").append(name);
-            }
+            String catName = categoryDisplayName(game);
+            if (catName != null) sb.append(" · ").append(catName);
         }
         sb.append(" · ").append(game.roundSeconds()).append("s per round");
         return sb.toString();
@@ -150,17 +145,25 @@ final class TriviaEmbedBuilder {
         if (f == null) return "";
         StringBuilder sb = new StringBuilder();
         if (f.difficulty() != null) sb.append(capitalise(f.difficulty()));
-        if (f.categoryId() != null) {
-            String name = TriviaCategories.all().entrySet().stream()
-                    .filter(e -> e.getValue().equals(f.categoryId()))
-                    .map(Map.Entry::getKey)
-                    .findFirst().orElse(null);
-            if (name != null) {
-                if (sb.length() > 0) sb.append(" · ");
-                sb.append(name);
-            }
+        String catName = categoryDisplayName(game);
+        if (catName != null) {
+            if (sb.length() > 0) sb.append(" · ");
+            sb.append(catName);
         }
         return sb.toString();
+    }
+
+    /**
+     * Render-safe category name. Uses the cache-resolved name stored on
+     * the game; falls back to {@code Category #N} when the cache couldn't
+     * resolve (e.g. opentdb's category endpoint was down at game start).
+     * Returns null if no category filter was set.
+     */
+    private static String categoryDisplayName(TriviaGame game) {
+        TriviaFilter f = game.filter();
+        if (f == null || f.categoryId() == null) return null;
+        if (game.categoryName() != null) return game.categoryName();
+        return "Category #" + f.categoryId();
     }
 
     private static String mentionList(Set<Long> userIds) {

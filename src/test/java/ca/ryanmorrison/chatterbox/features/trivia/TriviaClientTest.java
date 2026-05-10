@@ -10,7 +10,6 @@ import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -103,10 +102,9 @@ class TriviaClientTest {
             ex.sendResponseHeaders(200, bytes.length);
             try (var os = ex.getResponseBody()) { os.write(bytes); }
         });
-        client.fetch(new TriviaFilter(15, "hard"), "tok-abc");
+        client.fetch(new TriviaFilter(15, "hard"));
         assertTrue(rawQuery.get().contains("difficulty=hard"), () -> "got: " + rawQuery.get());
         assertTrue(rawQuery.get().contains("category=15"), () -> "got: " + rawQuery.get());
-        assertTrue(rawQuery.get().contains("token=tok-abc"), () -> "got: " + rawQuery.get());
         assertTrue(rawQuery.get().contains("encode=url3986"));
     }
 
@@ -125,19 +123,12 @@ class TriviaClientTest {
                 "no difficulty filter should not appear in the query");
         assertTrue(!rawQuery.get().contains("category="),
                 "no category filter should not appear in the query");
-        assertTrue(!rawQuery.get().contains("token="));
     }
 
     @Test
     void rejectsUnknownDifficulty() {
         assertThrows(TriviaClient.TriviaException.class,
                 () -> TriviaFilter.validated(null, "legendary"));
-    }
-
-    @Test
-    void rejectsUnknownCategory() {
-        assertThrows(TriviaClient.TriviaException.class,
-                () -> TriviaFilter.validated(99999, null));
     }
 
     @Test
@@ -171,17 +162,6 @@ class TriviaClientTest {
     }
 
     @Test
-    void tokenExhaustionIsTypedSubclassForRetry() {
-        // response_code 4 = token empty (no more unique questions for this token).
-        // The handler retries tokenless on this; the typed exception lets it.
-        serve("/api.php", 200, """
-                {"response_code": 4, "results": []}
-                """);
-        assertThrows(TriviaClient.TokenExhaustedException.class,
-                () -> client.fetch(TriviaFilter.any(), "exhausted"));
-    }
-
-    @Test
     void httpFiveHundredSurfacesAsHttpError() {
         serve("/api.php", 500, "internal error");
         var ex = assertThrows(TriviaClient.TriviaException.class,
@@ -197,23 +177,38 @@ class TriviaClientTest {
         assertTrue(ex.getMessage().toLowerCase().contains("unexpected"), () -> ex.getMessage());
     }
 
-    // -- session token endpoint ---------------------------------------------
+    // -- categories endpoint -----------------------------------------------
 
     @Test
-    void requestSessionTokenReturnsTokenOnSuccess() throws Exception {
-        serve("/api_token.php", 200, """
-                {"response_code": 0, "response_message": "Token Generated Successfully!", "token": "abc123"}
+    void fetchCategoriesParsesIdAndNameInOrder() throws Exception {
+        serve("/api_category.php", 200, """
+                {"trivia_categories": [
+                    {"id": 9, "name": "General Knowledge"},
+                    {"id": 22, "name": "Geography"},
+                    {"id": 18, "name": "Science: Computers"}
+                ]}
                 """);
-        Optional<String> token = client.requestSessionToken();
-        assertEquals("abc123", token.orElseThrow());
+        var got = client.fetchCategories();
+        assertEquals(3, got.size());
+        assertEquals(9, got.get(0).id());
+        assertEquals("General Knowledge", got.get(0).name());
+        assertEquals(22, got.get(1).id());
+        assertEquals("Science: Computers", got.get(2).name());
     }
 
     @Test
-    void requestSessionTokenEmptyOnError() throws Exception {
-        serve("/api_token.php", 200, """
-                {"response_code": 1, "response_message": "fail", "token": null}
+    void fetchCategoriesEmptyResponseThrows() {
+        serve("/api_category.php", 200, """
+                {"trivia_categories": []}
                 """);
-        assertTrue(client.requestSessionToken().isEmpty());
+        assertThrows(TriviaClient.TriviaException.class, () -> client.fetchCategories());
+    }
+
+    @Test
+    void fetchCategoriesHttpErrorSurfaces() {
+        serve("/api_category.php", 503, "down");
+        var ex = assertThrows(TriviaClient.TriviaException.class, () -> client.fetchCategories());
+        assertTrue(ex.getMessage().contains("503"), () -> ex.getMessage());
     }
 
     // -- fetchBatch (pre-loaded games) -------------------------------------

@@ -77,17 +77,20 @@ final class TriviaHandler extends ListenerAdapter {
 
     private final TriviaClient client;
     private final TriviaRounds rounds;
+    private final TriviaCategoryCache categories;
     private final ScheduledExecutorService worker;
     private volatile JDA jda;
 
-    TriviaHandler(TriviaClient client, TriviaRounds rounds) {
-        this(client, rounds, defaultWorker());
+    TriviaHandler(TriviaClient client, TriviaRounds rounds, TriviaCategoryCache categories) {
+        this(client, rounds, categories, defaultWorker());
     }
 
     /** Test seam — supply a deterministic worker. */
-    TriviaHandler(TriviaClient client, TriviaRounds rounds, ScheduledExecutorService worker) {
+    TriviaHandler(TriviaClient client, TriviaRounds rounds,
+                  TriviaCategoryCache categories, ScheduledExecutorService worker) {
         this.client = client;
         this.rounds = rounds;
+        this.categories = categories;
         this.worker = worker;
     }
 
@@ -150,11 +153,11 @@ final class TriviaHandler extends ListenerAdapter {
      * Failing here means we never post the lobby — players don't sit
      * through 30 seconds only to be told the upstream is unhappy.
      *
-     * <p>Two opentdb calls happen here, gated by the client's 5.5s
-     * rate-limiter: the (optional) session-token request and the batched
-     * question fetch. From the user's perspective {@code /trivia} takes
-     * roughly 6 seconds before the lobby appears; that's the cost of
-     * never hitting a 429 mid-game.
+     * <p>Exactly one opentdb call happens per session: the batched
+     * question fetch via {@code amount=N}. opentdb guarantees questions
+     * within a single response are distinct, so no session token is
+     * needed; the game runs entirely offline from opentdb after this
+     * point.
      */
     private void openLobby(SlashCommandInteractionEvent event,
                            long channelId,
@@ -162,27 +165,9 @@ final class TriviaHandler extends ListenerAdapter {
                            TriviaFilter filter,
                            int totalRounds,
                            int lobbySeconds) {
-        String token = null;
-        try {
-            token = client.requestSessionToken().orElse(null);
-        } catch (TriviaClient.TriviaException e) {
-            log.debug("Trivia session token request failed: {}", e.getMessage());
-        }
-
         List<TriviaQuestion> questions;
         try {
-            questions = client.fetchBatch(filter, token, totalRounds);
-        } catch (TriviaClient.TokenExhaustedException e) {
-            // Tokens last 6h server-side; an exhausted token at game-start
-            // is rare but possible if the same one's been used a lot. Retry
-            // tokenless.
-            try {
-                questions = client.fetchBatch(filter, totalRounds);
-            } catch (TriviaClient.TriviaException retry) {
-                event.getHook().sendMessage(retry.getMessage()).setEphemeral(true).queue();
-                rounds.releaseChannel(channelId, gameId);
-                return;
-            }
+            questions = client.fetchBatch(filter, totalRounds);
         } catch (TriviaClient.TriviaException e) {
             event.getHook().sendMessage(e.getMessage()).setEphemeral(true).queue();
             rounds.releaseChannel(channelId, gameId);
@@ -195,9 +180,17 @@ final class TriviaHandler extends ListenerAdapter {
             return;
         }
 
+        // Resolve the category name for the embed footer. May trigger a
+        // lazy fetch of the category list if no autocomplete has yet; the
+        // cache returns null on miss and the embed falls back to a
+        // generic "Category #N".
+        String categoryName = filter.categoryId() == null
+                ? null
+                : categories.nameFor(filter.categoryId()).orElse(null);
+
         TriviaGame game = new TriviaGame(gameId, channelId,
                 event.getUser().getIdLong(),
-                filter, questions, lobbySeconds, ROUND_SECONDS);
+                filter, categoryName, questions, lobbySeconds, ROUND_SECONDS);
         rounds.registerGame(game);
 
         long startsAt = Instant.now().getEpochSecond() + lobbySeconds;
@@ -218,6 +211,28 @@ final class TriviaHandler extends ListenerAdapter {
     }
 
     // -- buttons -----------------------------------------------------------
+
+    @Override
+    public void onCommandAutoCompleteInteraction(
+            net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent event) {
+        if (!COMMAND.equals(event.getName())) return;
+        if (!OPT_CATEGORY.equals(event.getFocusedOption().getName())) return;
+
+        String typed = event.getFocusedOption().getValue();
+        String needle = typed == null ? "" : typed.toLowerCase(java.util.Locale.ROOT).trim();
+
+        // Discord caps autocomplete suggestions at 25.
+        java.util.List<net.dv8tion.jda.api.interactions.commands.Command.Choice> matches = new java.util.ArrayList<>();
+        for (var c : categories.categories()) {
+            if (matches.size() >= 25) break;
+            if (c.name() == null) continue;
+            if (needle.isEmpty() || c.name().toLowerCase(java.util.Locale.ROOT).contains(needle)) {
+                matches.add(new net.dv8tion.jda.api.interactions.commands.Command.Choice(c.name(), c.id()));
+            }
+        }
+        event.replyChoices(matches).queue(null,
+                err -> log.debug("Failed to reply to category autocomplete: {}", err.toString()));
+    }
 
     @Override
     public void onButtonInteraction(ButtonInteractionEvent event) {

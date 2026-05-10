@@ -22,7 +22,7 @@ class TriviaGameTest {
         var qs = new java.util.ArrayList<TriviaQuestion>();
         for (int i = 0; i < totalRounds; i++) qs.add(sampleQuestion());
         return new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), qs, 30, 20);
+                TriviaFilter.any(), null, qs, 30, 20);
     }
 
     @Test
@@ -96,7 +96,7 @@ class TriviaGameTest {
         TriviaQuestion q2 = new TriviaQuestion(TriviaQuestion.Type.BOOLEAN, "easy", "Cat",
                 "Q2?", "True", List.of("False"));
         TriviaGame g = new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), List.of(q1, q2), 30, 20);
+                TriviaFilter.any(), null, List.of(q1, q2), 30, 20);
 
         assertEquals(2, g.totalRounds(), "totalRounds is the size of the pre-loaded list");
         assertEquals(q1, g.questionForRound(1));

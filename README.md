@@ -969,7 +969,7 @@ Options:
 | Option | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `difficulty` | Easy / Medium / Hard | any | Forwarded to opentdb's `difficulty` filter. |
-| `category` | one of 24 opentdb categories (General Knowledge, Film, Geography, History, Science & Nature, Sports, …) | any | Forwarded to opentdb's `category` filter. |
+| `category` | autocomplete from opentdb's live category list | any | Type to filter; suggestions come from `/api_category.php`, lazy-loaded on first use. |
 | `rounds` | integer 1–10 | 5 | How many questions the session runs through. |
 | `lobby` | integer 5–120 (seconds) | 30 | How long the lobby stays open for players to join. |
 
@@ -1008,23 +1008,30 @@ clients inspecting the components.
 
 **Pre-loaded questions.** All N questions for a session are fetched in
 a single batched opentdb call (`/api.php?amount=N`) before the lobby
-opens. After that the game runs entirely offline from opentdb — no
-inter-round network calls. If opentdb returns fewer questions than
-requested (e.g. a very narrow filter), the bot rejects the slash command
-with a friendly message ("Open Trivia DB only had X matching questions —
-try a different filter or fewer rounds") rather than silently shrinking
-the game.
+opens. opentdb guarantees questions within one response are distinct,
+so a session is naturally repeat-free without needing a session token.
+After the upfront fetch the game runs entirely offline from opentdb —
+no inter-round network calls. If opentdb returns fewer questions than
+requested (e.g. a very narrow filter), the bot rejects the slash
+command with a friendly message ("Open Trivia DB only had X matching
+questions — try a different filter or fewer rounds") rather than
+silently shrinking the game.
 
-To avoid duplicate questions within a single session, the bot also
-requests an opentdb session token at game start and threads it through
-the batch fetch. Token exhaustion (rare with one batch call) falls back
-to a tokenless retry.
+**Categories are autocomplete-driven.** The slash command's `category`
+option uses Discord's autocomplete: typing into the option fires a
+suggestion request, the bot returns up to 25 matching categories from
+opentdb's live `/api_category.php` list (lazy-fetched on first use,
+cached forever after). Nothing is hardcoded — if opentdb adds a new
+category, it shows up automatically. If the categories endpoint is
+down on first request, autocomplete returns no suggestions and the
+slash command still works (users can skip the option, or pass an id
+manually for opentdb to validate).
 
 **Rate limiting.** Open Trivia DB caps each IP at one request per
-~5 seconds. The client self-paces at 5.5s between any two outbound
-calls (token + batch fetch) so back-to-back sessions can't bust the
-limit. With pre-loading, a typical session makes only two outbound
-calls regardless of round count.
+~5 seconds. With pre-loading, a typical session makes only one
+outbound call per game (the batch fetch), plus at most one one-time
+category-list fetch over the bot's lifetime — comfortably under the
+limit even with concurrent sessions across channels.
 
 State is in-memory only — there is no cross-session persistence or
 all-time leaderboard. Sessions in flight at the moment of a bot restart
