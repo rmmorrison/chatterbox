@@ -66,7 +66,7 @@ final class TriviaHandler extends ListenerAdapter {
     static final String BUTTON_ANSWER_PREFIX = "trivia:answer:";
 
     static final int MIN_ROUNDS         = 1;
-    static final int MAX_ROUNDS         = 10;
+    static final int MAX_ROUNDS         = 50;
     static final int DEFAULT_ROUNDS     = 5;
     static final int MIN_LOBBY_SECONDS  = 5;
     static final int MAX_LOBBY_SECONDS  = 120;

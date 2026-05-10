@@ -970,7 +970,7 @@ Options:
 | --- | --- | --- | --- |
 | `difficulty` | Easy / Medium / Hard | any | Forwarded to opentdb's `difficulty` filter. |
 | `category` | autocomplete from opentdb's live category list | any | Type to filter; suggestions come from `/api_category.php`, lazy-loaded on first use. |
-| `rounds` | integer 1–10 | 5 | How many questions the session runs through. |
+| `rounds` | integer 1–50 | 5 | How many questions the session runs through. opentdb's `amount` parameter caps at 50. |
 | `lobby` | integer 5–120 (seconds) | 30 | How long the lobby stays open for players to join. |
 
 **One session per channel.** A second `/trivia` invocation in a channel
