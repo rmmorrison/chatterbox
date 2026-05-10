@@ -145,6 +145,17 @@ final class TriviaHandler extends ListenerAdapter {
                 totalRounds, lobbySeconds));
     }
 
+    /**
+     * Pre-load all questions for the session before the lobby opens.
+     * Failing here means we never post the lobby — players don't sit
+     * through 30 seconds only to be told the upstream is unhappy.
+     *
+     * <p>Two opentdb calls happen here, gated by the client's 5.5s
+     * rate-limiter: the (optional) session-token request and the batched
+     * question fetch. From the user's perspective {@code /trivia} takes
+     * roughly 6 seconds before the lobby appears; that's the cost of
+     * never hitting a 429 mid-game.
+     */
     private void openLobby(SlashCommandInteractionEvent event,
                            long channelId,
                            String gameId,
@@ -158,9 +169,35 @@ final class TriviaHandler extends ListenerAdapter {
             log.debug("Trivia session token request failed: {}", e.getMessage());
         }
 
+        List<TriviaQuestion> questions;
+        try {
+            questions = client.fetchBatch(filter, token, totalRounds);
+        } catch (TriviaClient.TokenExhaustedException e) {
+            // Tokens last 6h server-side; an exhausted token at game-start
+            // is rare but possible if the same one's been used a lot. Retry
+            // tokenless.
+            try {
+                questions = client.fetchBatch(filter, totalRounds);
+            } catch (TriviaClient.TriviaException retry) {
+                event.getHook().sendMessage(retry.getMessage()).setEphemeral(true).queue();
+                rounds.releaseChannel(channelId, gameId);
+                return;
+            }
+        } catch (TriviaClient.TriviaException e) {
+            event.getHook().sendMessage(e.getMessage()).setEphemeral(true).queue();
+            rounds.releaseChannel(channelId, gameId);
+            return;
+        } catch (RuntimeException e) {
+            log.warn("Unexpected error pre-loading trivia questions for game {}", gameId, e);
+            event.getHook().sendMessage("Something went wrong starting that game.")
+                    .setEphemeral(true).queue();
+            rounds.releaseChannel(channelId, gameId);
+            return;
+        }
+
         TriviaGame game = new TriviaGame(gameId, channelId,
                 event.getUser().getIdLong(),
-                filter, totalRounds, lobbySeconds, ROUND_SECONDS, token);
+                filter, questions, lobbySeconds, ROUND_SECONDS);
         rounds.registerGame(game);
 
         long startsAt = Instant.now().getEpochSecond() + lobbySeconds;
@@ -290,28 +327,8 @@ final class TriviaHandler extends ListenerAdapter {
             return;
         }
 
-        TriviaQuestion question;
-        try {
-            question = client.fetch(game.filter(), game.sessionToken());
-        } catch (TriviaClient.TokenExhaustedException e) {
-            // Session pool drained; fall back to tokenless.
-            try {
-                question = client.fetch(game.filter());
-            } catch (TriviaClient.TriviaException retry) {
-                abortMidGame(game, retry.getMessage());
-                return;
-            }
-        } catch (TriviaClient.TriviaException e) {
-            abortMidGame(game, e.getMessage());
-            return;
-        } catch (RuntimeException e) {
-            log.warn("Unexpected error fetching trivia question for game {}",
-                    game.gameId(), e);
-            abortMidGame(game, "Something went wrong fetching the next question.");
-            return;
-        }
-
         int roundNumber = game.advance();
+        TriviaQuestion question = game.questionForRound(roundNumber);
         TriviaRound round = buildRound(game, roundNumber, question);
         long answerWindowEndsAt = Instant.now().getEpochSecond() + ROUND_SECONDS;
         MessageEmbed embed = TriviaEmbedBuilder.question(round, answerWindowEndsAt);
@@ -370,15 +387,6 @@ final class TriviaHandler extends ListenerAdapter {
                     .queue(null, err -> log.debug(
                             "Failed to post final leaderboard for game {}: {}",
                             game.gameId(), err.toString()));
-        }
-        forgetGame(game);
-    }
-
-    private void abortMidGame(TriviaGame game, String reason) {
-        MessageChannel channel = resolveChannel(game.channelId());
-        if (channel != null) {
-            channel.sendMessage("Game ended early: " + reason).queue();
-            channel.sendMessageEmbeds(TriviaEmbedBuilder.gameOver(game)).queue();
         }
         forgetGame(game);
     }

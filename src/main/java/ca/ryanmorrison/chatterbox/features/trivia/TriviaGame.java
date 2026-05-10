@@ -25,8 +25,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * serialised through the round-level CAS in {@link TriviaRounds}, so
  * scoring and round advancement never race.
  *
- * <p>{@code sessionToken} is opentdb's no-repeat token; null means we
- * couldn't get one and fetches will use the untoked endpoint.
+ * <p>All questions for the session are pre-loaded at construction (one
+ * batched opentdb fetch in the handler), so gameplay is fully offline
+ * from opentdb once the lobby opens.
  */
 final class TriviaGame {
 
@@ -34,10 +35,9 @@ final class TriviaGame {
     private final long channelId;
     private final long initiatorId;
     private final TriviaFilter filter;
-    private final int totalRounds;
+    private final List<TriviaQuestion> questions;
     private final int lobbySeconds;
     private final int roundSeconds;
-    private final String sessionToken;
 
     /** Concurrent so Join clicks from any thread are race-safe. */
     private final Set<Long> joined = ConcurrentHashMap.newKeySet();
@@ -50,16 +50,15 @@ final class TriviaGame {
     private int currentRoundNumber;
 
     TriviaGame(String gameId, long channelId, long initiatorId,
-               TriviaFilter filter, int totalRounds,
-               int lobbySeconds, int roundSeconds, String sessionToken) {
+               TriviaFilter filter, List<TriviaQuestion> questions,
+               int lobbySeconds, int roundSeconds) {
         this.gameId = gameId;
         this.channelId = channelId;
         this.initiatorId = initiatorId;
         this.filter = filter;
-        this.totalRounds = totalRounds;
+        this.questions = List.copyOf(questions);
         this.lobbySeconds = lobbySeconds;
         this.roundSeconds = roundSeconds;
-        this.sessionToken = sessionToken;
         this.currentRoundNumber = 0;
         // Initiator opts in by virtue of running the command.
         joined.add(initiatorId);
@@ -69,13 +68,17 @@ final class TriviaGame {
     long channelId() { return channelId; }
     long initiatorId() { return initiatorId; }
     TriviaFilter filter() { return filter; }
-    int totalRounds() { return totalRounds; }
+    int totalRounds() { return questions.size(); }
     int lobbySeconds() { return lobbySeconds; }
     int roundSeconds() { return roundSeconds; }
-    String sessionToken() { return sessionToken; }
     int currentRoundNumber() { return currentRoundNumber; }
     Phase phase() { return phase; }
     long lobbyMessageId() { return lobbyMessageId; }
+
+    /** Pre-loaded question for round {@code n} (1-based). */
+    TriviaQuestion questionForRound(int roundNumber) {
+        return questions.get(roundNumber - 1);
+    }
 
     void setLobbyMessageId(long messageId) { this.lobbyMessageId = messageId; }
 
@@ -117,7 +120,7 @@ final class TriviaGame {
 
     /** True once {@link #advance} has been called {@code totalRounds} times. */
     boolean isLastRoundComplete() {
-        return currentRoundNumber >= totalRounds;
+        return currentRoundNumber >= questions.size();
     }
 
     /** Snapshot of the current scoreboard, sorted descending by score. */

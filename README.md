@@ -1006,16 +1006,25 @@ Button `custom_id`s encode only the round id and the zero-based choice
 index, never the answer text — so the correct option isn't leaked to
 clients inspecting the components.
 
-To avoid duplicate questions within a single session, the bot requests
-an opentdb session token at game start and threads it through each
-fetch. Token exhaustion mid-game falls back to tokenless fetches
-automatically.
+**Pre-loaded questions.** All N questions for a session are fetched in
+a single batched opentdb call (`/api.php?amount=N`) before the lobby
+opens. After that the game runs entirely offline from opentdb — no
+inter-round network calls. If opentdb returns fewer questions than
+requested (e.g. a very narrow filter), the bot rejects the slash command
+with a friendly message ("Open Trivia DB only had X matching questions —
+try a different filter or fewer rounds") rather than silently shrinking
+the game.
+
+To avoid duplicate questions within a single session, the bot also
+requests an opentdb session token at game start and threads it through
+the batch fetch. Token exhaustion (rare with one batch call) falls back
+to a tokenless retry.
 
 **Rate limiting.** Open Trivia DB caps each IP at one request per
 ~5 seconds. The client self-paces at 5.5s between any two outbound
-calls (token + question fetches alike) so back-to-back games and
-fast-resolving rounds can't bust the limit. With the lobby + answer-window
-defaults a single session naturally stays well under the cap.
+calls (token + batch fetch) so back-to-back sessions can't bust the
+limit. With pre-loading, a typical session makes only two outbound
+calls regardless of round count.
 
 State is in-memory only — there is no cross-session persistence or
 all-time leaderboard. Sessions in flight at the moment of a bot restart

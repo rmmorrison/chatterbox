@@ -39,8 +39,10 @@ class TriviaEmbedBuilderTest {
     }
 
     private static TriviaGame freshGame(int totalRounds) {
+        var qs = new java.util.ArrayList<TriviaQuestion>();
+        for (int i = 0; i < totalRounds; i++) qs.add(sampleMultiple());
         return new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), totalRounds, 30, 20, null);
+                TriviaFilter.any(), qs, 30, 20);
     }
 
     // -- lobby --------------------------------------------------------------
@@ -163,8 +165,10 @@ class TriviaEmbedBuilderTest {
     // -- final leaderboard --------------------------------------------------
 
     private static TriviaGame gameWithScores(int totalRounds, long... wins) {
+        var qs = new java.util.ArrayList<TriviaQuestion>();
+        for (int i = 0; i < totalRounds; i++) qs.add(sampleMultiple());
         TriviaGame game = new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), totalRounds, 30, 20, null);
+                TriviaFilter.any(), qs, 30, 20);
         // Ensure every winner is also a joined player.
         for (long userId : wins) game.addPlayer(userId);
         for (long userId : wins) game.recordWin(userId);
@@ -215,8 +219,10 @@ class TriviaEmbedBuilderTest {
 
     @Test
     void footerCarriesFilterSummaryWhenSet() {
+        var qs = new java.util.ArrayList<TriviaQuestion>();
+        for (int i = 0; i < 5; i++) qs.add(sampleMultiple());
         TriviaGame game = new TriviaGame("g1", 200L, 99L,
-                new TriviaFilter(15, "hard"), 5, 30, 20, null);
+                new TriviaFilter(15, "hard"), qs, 30, 20);
         game.recordWin(99L);
         String footer = TriviaEmbedBuilder.gameOver(game).getFooter().getText();
         assertTrue(footer.contains("Hard"), footer);

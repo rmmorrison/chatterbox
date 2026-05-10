@@ -215,4 +215,71 @@ class TriviaClientTest {
                 """);
         assertTrue(client.requestSessionToken().isEmpty());
     }
+
+    // -- fetchBatch (pre-loaded games) -------------------------------------
+
+    private static final String SAMPLE_BATCH_OF_THREE = """
+            {
+              "response_code": 0,
+              "results": [
+                {"type":"multiple","difficulty":"easy","category":"A%26B",
+                 "question":"Q1%3F","correct_answer":"X1","incorrect_answers":["W1","W2","W3"]},
+                {"type":"boolean","difficulty":"easy","category":"A%26B",
+                 "question":"Q2%3F","correct_answer":"True","incorrect_answers":["False"]},
+                {"type":"multiple","difficulty":"easy","category":"A%26B",
+                 "question":"Q3%3F","correct_answer":"X3","incorrect_answers":["W1","W2","W3"]}
+              ]
+            }
+            """;
+
+    @Test
+    void fetchBatchSendsAmountAndReturnsAllQuestions() throws Exception {
+        AtomicReference<String> rawQuery = new AtomicReference<>();
+        server.createContext("/api.php", ex -> {
+            rawQuery.set(ex.getRequestURI().getRawQuery());
+            byte[] bytes = SAMPLE_BATCH_OF_THREE.getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, bytes.length);
+            try (var os = ex.getResponseBody()) { os.write(bytes); }
+        });
+        var got = client.fetchBatch(TriviaFilter.any(), 3);
+        assertEquals(3, got.size());
+        assertEquals("X1", got.get(0).correctAnswer());
+        assertEquals(TriviaQuestion.Type.BOOLEAN, got.get(1).type());
+        assertEquals("X3", got.get(2).correctAnswer());
+        assertTrue(rawQuery.get().contains("amount=3"), () -> "got: " + rawQuery.get());
+    }
+
+    @Test
+    void fetchBatchTooFewResultsThrowsWithFriendlyMessage() {
+        // amount=5 but server only returns 3 — the client refuses rather
+        // than silently shrinking the game.
+        serve("/api.php", 200, SAMPLE_BATCH_OF_THREE);
+        var ex = assertThrows(TriviaClient.TriviaException.class,
+                () -> client.fetchBatch(TriviaFilter.any(), 5));
+        assertTrue(ex.getMessage().toLowerCase().contains("only had"), () -> ex.getMessage());
+        assertTrue(ex.getMessage().contains("5"), () -> ex.getMessage());
+    }
+
+    @Test
+    void fetchBatchRespectsAmountLimits() {
+        assertThrows(TriviaClient.TriviaException.class,
+                () -> client.fetchBatch(TriviaFilter.any(), 0));
+        assertThrows(TriviaClient.TriviaException.class,
+                () -> client.fetchBatch(TriviaFilter.any(), 51));
+    }
+
+    @Test
+    void fetchSingleDelegatesToBatchOfOne() throws Exception {
+        AtomicReference<String> rawQuery = new AtomicReference<>();
+        server.createContext("/api.php", ex -> {
+            rawQuery.set(ex.getRequestURI().getRawQuery());
+            byte[] bytes = SAMPLE_MULTIPLE.getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, bytes.length);
+            try (var os = ex.getResponseBody()) { os.write(bytes); }
+        });
+        client.fetch(TriviaFilter.any());
+        assertTrue(rawQuery.get().contains("amount=1"), () -> "got: " + rawQuery.get());
+    }
 }

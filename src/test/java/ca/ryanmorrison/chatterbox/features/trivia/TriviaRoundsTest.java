@@ -234,7 +234,7 @@ class TriviaRoundsTest {
     @Test
     void registerAndLookupGameById() {
         TriviaGame game = new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), 5, 30, 20, "tok");
+                TriviaFilter.any(), List.of(sampleMultiple()), 30, 20);
         rounds.registerGame(game);
         assertEquals(game, rounds.game("g1").orElseThrow());
     }
@@ -242,7 +242,7 @@ class TriviaRoundsTest {
     @Test
     void activeGameInChannelLooksUpViaClaim() {
         TriviaGame game = new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), 5, 30, 20, null);
+                TriviaFilter.any(), List.of(sampleMultiple()), 30, 20);
         rounds.tryClaimChannel(200L, "g1");
         rounds.registerGame(game);
         assertEquals(game, rounds.activeGameInChannel(200L).orElseThrow());

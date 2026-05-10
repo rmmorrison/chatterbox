@@ -79,12 +79,38 @@ final class TriviaClient {
     }
 
     /**
-     * Fetch a single random question matching {@code filter}. If
-     * {@code sessionToken} is non-null, opentdb won't repeat questions
-     * already served against it within this session.
+     * Fetch a single random question. Convenience wrapper around
+     * {@link #fetchBatch} for callers that want exactly one. Throws if the
+     * batch comes back short.
      */
     TriviaQuestion fetch(TriviaFilter filter, String sessionToken) throws TriviaException {
-        StringBuilder qs = new StringBuilder("/api.php?amount=1&encode=url3986");
+        List<TriviaQuestion> batch = fetchBatch(filter, sessionToken, 1);
+        return batch.get(0);
+    }
+
+    /** Convenience overload: same as {@link #fetch(TriviaFilter, String)} with no session token. */
+    TriviaQuestion fetch(TriviaFilter filter) throws TriviaException {
+        return fetch(filter, null);
+    }
+
+    /**
+     * Fetch {@code amount} random questions in one round-trip. opentdb
+     * supports {@code amount} in the range 1–50; this client clamps to
+     * 1–50 and trusts the upstream behaviour.
+     *
+     * <p>If opentdb returns <em>fewer</em> than requested (rare — usually
+     * means the filter is unusually narrow), this throws so the caller
+     * can abort cleanly rather than silently shrink the game. opentdb's
+     * {@code response_code: 1} ("no results") becomes the same friendly
+     * "no questions matched" message either way.
+     */
+    List<TriviaQuestion> fetchBatch(TriviaFilter filter, String sessionToken, int amount)
+            throws TriviaException {
+        if (amount < 1 || amount > 50) {
+            throw new TriviaException("Trivia batch size must be 1–50.");
+        }
+        StringBuilder qs = new StringBuilder("/api.php?amount=")
+                .append(amount).append("&encode=url3986");
         if (filter != null) {
             if (filter.difficulty() != null) qs.append("&difficulty=").append(filter.difficulty());
             if (filter.categoryId() != null) qs.append("&category=").append(filter.categoryId());
@@ -100,7 +126,7 @@ final class TriviaClient {
         }
         TriviaResponse parsed = sendJson(uri, TriviaResponse.class);
         return switch (parsed.responseCode()) {
-            case 0 -> firstResult(parsed);
+            case 0 -> parseAllResults(parsed, amount);
             case 1 -> throw new TriviaException(
                     "No more trivia questions matched that filter.");
             case 2 -> throw new TriviaException("Open Trivia DB rejected our request as invalid.");
@@ -112,9 +138,9 @@ final class TriviaClient {
         };
     }
 
-    /** Convenience overload: same as {@link #fetch(TriviaFilter, String)} with no session token. */
-    TriviaQuestion fetch(TriviaFilter filter) throws TriviaException {
-        return fetch(filter, null);
+    /** Convenience overload — no session token. */
+    List<TriviaQuestion> fetchBatch(TriviaFilter filter, int amount) throws TriviaException {
+        return fetchBatch(filter, null, amount);
     }
 
     /**
@@ -173,11 +199,26 @@ final class TriviaClient {
         }
     }
 
-    private TriviaQuestion firstResult(TriviaResponse parsed) throws TriviaException {
+    private List<TriviaQuestion> parseAllResults(TriviaResponse parsed, int requested)
+            throws TriviaException {
         if (parsed.results() == null || parsed.results().isEmpty()) {
             throw new TriviaException("Open Trivia DB returned no questions.");
         }
-        TriviaResultEntry entry = parsed.results().get(0);
+        if (parsed.results().size() < requested) {
+            throw new TriviaException(
+                    "Open Trivia DB only had " + parsed.results().size()
+                            + " matching question" + (parsed.results().size() == 1 ? "" : "s")
+                            + " (asked for " + requested + "). "
+                            + "Try a different filter or fewer rounds.");
+        }
+        List<TriviaQuestion> out = new ArrayList<>(parsed.results().size());
+        for (TriviaResultEntry entry : parsed.results()) {
+            out.add(toQuestion(entry));
+        }
+        return List.copyOf(out);
+    }
+
+    private TriviaQuestion toQuestion(TriviaResultEntry entry) throws TriviaException {
         if (entry == null || entry.question() == null || entry.correctAnswer() == null) {
             throw new TriviaException("Open Trivia DB returned a malformed question.");
         }

@@ -11,9 +11,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TriviaGameTest {
 
+    private static TriviaQuestion sampleQuestion() {
+        return new TriviaQuestion(
+                TriviaQuestion.Type.MULTIPLE, "easy", "Geography",
+                "Capital of Canada?", "Ottawa",
+                List.of("Toronto", "Vancouver", "Montreal"));
+    }
+
     private static TriviaGame game(int totalRounds) {
+        var qs = new java.util.ArrayList<TriviaQuestion>();
+        for (int i = 0; i < totalRounds; i++) qs.add(sampleQuestion());
         return new TriviaGame("g1", 200L, 99L,
-                TriviaFilter.any(), totalRounds, 30, 20, null);
+                TriviaFilter.any(), qs, 30, 20);
     }
 
     @Test
@@ -78,5 +87,19 @@ class TriviaGameTest {
         for (var e : board) {
             assertEquals(0, e.getValue());
         }
+    }
+
+    @Test
+    void preLoadedQuestionsAreAccessibleByRoundNumber() {
+        TriviaQuestion q1 = new TriviaQuestion(TriviaQuestion.Type.MULTIPLE, "easy", "Cat",
+                "Q1?", "A", List.of("B", "C", "D"));
+        TriviaQuestion q2 = new TriviaQuestion(TriviaQuestion.Type.BOOLEAN, "easy", "Cat",
+                "Q2?", "True", List.of("False"));
+        TriviaGame g = new TriviaGame("g1", 200L, 99L,
+                TriviaFilter.any(), List.of(q1, q2), 30, 20);
+
+        assertEquals(2, g.totalRounds(), "totalRounds is the size of the pre-loaded list");
+        assertEquals(q1, g.questionForRound(1));
+        assertEquals(q2, g.questionForRound(2));
     }
 }
