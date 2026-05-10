@@ -120,16 +120,19 @@ final class TriviaRounds {
 
     /**
      * Register a freshly-built round and schedule its answer-window
-     * timeout. {@code onTimeout} runs only if the round is still present
-     * at deadline (i.e. not already resolved by all-answered).
+     * timeout. When the timer fires the round is atomically removed and
+     * passed to {@code onTimeout}; if a concurrent click already
+     * resolved the round (via {@link #consumeRound}), the timer's
+     * removal is a no-op and {@code onTimeout} is skipped.
      */
-    void register(TriviaRound round, long timeoutSeconds, Runnable onTimeout) {
+    void register(TriviaRound round, long timeoutSeconds,
+                  java.util.function.Consumer<TriviaRound> onTimeout) {
         rounds.put(round.roundId(), round);
         ScheduledFuture<?> task = scheduler.schedule(() -> {
             TriviaRound removed = rounds.remove(round.roundId());
             timeouts.remove(round.roundId());
             if (removed != null) {
-                onTimeout.run();
+                onTimeout.accept(removed);
             }
         }, timeoutSeconds, TimeUnit.SECONDS);
         timeouts.put(round.roundId(), task);

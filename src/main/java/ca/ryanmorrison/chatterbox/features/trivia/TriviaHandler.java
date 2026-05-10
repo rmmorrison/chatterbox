@@ -360,9 +360,7 @@ final class TriviaHandler extends ListenerAdapter {
                 .addComponents(ActionRow.of(buttons))
                 .queue(msg -> {
                     TriviaRound posted = round.withMessage(msg.getIdLong(), msg.getChannelIdLong());
-                    rounds.register(posted, ROUND_SECONDS,
-                            () -> rounds.consumeRound(posted.roundId())
-                                    .ifPresent(this::resolveRound));
+                    rounds.register(posted, ROUND_SECONDS, this::resolveRound);
                 }, err -> {
                     log.warn("Failed to post round {} of game {}: {}",
                             roundNumber, game.gameId(), err.toString());

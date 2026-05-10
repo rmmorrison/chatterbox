@@ -105,7 +105,7 @@ class TriviaRoundsTest {
     @Test
     void nonJoinedClickRejected() {
         TriviaRound round = buildRound("r1", Set.of(1L, 2L), 0);
-        rounds.register(round, 60, () -> {});
+        rounds.register(round, 60, r -> {});
         TriviaRounds.AttemptResult r = rounds.recordAnswer("r1", 99L, 0);
         assertEquals(TriviaRounds.AttemptOutcome.NOT_JOINED, r.outcome());
     }
@@ -113,7 +113,7 @@ class TriviaRoundsTest {
     @Test
     void firstAnswerRecordsAndMarksRecorded() {
         TriviaRound round = buildRound("r1", Set.of(1L, 2L, 3L), 0);
-        rounds.register(round, 60, () -> {});
+        rounds.register(round, 60, r -> {});
         TriviaRounds.AttemptResult r = rounds.recordAnswer("r1", 1L, 1);
         assertEquals(TriviaRounds.AttemptOutcome.RECORDED, r.outcome());
         assertEquals(1, r.round().orElseThrow().answers().size());
@@ -122,7 +122,7 @@ class TriviaRoundsTest {
     @Test
     void duplicateAnswerSameUserIsRejected() {
         TriviaRound round = buildRound("r1", Set.of(1L, 2L, 3L), 0);
-        rounds.register(round, 60, () -> {});
+        rounds.register(round, 60, r -> {});
         rounds.recordAnswer("r1", 1L, 1);
         TriviaRounds.AttemptResult r = rounds.recordAnswer("r1", 1L, 0);
         assertEquals(TriviaRounds.AttemptOutcome.ALREADY_ANSWERED, r.outcome());
@@ -133,7 +133,7 @@ class TriviaRoundsTest {
     @Test
     void lastOutstandingAnswerSignalsRecordedLast() {
         TriviaRound round = buildRound("r1", Set.of(1L, 2L), 0);
-        rounds.register(round, 60, () -> {});
+        rounds.register(round, 60, r -> {});
         assertEquals(TriviaRounds.AttemptOutcome.RECORDED,
                 rounds.recordAnswer("r1", 1L, 0).outcome());
         TriviaRounds.AttemptResult last = rounds.recordAnswer("r1", 2L, 1);
@@ -144,7 +144,7 @@ class TriviaRoundsTest {
     @Test
     void recordedLastFromConcurrentClicksFiresExactlyOnce() throws Exception {
         TriviaRound round = buildRound("r1", Set.of(1L, 2L, 3L), 0);
-        rounds.register(round, 60, () -> {});
+        rounds.register(round, 60, r -> {});
 
         int contestants = 3;
         var pool = Executors.newFixedThreadPool(contestants);
@@ -180,7 +180,7 @@ class TriviaRoundsTest {
     @Test
     void consumeRoundReturnsRoundOnceThenEmpty() {
         TriviaRound round = buildRound("r1", Set.of(1L), 0);
-        rounds.register(round, 60, () -> {});
+        rounds.register(round, 60, r -> {});
         assertTrue(rounds.consumeRound("r1").isPresent());
         assertTrue(rounds.consumeRound("r1").isEmpty(),
                 "second consume should see the round already gone");
@@ -190,7 +190,7 @@ class TriviaRoundsTest {
     void consumeRoundCancelsTheTimeoutCallback() throws Exception {
         TriviaRound round = buildRound("r1", Set.of(1L), 0);
         AtomicInteger fires = new AtomicInteger();
-        rounds.register(round, 1, fires::incrementAndGet);
+        rounds.register(round, 1, r -> fires.incrementAndGet());
         rounds.consumeRound("r1");
         Thread.sleep(1500);
         assertEquals(0, fires.get(),
@@ -206,7 +206,7 @@ class TriviaRoundsTest {
         TriviaRound round = buildRound("r1", Set.of(1L), 0);
         AtomicInteger fires = new AtomicInteger();
         CountDownLatch latch = new CountDownLatch(1);
-        rounds.register(round, 0, () -> { fires.incrementAndGet(); latch.countDown(); });
+        rounds.register(round, 0, r -> { fires.incrementAndGet(); latch.countDown(); });
         // Race: try to consume just as the timer fires. Won't be reliable
         // every time but verifies the contract whichever side wins.
         boolean timedOut = latch.await(2, TimeUnit.SECONDS);
