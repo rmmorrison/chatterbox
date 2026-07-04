@@ -1,9 +1,10 @@
 package ca.ryanmorrison.chatterbox.features.weather;
 
 import ca.ryanmorrison.chatterbox.features.weather.dto.WeatherResponse;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.net.URI;
@@ -63,6 +64,10 @@ final class WeatherClient {
         this.mapper = JsonMapper.builder()
                 .findAndAddModules()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                // Jackson 3 enables FAIL_ON_NULL_FOR_PRIMITIVES by default; these
+                // upstream APIs omit optional primitive fields, which the DTOs
+                // expect to default to zero as in Jackson 2.
+                .configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false)
                 .build();
     }
 
@@ -126,7 +131,7 @@ final class WeatherClient {
         }
         try {
             return mapper.readValue(body, WeatherResponse.class);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new WeatherException("wttr.in returned an unexpected response.");
         }
     }

@@ -2,9 +2,10 @@ package ca.ryanmorrison.chatterbox.features.stock;
 
 import ca.ryanmorrison.chatterbox.features.stock.dto.ChartMeta;
 import ca.ryanmorrison.chatterbox.features.stock.dto.ChartResponse;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.net.URI;
@@ -66,6 +67,10 @@ final class StockClient {
         this.mapper = JsonMapper.builder()
                 .findAndAddModules()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                // Jackson 3 enables FAIL_ON_NULL_FOR_PRIMITIVES by default; these
+                // upstream APIs omit optional primitive fields, which the DTOs
+                // expect to default to zero as in Jackson 2.
+                .configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false)
                 .build();
     }
 
@@ -128,7 +133,7 @@ final class StockClient {
         ChartResponse parsed;
         try {
             parsed = mapper.readValue(body, ChartResponse.class);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new StockException("Yahoo Finance returned an unexpected response.");
         }
         // Some 200-class responses still carry a populated error block when
@@ -151,7 +156,7 @@ final class StockClient {
                 return new StockException("Couldn't find symbol `" + symbol + "`. "
                         + "It may be delisted, or check the spelling.");
             }
-        } catch (IOException ignored) {
+        } catch (JacksonException ignored) {
             // Fall through to the generic message.
         }
         return new StockException("Couldn't find symbol `" + symbol + "`. "
