@@ -48,6 +48,7 @@ jobs:
             del(.services.postgres) |
             del(.services."postgres-backup") |
             del(.services."backup-sync") |
+            del(.services.pgweb) |
             del(.volumes) |
             del(.services.chatterbox.depends_on) |
             .services.chatterbox.image = "chatterbox:staging" |
