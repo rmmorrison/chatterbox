@@ -160,6 +160,29 @@ automatically and keeps you under the 2 GB free-tier limit.
 | `DROPBOX_REMOTE_PATH`  | no       | `chatterbox-backups`  | Folder inside the app folder to sync into. |
 | `BACKUP_SYNC_INTERVAL` | no       | `3600`                | Seconds between sync runs. |
 
+## Database GUI (pgweb)
+
+The `pgweb` service runs a lightweight web console for the Postgres database.
+It is chosen for its tiny footprint (a single Go binary, ~30 MB resident,
+capped at 64 MB) so it fits alongside the rest of the stack on a 1 GB host.
+
+For safety it is **not** exposed through Traefik and has no public route. The
+container publishes its port on the host loopback only
+(`127.0.0.1:${PGWEB_BIND_PORT:-8081}`), so the only way in is an SSH tunnel:
+
+```sh
+ssh -L 8081:127.0.0.1:8081 user@host
+```
+
+Then open <http://localhost:8081> in your browser. pgweb reads
+`PGWEB_DATABASE_URL` from the compose file and connects automatically — no
+credentials to enter. Because it always runs, there is nothing to start or
+stop by hand; the tunnel is the only step.
+
+| Variable          | Required | Default | Purpose |
+|-------------------|----------|---------|---------|
+| `PGWEB_BIND_PORT` | no       | `8081`  | Host-side loopback port pgweb binds to. Change only if `8081` is already taken on the server. |
+
 ## Architecture
 
 ### Module SPI

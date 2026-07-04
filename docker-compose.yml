@@ -55,6 +55,30 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  pgweb:
+    image: sosedoff/pgweb:0.17.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGWEB_DATABASE_URL: postgres://${POSTGRES_USER:-chatterbox}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-chatterbox}?sslmode=disable
+    # Bound to loopback only — the GUI is never exposed to the internet.
+    # Reach it with an SSH tunnel: ssh -L 8081:127.0.0.1:8081 user@host
+    ports:
+      - "127.0.0.1:${PGWEB_BIND_PORT:-8081}:8081"
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   backup-sync:
     profiles: ["dropbox-sync"]
     image: rclone/rclone:1.74
