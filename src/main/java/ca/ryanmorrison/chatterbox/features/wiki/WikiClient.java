@@ -3,9 +3,10 @@ package ca.ryanmorrison.chatterbox.features.wiki;
 import ca.ryanmorrison.chatterbox.features.wiki.dto.PageSummary;
 import ca.ryanmorrison.chatterbox.features.wiki.dto.SearchHit;
 import ca.ryanmorrison.chatterbox.features.wiki.dto.SearchResponse;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.net.URI;
@@ -60,6 +61,10 @@ final class WikiClient {
         this.mapper = JsonMapper.builder()
                 .findAndAddModules()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                // Jackson 3 enables FAIL_ON_NULL_FOR_PRIMITIVES by default; these
+                // upstream APIs omit optional primitive fields, which the DTOs
+                // expect to default to zero as in Jackson 2.
+                .configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false)
                 .build();
     }
 
@@ -90,7 +95,7 @@ final class WikiClient {
         if (body.length == 0) throw new WikiException("Wikipedia returned an empty response.");
         try {
             return Optional.of(mapper.readValue(body, PageSummary.class));
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new WikiException("Wikipedia returned an unexpected response.");
         }
     }
@@ -118,7 +123,7 @@ final class WikiClient {
         if (body.length == 0) return List.of();
         try {
             return mapper.readValue(body, SearchResponse.class).hits();
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new WikiException("Wikipedia returned an unexpected response.");
         }
     }

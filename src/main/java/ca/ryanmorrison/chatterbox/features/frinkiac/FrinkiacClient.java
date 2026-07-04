@@ -1,10 +1,11 @@
 package ca.ryanmorrison.chatterbox.features.frinkiac;
 
 import ca.ryanmorrison.chatterbox.features.frinkiac.dto.SearchResult;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.net.URI;
@@ -69,6 +70,10 @@ final class FrinkiacClient {
         this.mapper = JsonMapper.builder()
                 .findAndAddModules()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                // Jackson 3 enables FAIL_ON_NULL_FOR_PRIMITIVES by default; these
+                // upstream APIs omit optional primitive fields, which the DTOs
+                // expect to default to zero as in Jackson 2.
+                .configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false)
                 .build();
     }
 
@@ -81,7 +86,7 @@ final class FrinkiacClient {
         byte[] body = getBytes("/api/search?q=" + encoded, MAX_JSON_BYTES);
         try {
             return mapper.readValue(body, new TypeReference<List<SearchResult>>() {});
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new FrinkiacException("Frinkiac returned an unexpected search response.");
         }
     }
@@ -109,7 +114,7 @@ final class FrinkiacClient {
             json = mapper.writeValueAsString(
                     CaptionOverlay.singlePanel(episode.trim().toUpperCase(Locale.ROOT), timestamp,
                             text == null ? "" : text));
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new FrinkiacException("Couldn't serialise the caption payload.");
         }
         // URL-safe alphabet (- and _ instead of + and /) — the comic renderer's b64

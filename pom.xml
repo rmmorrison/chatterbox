@@ -30,7 +30,7 @@
         <logback.version>1.5.37</logback.version>
         <rome.version>2.1.0</rome.version>
         <jsoup.version>1.22.2</jsoup.version>
-        <jackson.version>2.22.0</jackson.version>
+        <jackson.version>3.1.4</jackson.version>
         <javalin.version>7.2.2</javalin.version>
         <junit.version>6.1.1</junit.version>
         <testcontainers.version>1.21.4</testcontainers.version>
@@ -41,6 +41,23 @@
         <enforcer.plugin.version>3.6.3</enforcer.plugin.version>
         <groovy.maven.plugin.version>2.1.1</groovy.maven.plugin.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Jackson BOM governs the versions of all tools.jackson.* artifacts
+                (databind, core, annotations, ...) so individual dependencies can
+                omit their <version>.
+            -->
+            <dependency>
+                <groupId>tools.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <scope>import</scope>
+                <type>pom</type>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -126,15 +143,14 @@
             <version>${jsoup.version}</version>
         </dependency>
 
+        <!--
+            Jackson 3: java.time (JSR-310) support is now built into
+            jackson-databind, so no separate datatype module is needed. The
+            version is governed by the imported jackson-bom above.
+        -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
+            <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>

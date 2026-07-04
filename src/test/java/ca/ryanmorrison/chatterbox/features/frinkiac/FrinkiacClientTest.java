@@ -1,7 +1,7 @@
 package ca.ryanmorrison.chatterbox.features.frinkiac;
 
 import ca.ryanmorrison.chatterbox.features.frinkiac.dto.SearchResult;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -116,7 +116,7 @@ class FrinkiacClientTest {
         assertTrue(!b64.contains("+") && !b64.contains("/"),
                 () -> "expected URL-safe base64, got: " + b64);
         byte[] json = Base64.getUrlDecoder().decode(b64);
-        ObjectMapper mapper = new ObjectMapper();
+        JsonMapper mapper = JsonMapper.builder().build();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> panels = mapper.readValue(json, List.class);
         assertEquals(1, panels.size(), "expected single-panel payload");
