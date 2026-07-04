@@ -20,25 +20,25 @@
 
         <main.class>ca.ryanmorrison.chatterbox.Main</main.class>
 
-        <jda.version>6.4.1</jda.version>
-        <jooq.version>3.21.2</jooq.version>
-        <flyway.version>12.5.0</flyway.version>
-        <hikari.version>7.0.2</hikari.version>
-        <postgres.version>42.7.11</postgres.version>
-        <sqlite.version>3.53.0.0</sqlite.version>
-        <slf4j.version>2.0.17</slf4j.version>
-        <logback.version>1.5.32</logback.version>
+        <jda.version>6.4.2</jda.version>
+        <jooq.version>3.21.6</jooq.version>
+        <flyway.version>12.10.0</flyway.version>
+        <hikari.version>7.1.0</hikari.version>
+        <postgres.version>42.7.12</postgres.version>
+        <sqlite.version>3.53.2.0</sqlite.version>
+        <slf4j.version>2.0.18</slf4j.version>
+        <logback.version>1.5.37</logback.version>
         <rome.version>2.1.0</rome.version>
         <jsoup.version>1.22.2</jsoup.version>
-        <jackson.version>2.21.3</jackson.version>
-        <javalin.version>7.2.0</javalin.version>
-        <junit.version>6.0.3</junit.version>
+        <jackson.version>2.22.0</jackson.version>
+        <javalin.version>7.2.2</javalin.version>
+        <junit.version>6.1.1</junit.version>
         <testcontainers.version>1.21.4</testcontainers.version>
 
         <compiler.plugin.version>3.15.0</compiler.plugin.version>
         <shade.plugin.version>3.6.2</shade.plugin.version>
-        <surefire.plugin.version>3.5.5</surefire.plugin.version>
-        <enforcer.plugin.version>3.6.2</enforcer.plugin.version>
+        <surefire.plugin.version>3.5.6</surefire.plugin.version>
+        <enforcer.plugin.version>3.6.3</enforcer.plugin.version>
         <groovy.maven.plugin.version>2.1.1</groovy.maven.plugin.version>
     </properties>
 
@@ -66,7 +66,7 @@
         <dependency>
             <groupId>jakarta.xml.bind</groupId>
             <artifactId>jakarta.xml.bind-api</artifactId>
-            <version>4.0.2</version>
+            <version>4.0.5</version>
             <scope>provided</scope>
         </dependency>
 
