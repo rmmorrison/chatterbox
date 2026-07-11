@@ -20,17 +20,17 @@
 
         <main.class>ca.ryanmorrison.chatterbox.Main</main.class>
 
-        <jda.version>6.4.2</jda.version>
+        <jda.version>6.5.0</jda.version>
         <jooq.version>3.21.6</jooq.version>
-        <flyway.version>12.10.0</flyway.version>
+        <flyway.version>12.11.0</flyway.version>
         <hikari.version>7.1.0</hikari.version>
-        <postgres.version>42.7.12</postgres.version>
+        <postgres.version>42.7.13</postgres.version>
         <sqlite.version>3.53.2.0</sqlite.version>
         <slf4j.version>2.0.18</slf4j.version>
-        <logback.version>1.5.37</logback.version>
+        <logback.version>1.5.38</logback.version>
         <rome.version>2.1.0</rome.version>
         <jsoup.version>1.22.2</jsoup.version>
-        <jackson.version>3.1.4</jackson.version>
+        <jackson.version>3.2.1</jackson.version>
         <javalin.version>7.2.2</javalin.version>
         <junit.version>6.1.1</junit.version>
         <testcontainers.version>1.21.4</testcontainers.version>
