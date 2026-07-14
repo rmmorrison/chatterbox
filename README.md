@@ -979,3 +979,84 @@ errors come through as "HTTP N", and timeouts/network errors produce
   to get through.
 
 No SSRF surface: hostname is hard-coded `query1.finance.yahoo.com`.
+
+### Trivia
+
+`/trivia [difficulty] [category] [rounds] [lobby]` — runs a multi-round
+trivia session in the channel using questions from
+[Open Trivia DB](https://opentdb.com) (no API key required).
+**Players opt in during a lobby phase, then play together each round.**
+
+Options:
+
+| Option | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `difficulty` | Easy / Medium / Hard | any | Forwarded to opentdb's `difficulty` filter. |
+| `category` | autocomplete from opentdb's live category list | any | Type to filter; suggestions come from `/api_category.php`, lazy-loaded on first use. |
+| `rounds` | integer 1–50 | 5 | How many questions the session runs through. opentdb's `amount` parameter caps at 50. |
+| `lobby` | integer 5–120 (seconds) | 30 | How long the lobby stays open for players to join. |
+
+**One session per channel.** A second `/trivia` invocation in a channel
+that already has an active session is rejected with a brief ephemeral
+reply ("There's already a trivia session in this channel — wait for it
+to finish.").
+
+How a session plays:
+
+1. The bot posts a **🎲 Trivia lobby** embed showing the initiator,
+   settings, the joined players list, and a relative-timestamp
+   countdown. The embed has a single **Join** button. The initiator is
+   auto-joined; everyone else clicks Join. The roster updates live each
+   time someone joins.
+2. When the lobby timer expires, the join roster freezes and round 1
+   posts. Each round shows the question with answer buttons (A/B/C/D for
+   multiple-choice, True/False for boolean) and a footer with the
+   answer-window deadline.
+3. **Each joined player gets one click per round.** Clicks from
+   non-joined users are rejected ("you aren't in this session — wait
+   for the next one"). The round resolves when the timer (20 seconds)
+   elapses **or** every joined player has clicked, whichever comes first.
+4. The round-result embed reveals the correct answer and a per-player
+   breakdown — ✅ for correct, ❌ with the wrong pick spelled out, ⏰
+   for non-answerers. Each correct answer is worth one point, scored at
+   round end.
+5. After the last round, a final leaderboard embed posts. All joined
+   players appear (zero-scorers at the bottom), sorted descending, with
+   tied scores sharing rank. If everyone scored zero, the embed says so
+   cheerfully.
+
+Button `custom_id`s encode only the round id and the zero-based choice
+index, never the answer text — so the correct option isn't leaked to
+clients inspecting the components.
+
+**Pre-loaded questions.** All N questions for a session are fetched in
+a single batched opentdb call (`/api.php?amount=N`) before the lobby
+opens. opentdb guarantees questions within one response are distinct,
+so a session is naturally repeat-free without needing a session token.
+After the upfront fetch the game runs entirely offline from opentdb —
+no inter-round network calls. If opentdb returns fewer questions than
+requested (e.g. a very narrow filter), the bot rejects the slash
+command with a friendly message ("Open Trivia DB only had X matching
+questions — try a different filter or fewer rounds") rather than
+silently shrinking the game.
+
+**Categories are autocomplete-driven.** The slash command's `category`
+option uses Discord's autocomplete: typing into the option fires a
+suggestion request, the bot returns up to 25 matching categories from
+opentdb's live `/api_category.php` list (lazy-fetched on first use,
+cached forever after). Nothing is hardcoded — if opentdb adds a new
+category, it shows up automatically. If the categories endpoint is
+down on first request, autocomplete returns no suggestions and the
+slash command still works (users can skip the option, or pass an id
+manually for opentdb to validate).
+
+**Rate limiting.** Open Trivia DB caps each IP at one request per
+~5 seconds. With pre-loading, a typical session makes only one
+outbound call per game (the batch fetch), plus at most one one-time
+category-list fetch over the bot's lifetime — comfortably under the
+limit even with concurrent sessions across channels.
+
+State is in-memory only — there is no cross-session persistence or
+all-time leaderboard. Sessions in flight at the moment of a bot restart
+are forgotten; clicks on orphaned buttons get a polite "this round has
+ended" reply.
