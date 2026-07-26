@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.rss;
 
+import ca.ryanmorrison.chatterbox.common.net.HttpClients;
 import ca.ryanmorrison.chatterbox.common.net.BoundedBody;
 import ca.ryanmorrison.chatterbox.common.net.SafeHttp;
 import ca.ryanmorrison.chatterbox.common.net.UrlGuard;
@@ -222,4 +223,10 @@ final class RssFetcher {
     static final class FetchException extends Exception {
         FetchException(String message) { super(message); }
     }
+
+    /** Releases the HTTP client's selector thread and executor. */
+    void close() {
+        HttpClients.closeQuietly(http);
+    }
+
 }

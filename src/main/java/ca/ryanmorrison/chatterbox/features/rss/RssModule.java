@@ -23,6 +23,8 @@ import java.util.List;
 public final class RssModule implements Module {
 
     private RssScheduler scheduler;
+    /** Retained so {@link #onStop()} can release its HTTP client. */
+    private volatile RssFetcher fetcher;
 
     @Override public String name() { return "rss"; }
 
@@ -35,6 +37,7 @@ public final class RssModule implements Module {
     public List<EventListener> listeners(InitContext ctx) {
         var repo = new RssRepository(ctx.database());
         var fetcher = new RssFetcher();
+        this.fetcher = fetcher;
         this.scheduler = new RssScheduler(repo, fetcher);
         var pending = new PendingRssRemovals();
         return List.of(
@@ -72,6 +75,10 @@ public final class RssModule implements Module {
 
     @Override
     public void onStop() {
+        // Scheduler first: stop issuing new fetches before closing the client
+        // they run through.
         if (scheduler != null) scheduler.stop();
+        RssFetcher f = fetcher;
+        if (f != null) f.close();
     }
 }

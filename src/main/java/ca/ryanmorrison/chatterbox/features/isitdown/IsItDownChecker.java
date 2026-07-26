@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.isitdown;
 
+import ca.ryanmorrison.chatterbox.common.net.HttpClients;
 import ca.ryanmorrison.chatterbox.common.net.SafeHttp;
 import ca.ryanmorrison.chatterbox.common.net.UrlGuard;
 import org.slf4j.Logger;
@@ -208,4 +209,10 @@ final class IsItDownChecker {
             total += n;
         }
     }
+
+    /** Releases the HTTP client's selector thread and executor. */
+    void close() {
+        HttpClients.closeQuietly(http);
+    }
+
 }

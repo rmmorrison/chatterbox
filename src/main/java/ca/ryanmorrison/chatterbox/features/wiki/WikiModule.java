@@ -24,6 +24,9 @@ public final class WikiModule implements Module {
     static final String OPT_QUERY   = "query";
     static final String OPT_PRIVATE = "private";
 
+    /** Retained so {@link #onStop()} can release its HTTP client. */
+    private volatile WikiClient client;
+
     @Override public String name() { return "wiki"; }
 
     @Override
@@ -39,6 +42,15 @@ public final class WikiModule implements Module {
 
     @Override
     public List<EventListener> listeners(InitContext ctx) {
-        return List.of(new WikiHandler(new WikiClient()));
+        WikiClient c = new WikiClient();
+        this.client = c;
+        return List.of(new WikiHandler(c));
     }
+
+    @Override
+    public void onStop() {
+        WikiClient c = client;
+        if (c != null) c.close();
+    }
+
 }

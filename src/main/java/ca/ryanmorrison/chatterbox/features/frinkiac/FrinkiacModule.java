@@ -20,6 +20,9 @@ public final class FrinkiacModule implements Module {
     static final String COMMAND = "frinkiac";
     static final String OPTION_QUERY = "query";
 
+    /** Retained so {@link #onStop()} can release its HTTP client. */
+    private volatile FrinkiacClient client;
+
     @Override public String name() { return "frinkiac"; }
 
     @Override
@@ -34,6 +37,15 @@ public final class FrinkiacModule implements Module {
 
     @Override
     public List<EventListener> listeners(InitContext ctx) {
-        return List.of(new FrinkiacHandler(new FrinkiacClient(), new FrinkiacSessions()));
+        FrinkiacClient c = new FrinkiacClient();
+        this.client = c;
+        return List.of(new FrinkiacHandler(c, new FrinkiacSessions()));
     }
+
+    @Override
+    public void onStop() {
+        FrinkiacClient c = client;
+        if (c != null) c.close();
+    }
+
 }

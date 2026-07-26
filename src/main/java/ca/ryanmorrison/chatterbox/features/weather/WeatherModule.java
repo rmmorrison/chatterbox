@@ -31,6 +31,9 @@ public final class WeatherModule implements Module {
     static final String UNITS_METRIC   = "metric";
     static final String UNITS_IMPERIAL = "imperial";
 
+    /** Retained so {@link #onStop()} can release its HTTP client. */
+    private volatile WeatherClient client;
+
     @Override public String name() { return "weather"; }
 
     @Override
@@ -51,6 +54,15 @@ public final class WeatherModule implements Module {
 
     @Override
     public List<EventListener> listeners(InitContext ctx) {
-        return List.of(new WeatherHandler(new WeatherClient()));
+        WeatherClient c = new WeatherClient();
+        this.client = c;
+        return List.of(new WeatherHandler(c));
     }
+
+    @Override
+    public void onStop() {
+        WeatherClient c = client;
+        if (c != null) c.close();
+    }
+
 }

@@ -18,6 +18,7 @@ import java.time.ZoneOffset;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -65,19 +66,19 @@ class RuntimeConfigRepositorySqliteTest {
     @Test
     void putThenFindReturnsValue() {
         repo.put(GUILD, "autoshorten.enabled", "false", ADMIN, NOW);
-        assertEquals("false", repo.findValue(GUILD, "autoshorten.enabled").orElseThrow());
+        assertEquals("false", repo.findAllForGuild(GUILD).get("autoshorten.enabled"));
     }
 
     @Test
-    void findValueIsEmptyWhenAbsent() {
-        assertTrue(repo.findValue(GUILD, "nope").isEmpty());
+    void lookupIsEmptyWhenAbsent() {
+        assertNull(repo.findAllForGuild(GUILD).get("nope"));
     }
 
     @Test
     void putUpdatesExistingRow() {
         repo.put(GUILD, "autoshorten.threshold", "200", ADMIN, NOW);
         repo.put(GUILD, "autoshorten.threshold", "300", ADMIN, LATER);
-        assertEquals("300", repo.findValue(GUILD, "autoshorten.threshold").orElseThrow());
+        assertEquals("300", repo.findAllForGuild(GUILD).get("autoshorten.threshold"));
     }
 
     @Test
@@ -96,7 +97,7 @@ class RuntimeConfigRepositorySqliteTest {
     void deleteReturnsTrueWhenRowExisted() {
         repo.put(GUILD, "autoshorten.enabled", "false", ADMIN, NOW);
         assertTrue(repo.delete(GUILD, "autoshorten.enabled"));
-        assertTrue(repo.findValue(GUILD, "autoshorten.enabled").isEmpty());
+        assertNull(repo.findAllForGuild(GUILD).get("autoshorten.enabled"));
     }
 
     @Test

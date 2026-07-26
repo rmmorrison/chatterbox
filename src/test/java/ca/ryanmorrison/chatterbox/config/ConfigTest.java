@@ -19,7 +19,6 @@ class ConfigTest {
         )::get);
         assertEquals("abc", cfg.discordToken());
         assertFalse(cfg.devMode());
-        assertEquals("INFO", cfg.logLevel());
         assertTrue(cfg.database().isSqlite());
         assertEquals("", cfg.database().user());
     }

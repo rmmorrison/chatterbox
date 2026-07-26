@@ -24,6 +24,9 @@ public final class NhlModule implements Module {
     static final String SUBCOMMAND_SCHEDULE = "schedule";
     static final String OPTION_TEAM = "team";
 
+    /** Retained so {@link #onStop()} can release its HTTP client. */
+    private volatile NhlClient client;
+
     @Override public String name() { return "nhl"; }
 
     @Override
@@ -40,6 +43,15 @@ public final class NhlModule implements Module {
 
     @Override
     public List<EventListener> listeners(InitContext ctx) {
-        return List.of(new NhlHandler(new NhlClient()));
+        NhlClient c = new NhlClient();
+        this.client = c;
+        return List.of(new NhlHandler(c));
     }
+
+    @Override
+    public void onStop() {
+        NhlClient c = client;
+        if (c != null) c.close();
+    }
+
 }

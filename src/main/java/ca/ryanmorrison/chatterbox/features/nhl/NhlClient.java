@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.nhl;
 
+import ca.ryanmorrison.chatterbox.common.net.HttpClients;
 import ca.ryanmorrison.chatterbox.common.net.BoundedBody;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.Game;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.GameDay;
@@ -165,4 +166,10 @@ final class NhlClient {
     static final class NhlException extends Exception {
         NhlException(String message) { super(message); }
     }
+
+    /** Releases the HTTP client's selector thread and executor. */
+    void close() {
+        HttpClients.closeQuietly(http);
+    }
+
 }

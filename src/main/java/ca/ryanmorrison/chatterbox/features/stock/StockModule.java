@@ -27,6 +27,9 @@ public final class StockModule implements Module {
     static final String OPT_SYMBOL  = "symbol";
     static final String OPT_PRIVATE = "private";
 
+    /** Retained so {@link #onStop()} can release its HTTP client. */
+    private volatile StockClient client;
+
     @Override public String name() { return "stock"; }
 
     @Override
@@ -44,6 +47,15 @@ public final class StockModule implements Module {
 
     @Override
     public List<EventListener> listeners(InitContext ctx) {
-        return List.of(new StockHandler(new StockClient()));
+        StockClient c = new StockClient();
+        this.client = c;
+        return List.of(new StockHandler(c));
     }
+
+    @Override
+    public void onStop() {
+        StockClient c = client;
+        if (c != null) c.close();
+    }
+
 }

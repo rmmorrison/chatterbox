@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.weather;
 
+import ca.ryanmorrison.chatterbox.common.net.HttpClients;
 import ca.ryanmorrison.chatterbox.common.net.BoundedBody;
 import ca.ryanmorrison.chatterbox.features.weather.dto.WeatherResponse;
 import tools.jackson.core.JacksonException;
@@ -148,4 +149,10 @@ final class WeatherClient {
     static final class WeatherException extends Exception {
         WeatherException(String message) { super(message); }
     }
+
+    /** Releases the HTTP client's selector thread and executor. */
+    void close() {
+        HttpClients.closeQuietly(http);
+    }
+
 }

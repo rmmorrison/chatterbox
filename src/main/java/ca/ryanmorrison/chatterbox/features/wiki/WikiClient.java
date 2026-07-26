@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.wiki;
 
+import ca.ryanmorrison.chatterbox.common.net.HttpClients;
 import ca.ryanmorrison.chatterbox.common.net.BoundedBody;
 import ca.ryanmorrison.chatterbox.features.wiki.dto.PageSummary;
 import ca.ryanmorrison.chatterbox.features.wiki.dto.SearchHit;
@@ -162,4 +163,10 @@ final class WikiClient {
     static final class WikiException extends Exception {
         WikiException(String message) { super(message); }
     }
+
+    /** Releases the HTTP client's selector thread and executor. */
+    void close() {
+        HttpClients.closeQuietly(http);
+    }
+
 }

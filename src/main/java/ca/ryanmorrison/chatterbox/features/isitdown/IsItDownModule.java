@@ -28,6 +28,9 @@ public final class IsItDownModule implements Module {
     static final String OPT_URL     = "url";
     static final String OPT_PRIVATE = "private";
 
+    /** Retained so {@link #onStop()} can release its HTTP client. */
+    private volatile IsItDownChecker checker;
+
     @Override public String name() { return "isitdown"; }
 
     @Override
@@ -42,6 +45,15 @@ public final class IsItDownModule implements Module {
 
     @Override
     public List<EventListener> listeners(InitContext ctx) {
-        return List.of(new IsItDownHandler(new IsItDownChecker()));
+        IsItDownChecker c = new IsItDownChecker();
+        this.checker = c;
+        return List.of(new IsItDownHandler(c));
     }
+
+    @Override
+    public void onStop() {
+        IsItDownChecker c = checker;
+        if (c != null) c.close();
+    }
+
 }
