@@ -1,5 +1,7 @@
 package ca.ryanmorrison.chatterbox.features.nhl;
 
+import ca.ryanmorrison.chatterbox.common.net.HttpClients;
+import ca.ryanmorrison.chatterbox.common.net.BoundedBody;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.Game;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.GameDay;
 import ca.ryanmorrison.chatterbox.features.nhl.dto.ScheduleResponse;
@@ -10,6 +12,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -122,9 +125,9 @@ final class NhlClient {
                 .header("Accept", "application/json")
                 .GET()
                 .build();
-        HttpResponse<byte[]> resp;
+        HttpResponse<InputStream> resp;
         try {
-            resp = http.send(req, HttpResponse.BodyHandlers.ofByteArray());
+            resp = http.send(req, HttpResponse.BodyHandlers.ofInputStream());
         } catch (IOException e) {
             throw new NhlException("Couldn't reach the NHL API.");
         } catch (InterruptedException e) {
@@ -139,12 +142,18 @@ final class NhlClient {
         if (status / 100 != 2) {
             throw new NhlException("The NHL API returned HTTP " + status + ".");
         }
-        byte[] body = resp.body();
-        if (body == null || body.length == 0) {
-            throw new NhlException("The NHL API returned an empty response.");
-        }
-        if (body.length > MAX_RESPONSE_BYTES) {
+        // Cap while streaming: ofByteArray would buffer the whole response
+        // before any size check could run.
+        byte[] body;
+        try (InputStream in = resp.body()) {
+            body = BoundedBody.read(in, MAX_RESPONSE_BYTES);
+        } catch (BoundedBody.TooLargeException e) {
             throw new NhlException("The NHL API response was too large.");
+        } catch (IOException e) {
+            throw new NhlException("Couldn't read the NHL API response.");
+        }
+        if (body.length == 0) {
+            throw new NhlException("The NHL API returned an empty response.");
         }
         try {
             return mapper.readValue(body, type);
@@ -157,4 +166,10 @@ final class NhlClient {
     static final class NhlException extends Exception {
         NhlException(String message) { super(message); }
     }
+
+    /** Releases the HTTP client's selector thread and executor. */
+    void close() {
+        HttpClients.closeQuietly(http);
+    }
+
 }

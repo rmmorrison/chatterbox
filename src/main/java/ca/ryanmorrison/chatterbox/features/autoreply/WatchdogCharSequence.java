@@ -20,8 +20,20 @@ final class WatchdogCharSequence implements CharSequence {
     private final long deadlineNanos;
 
     static WatchdogCharSequence wrap(CharSequence delegate, long timeoutMillis) {
-        return new WatchdogCharSequence(delegate,
-                System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis));
+        return wrapUntil(delegate, deadlineFrom(timeoutMillis));
+    }
+
+    /** An absolute {@link System#nanoTime()} deadline {@code timeoutMillis} from now. */
+    static long deadlineFrom(long timeoutMillis) {
+        return System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+    }
+
+    /**
+     * Wraps against a deadline the caller owns, so one budget can span several
+     * matches (see {@link AutoReplyMatcher#firstMatch}).
+     */
+    static WatchdogCharSequence wrapUntil(CharSequence delegate, long deadlineNanos) {
+        return new WatchdogCharSequence(delegate, deadlineNanos);
     }
 
     private WatchdogCharSequence(CharSequence delegate, long deadlineNanos) {
@@ -34,7 +46,10 @@ final class WatchdogCharSequence implements CharSequence {
 
     @Override
     public char charAt(int index) {
-        if (System.nanoTime() > deadlineNanos) throw new RegexTimeoutException();
+        // Subtract-then-compare, not a direct >. nanoTime()'s origin is
+        // arbitrary and the value can wrap, and a wrapped comparison would
+        // either fire instantly or never fire at all.
+        if (System.nanoTime() - deadlineNanos > 0) throw new RegexTimeoutException();
         return delegate.charAt(index);
     }
 

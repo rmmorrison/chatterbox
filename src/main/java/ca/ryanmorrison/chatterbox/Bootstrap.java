@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -35,6 +36,11 @@ public final class Bootstrap {
 
     private static final Logger log = LoggerFactory.getLogger(Bootstrap.class);
 
+    /** How long to let JDA drain in-flight events before closing the DB pool. */
+    private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
+    /** Follow-up grace period after shutdownNow(). */
+    private static final Duration FORCED_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
+
     public static void run() throws InterruptedException {
         SLF4JBridgeHandler.removeHandlersForRootLogger();
         SLF4JBridgeHandler.install();
@@ -45,7 +51,26 @@ public final class Bootstrap {
         List<Module> modules = ModuleRegistry.discover();
 
         Database database = new Database(config.database());
+        HttpServer httpServer = new HttpServer(config.http().port());
+        try {
+            start(config, modules, database, httpServer);
+        } catch (InterruptedException | RuntimeException | Error e) {
+            // The shutdown hook isn't registered until the very end of start(),
+            // so anything thrown before then -- a Flyway failure, a duplicate
+            // config key, a module blowing up, an interrupt during
+            // awaitReady() -- would otherwise leave the Hikari pool and the
+            // bound HTTP port behind. The process is exiting either way, but
+            // this also keeps run() usable from a test.
+            closeQuietly(httpServer::stop, "HTTP server");
+            closeQuietly(database::close, "database");
+            throw e;
+        }
+    }
 
+    private static void start(Config config,
+                              List<Module> modules,
+                              Database database,
+                              HttpServer httpServer) throws InterruptedException {
         var migrationLocations = new ArrayList<String>();
         modules.forEach(m -> migrationLocations.addAll(m.migrationLocations()));
         // The /config slash command lives in a feature module too, but its
@@ -63,28 +88,32 @@ public final class Bootstrap {
 
         InitContext initCtx = new InitContextImpl(config, database.dsl(), runtimeConfig);
 
-        HttpServer httpServer = new HttpServer(config.http().port());
-
         Set<GatewayIntent> intents = new HashSet<>();
         EnumSet<CacheFlag> cacheFlags = EnumSet.noneOf(CacheFlag.class);
         List<SlashCommandData> commands = new ArrayList<>();
         List<EventListener> listeners = new ArrayList<>();
 
         for (Module m : modules) {
-            intents.addAll(m.intents());
-            cacheFlags.addAll(m.cacheFlags());
-            commands.addAll(m.slashCommands(initCtx));
-            listeners.addAll(m.listeners(initCtx));
-            m.registerHttpRoutes(httpServer.router(), initCtx);
+            // Guarded the same way onStart is below. Modules arrive via a
+            // ServiceLoader SPI, so a third-party one throwing here used to
+            // take the whole bot down, while the identical failure in onStart
+            // was logged and skipped.
+            try {
+                intents.addAll(m.intents());
+                cacheFlags.addAll(m.cacheFlags());
+                commands.addAll(m.slashCommands(initCtx));
+                listeners.addAll(m.listeners(initCtx));
+                m.registerHttpRoutes(httpServer.router(), initCtx);
+            } catch (RuntimeException e) {
+                log.error("Module {} failed to initialise; continuing without it.", m.name(), e);
+            }
         }
         log.info("Aggregated {} intent(s), {} command(s), {} listener(s) across {} module(s).",
                 intents.size(), commands.size(), listeners.size(), modules.size());
 
-        if (httpServer.hasRoutes()) {
-            httpServer.start();
-        } else {
-            log.info("No modules registered HTTP routes; skipping HTTP server bind.");
-        }
+        // Always start: the server owns /health, which has to answer before
+        // JDA is up (with 503) for a container healthcheck to mean anything.
+        httpServer.start();
 
         CommandSync commandSync = new CommandSync(commands, config.devMode());
 
@@ -98,6 +127,9 @@ public final class Bootstrap {
         jda.awaitReady();
         log.info("JDA ready. Connected as {} in {} guild(s).",
                 jda.getSelfUser().getName(), jda.getGuilds().size());
+
+        // Only now does the bot actually work, so only now does /health say so.
+        httpServer.setReadiness(() -> jda.getStatus() == JDA.Status.CONNECTED);
 
         commandSync.syncAll(jda);
 
@@ -120,17 +152,46 @@ public final class Bootstrap {
             if (!shuttingDown.compareAndSet(false, true)) return;
             log.info("Shutdown signal received.");
             for (Module m : modules) {
+                // Throwable, not RuntimeException: an Error from any one module
+                // used to skip the HTTP stop, the JDA shutdown and the pool
+                // close for everything else.
                 try {
                     m.onStop();
-                } catch (RuntimeException e) {
-                    log.warn("Module {} failed during shutdown.", m.name(), e);
+                } catch (Throwable t) {
+                    log.warn("Module {} failed during shutdown.", m.name(), t);
                 }
             }
-            httpServer.stop();
-            jda.shutdown();
-            database.close();
+            closeQuietly(httpServer::stop, "HTTP server");
+            // JDA#shutdown is asynchronous, so closing the pool straight after
+            // tore it down while listener threads were still draining in-flight
+            // events -- an in-flight handler would fail mid-write with
+            // "HikariDataSource has been closed". Wait for the drain first.
+            try {
+                jda.shutdown();
+                if (!jda.awaitShutdown(SHUTDOWN_TIMEOUT)) {
+                    log.warn("JDA didn't finish shutting down within {}s; forcing.",
+                            SHUTDOWN_TIMEOUT.toSeconds());
+                    jda.shutdownNow();
+                    jda.awaitShutdown(FORCED_SHUTDOWN_TIMEOUT);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Interrupted while waiting for JDA to shut down.");
+            } catch (RuntimeException e) {
+                log.warn("JDA shutdown failed.", e);
+            }
+            closeQuietly(database::close, "database");
             log.info("Shutdown complete.");
         }, "chatterbox-shutdown"));
+    }
+
+    /** Runs a cleanup step, logging rather than propagating so later steps still run. */
+    private static void closeQuietly(Runnable step, String what) {
+        try {
+            step.run();
+        } catch (Throwable t) {
+            log.warn("Failed to shut down the {} cleanly.", what, t);
+        }
     }
 
     private record InitContextImpl(Config config, DSLContext database, RuntimeConfig runtimeConfig)

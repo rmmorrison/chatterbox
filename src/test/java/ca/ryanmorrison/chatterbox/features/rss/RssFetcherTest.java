@@ -1,12 +1,15 @@
 package ca.ryanmorrison.chatterbox.features.rss;
 
+import ca.ryanmorrison.chatterbox.common.net.UrlGuard;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,7 +28,29 @@ class RssFetcherTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         port = server.getAddress().getPort();
         server.start();
-        fetcher = new RssFetcher();
+        // The test server is on loopback, which UrlGuard denies outright, so
+        // the deny check is fed a resolver reporting a public address. The
+        // request still goes to loopback. Deny-list behaviour itself is covered
+        // by refusesPrivateAddress below and by UrlGuardTest.
+        fetcher = new RssFetcher(RssFetcherTest::publicAddress);
+    }
+
+    /**
+     * Reports the loopback test server as a public address, and resolves
+     * everything else for real. Faking <em>every</em> host would also whitelist
+     * redirect targets and quietly disarm the check the redirect test exists to
+     * prove.
+     */
+    private static InetAddress[] publicAddress(String host) {
+        if (!"127.0.0.1".equals(host)) {
+            return UrlGuard.systemResolver(host);
+        }
+        try {
+            return new InetAddress[]{
+                    InetAddress.getByAddress(host, new byte[]{93, (byte) 184, (byte) 216, 34})};
+        } catch (UnknownHostException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @AfterEach
@@ -139,6 +164,81 @@ class RssFetcherTest {
         var ex = assertThrows(RssFetcher.FetchException.class,
                 () -> fetcher.validate(url("/notitle")));
         assertTrue(ex.getMessage().toLowerCase().contains("title"));
+    }
+
+    // ---- SSRF ----
+
+    /**
+     * The core SSRF regression: /rss add is reachable by any guild member, so
+     * the fetcher must refuse private address space. Uses the real resolver, so
+     * loopback is genuinely denied.
+     */
+    @Test
+    void refusesPrivateAddress() {
+        RssFetcher guarded = new RssFetcher();
+        var ex = assertThrows(RssFetcher.FetchException.class,
+                () -> guarded.validate(url("/rss")));
+        assertTrue(ex.getMessage().contains("loopback"),
+                () -> "expected the loopback deny reason, got: " + ex.getMessage());
+    }
+
+    @Test
+    void refusesCloudMetadataAddress() {
+        RssFetcher guarded = new RssFetcher();
+        var ex = assertThrows(RssFetcher.FetchException.class,
+                () -> guarded.validate("http://169.254.169.254/latest/meta-data/"));
+        assertTrue(ex.getMessage().contains("link-local"),
+                () -> "got: " + ex.getMessage());
+    }
+
+    /** The scheduler path must be guarded too, not just /rss add. */
+    @Test
+    void fetchAlsoRefusesPrivateAddress() {
+        RssFetcher guarded = new RssFetcher();
+        assertThrows(RssFetcher.FetchException.class, () -> guarded.fetch(url("/rss")));
+    }
+
+    @Test
+    void redirectToBlockedAddressIsRefused() {
+        server.createContext("/redirect", ex -> {
+            ex.getResponseHeaders().add("Location", "http://169.254.169.254/latest/meta-data/");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+        });
+        var ex = assertThrows(RssFetcher.FetchException.class,
+                () -> fetcher.validate(url("/redirect")));
+        assertTrue(ex.getMessage().contains("link-local"),
+                () -> "expected the redirect target to be denied, got: " + ex.getMessage());
+    }
+
+    // ---- parser hardening ----
+
+    @Test
+    void rejectsDoctypeSoExternalEntitiesNeverResolve() {
+        // XXE probe: if doctypes were allowed, the parser would try to read
+        // /etc/passwd. Rejecting the document outright is the desired outcome.
+        String xxe = """
+                <?xml version="1.0"?>
+                <!DOCTYPE rss [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+                <rss version="2.0"><channel>
+                  <title>&xxe;</title><link>x</link><description>y</description>
+                </channel></rss>
+                """;
+        serve("/xxe", 200, "application/rss+xml", xxe);
+        assertThrows(RssFetcher.FetchException.class, () -> fetcher.validate(url("/xxe")));
+    }
+
+    @Test
+    void rejectsBodyOverTheSizeCap() {
+        // Padding inside a comment keeps the document well-formed, so the only
+        // thing that can reject it is the size cap.
+        StringBuilder sb = new StringBuilder("<?xml version=\"1.0\"?><!--");
+        sb.append("x".repeat(RssFetcher.MAX_RESPONSE_BYTES + 1024));
+        sb.append("--><rss version=\"2.0\"><channel><title>t</title></channel></rss>");
+        serve("/huge", 200, "application/rss+xml", sb.toString());
+        var ex = assertThrows(RssFetcher.FetchException.class,
+                () -> fetcher.validate(url("/huge")));
+        assertTrue(ex.getMessage().contains("larger than"), () -> "got: " + ex.getMessage());
     }
 
     @Test

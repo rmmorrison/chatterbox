@@ -1,18 +1,9 @@
 package ca.ryanmorrison.chatterbox.features.shortener;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
-import org.flywaydb.core.Flyway;
-import org.jooq.DSLContext;
-import org.jooq.SQLDialect;
-import org.jooq.conf.Settings;
-import org.jooq.impl.DSL;
-import org.junit.jupiter.api.AfterEach;
+import ca.ryanmorrison.chatterbox.db.SqliteRepositoryTestBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -23,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Verifies the SQLite migrations are wire-compatible with the generated jOOQ classes. */
-class ShortenerRepositorySqliteTest {
+class ShortenerRepositorySqliteTest extends SqliteRepositoryTestBase {
 
     private static final long USER = 4242L;
     private static final long MOD = 9999L;
@@ -32,37 +23,18 @@ class ShortenerRepositorySqliteTest {
     private static final OffsetDateTime LATER =
             OffsetDateTime.of(2026, 5, 3, 13, 0, 0, 0, ZoneOffset.UTC);
 
-    private Path dbFile;
-    private HikariDataSource dataSource;
-    private DSLContext dsl;
     private ShortenerRepository repo;
 
+    @Override
+    protected String migrationLocation() {
+        return "classpath:db/migration/shortener/sqlite";
+    }
+
     @BeforeEach
-    void setUp() throws Exception {
-        dbFile = Files.createTempFile("chatterbox-shortener-test", ".db");
-        Files.delete(dbFile);
-
-        var hc = new HikariConfig();
-        hc.setJdbcUrl("jdbc:sqlite:" + dbFile);
-        hc.setMaximumPoolSize(1);
-        hc.setConnectionInitSql("PRAGMA foreign_keys = ON");
-        dataSource = new HikariDataSource(hc);
-
-        Flyway.configure()
-                .dataSource(dataSource)
-                .locations("classpath:db/migration/shortener/sqlite")
-                .load()
-                .migrate();
-
-        dsl = DSL.using(dataSource, SQLDialect.SQLITE, new Settings().withRenderSchema(false));
+    void createRepositories() {
         repo = new ShortenerRepository(dsl);
     }
 
-    @AfterEach
-    void tearDown() throws Exception {
-        if (dataSource != null) dataSource.close();
-        if (dbFile != null) Files.deleteIfExists(dbFile);
-    }
 
     @Test
     void insertAndLookupByToken() {

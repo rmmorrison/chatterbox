@@ -163,4 +163,17 @@ class RuntimeConfigTest {
         runtime.set(GUILD, ENABLED, "false", ADMIN);
         assertFalse(runtime.bool(GUILD, ENABLED));
     }
+
+    @Test
+    void readsFallBackToEnvAndDefaultWhenTheDatabaseIsUnavailable() {
+        // A DB failure on the read path used to propagate into the JDA
+        // listener thread. It should degrade to env/default instead.
+        dataSource.close();
+
+        env.put("CHATTERBOX_AUTOSHORTEN_THRESHOLD", "512");
+        assertEquals(512, runtime.integer(GUILD, THRESHOLD));
+
+        env.remove("CHATTERBOX_AUTOSHORTEN_THRESHOLD");
+        assertEquals(160, runtime.integer(GUILD, THRESHOLD));
+    }
 }

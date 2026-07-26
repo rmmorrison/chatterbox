@@ -34,6 +34,36 @@ class RssSchedulerDiffTest {
     }
 
     @Test
+    void datelessEntriesSortLastSoTheyNeverBecomeTheMarker() {
+        // The head of this list is what gets persisted as the marker. A
+        // dateless entry landing there wipes the stored publish date and
+        // degrades the date-floor fallback, so dated entries must win.
+        OffsetDateTime t0 = OffsetDateTime.parse("2026-01-01T00:00:00Z");
+        var undated = entry("no-date", null);
+        var older = entry("older", t0);
+        var newer = entry("newer", t0.plusHours(1));
+
+        List<SyndEntry> sorted = RssScheduler.sortNewestFirst(List.of(undated, older, newer));
+
+        assertEquals("newer", RssScheduler.entryId(sorted.get(0)));
+        assertEquals("older", RssScheduler.entryId(sorted.get(1)));
+        assertEquals("no-date", RssScheduler.entryId(sorted.get(2)));
+    }
+
+    @Test
+    void aFeedWithNoDatesAtAllKeepsSourceOrder() {
+        var a = entry("a", null);
+        var b = entry("b", null);
+        var c = entry("c", null);
+
+        List<SyndEntry> sorted = RssScheduler.sortNewestFirst(List.of(a, b, c));
+
+        assertEquals("a", RssScheduler.entryId(sorted.get(0)));
+        assertEquals("b", RssScheduler.entryId(sorted.get(1)));
+        assertEquals("c", RssScheduler.entryId(sorted.get(2)));
+    }
+
+    @Test
     void stopsAtMarker() {
         OffsetDateTime t0 = OffsetDateTime.parse("2026-01-01T00:00:00Z");
         var newer1 = entry("c", t0.plusMinutes(20));

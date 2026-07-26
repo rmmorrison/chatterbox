@@ -1,18 +1,9 @@
 package ca.ryanmorrison.chatterbox.features.shout;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
-import org.flywaydb.core.Flyway;
-import org.jooq.DSLContext;
-import org.jooq.SQLDialect;
-import org.jooq.conf.Settings;
-import org.jooq.impl.DSL;
-import org.junit.jupiter.api.AfterEach;
+import ca.ryanmorrison.chatterbox.db.SqliteRepositoryTestBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -27,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * query both compiles against the generated jOOQ classes and produces the
  * expected aggregate against a real schema.
  */
-class ShoutStatsRepositorySqliteTest {
+class ShoutStatsRepositorySqliteTest extends SqliteRepositoryTestBase {
 
     private static final long CHANNEL = 1L;
     private static final long OTHER_CHANNEL = 2L;
@@ -35,41 +26,22 @@ class ShoutStatsRepositorySqliteTest {
     private static final OffsetDateTime BASE =
             OffsetDateTime.of(2026, 5, 1, 12, 0, 0, 0, ZoneOffset.UTC);
 
-    private Path dbFile;
-    private HikariDataSource dataSource;
-    private DSLContext dsl;
     private ShoutRepository shouts;
     private ShoutHistoryRepository history;
     private ShoutStatsRepository stats;
 
+    @Override
+    protected String migrationLocation() {
+        return "classpath:db/migration/shout/sqlite";
+    }
+
     @BeforeEach
-    void setUp() throws Exception {
-        dbFile = Files.createTempFile("chatterbox-stats-test", ".db");
-        Files.delete(dbFile);
-
-        var hc = new HikariConfig();
-        hc.setJdbcUrl("jdbc:sqlite:" + dbFile);
-        hc.setMaximumPoolSize(1);
-        hc.setConnectionInitSql("PRAGMA foreign_keys = ON");
-        dataSource = new HikariDataSource(hc);
-
-        Flyway.configure()
-                .dataSource(dataSource)
-                .locations("classpath:db/migration/shout/sqlite")
-                .load()
-                .migrate();
-
-        dsl = DSL.using(dataSource, SQLDialect.SQLITE, new Settings().withRenderSchema(false));
+    void createRepositories() {
         shouts = new ShoutRepository(dsl);
         history = new ShoutHistoryRepository(dsl);
         stats = new ShoutStatsRepository(dsl);
     }
 
-    @AfterEach
-    void tearDown() throws Exception {
-        if (dataSource != null) dataSource.close();
-        if (dbFile != null) Files.deleteIfExists(dbFile);
-    }
 
     @Test
     void emptyChannelHasZeroes() {

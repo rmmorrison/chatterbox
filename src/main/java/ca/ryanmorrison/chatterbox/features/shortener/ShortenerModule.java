@@ -5,6 +5,7 @@ import ca.ryanmorrison.chatterbox.http.HttpRouter;
 import ca.ryanmorrison.chatterbox.module.InitContext;
 import ca.ryanmorrison.chatterbox.module.Module;
 import net.dv8tion.jda.api.hooks.EventListener;
+import net.dv8tion.jda.api.interactions.InteractionContextType;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
@@ -111,7 +112,12 @@ public final class ShortenerModule implements Module {
                         new SubcommandData(ShortenerHandler.SUB_STATS,
                                 "Show click stats for a short URL.")
                                 .addOption(OptionType.STRING, ShortenerHandler.OPTION_TARGET,
-                                        "Full short URL or 6-character short code.", true)));
+                                        "Full short URL or 6-character short code.", true))
+                // Guild-only: the delete/peek handlers gate on a per-channel
+                // Manage Messages check, which has no meaning in a DM. Without
+                // this, JDA defaults to {GUILD, BOT_DM} and the command shows up
+                // in the bot's DMs.
+                .setContexts(InteractionContextType.GUILD));
     }
 
     @Override

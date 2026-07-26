@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 /**
@@ -36,6 +37,15 @@ import java.util.function.Function;
  * busy channels); writes happen on the slash-command handler thread.
  * The cache map handles concurrency; the per-guild value map is built
  * fresh inside {@link #cacheFor(long)} and never mutated after publication.
+ *
+ * <p>The load deliberately runs <em>outside</em> the map's lock. Doing it
+ * inside {@code computeIfAbsent} held a ConcurrentHashMap bin lock across a
+ * database round-trip, so every other guild hashing to the same bin stalled
+ * behind it — on SQLite, where the pool is a single connection, for up to
+ * Hikari's connection timeout. A publish-if-unchanged counter
+ * ({@link #invalidations}) preserves what that lock used to give for free:
+ * a snapshot loaded before a concurrent {@code set} is discarded rather than
+ * published over the newer value.
  */
 public final class RuntimeConfig {
 
@@ -46,8 +56,21 @@ public final class RuntimeConfig {
     private final Function<String, String> envLookup;
     private final Clock clock;
 
-    /** Per-guild snapshot of override rows. Null map value means "not yet loaded". */
-    private final ConcurrentHashMap<Long, Map<String, String>> cache = new ConcurrentHashMap<>();
+    /**
+     * Per-guild snapshot of override rows. Absence of the key means "not yet
+     * loaded" — a ConcurrentHashMap cannot hold null values, so there is no
+     * null-means-unloaded state to check for.
+     */
+    private final ConcurrentHashMap<Long, Snapshot> cache = new ConcurrentHashMap<>();
+
+    /**
+     * Bumped by every {@link #invalidate(long)}. A load that started before the
+     * bump is not allowed to publish, which is what stops a slow read from
+     * resurrecting a value that {@code /config set} just replaced. Global
+     * rather than per-guild: writes are rare, so the occasional redundant
+     * re-load on an unrelated guild is cheaper than tracking versions per key.
+     */
+    private final AtomicLong invalidations = new AtomicLong();
 
     public RuntimeConfig(ConfigRegistry registry,
                          RuntimeConfigRepository repository,
@@ -116,12 +139,41 @@ public final class RuntimeConfig {
 
     /** Drops cached per-guild overrides; next read re-loads. */
     public void invalidate(long guildId) {
+        // Bump before removing, not after: a loader that finishes in between
+        // would otherwise see an unchanged counter and publish its stale
+        // snapshot straight back into the map.
+        invalidations.incrementAndGet();
         cache.remove(guildId);
     }
 
     private Map<String, String> cacheFor(long guildId) {
-        return cache.computeIfAbsent(guildId, repository::findAllForGuild);
+        Snapshot cached = cache.get(guildId);
+        if (cached != null) return cached.values();
+
+        long observed = invalidations.get();
+        Map<String, String> loaded;
+        try {
+            loaded = Map.copyOf(repository.findAllForGuild(guildId));
+        } catch (RuntimeException e) {
+            // Same tolerance as tryParse below: a database blip on this path
+            // would otherwise propagate into a JDA listener thread and kill
+            // message handling. Fall through to env vars and defaults, and
+            // don't cache the failure.
+            log.warn("Couldn't load runtime config for guild {}; using env/defaults: {}",
+                    guildId, e.toString());
+            return Map.of();
+        }
+
+        cache.compute(guildId, (k, existing) -> {
+            if (existing != null) return existing;                  // another thread won the race
+            if (invalidations.get() != observed) return null;       // invalidated mid-load; drop it
+            return new Snapshot(loaded);
+        });
+        return loaded;
     }
+
+    /** Immutable published snapshot of one guild's override rows. */
+    private record Snapshot(Map<String, String> values) {}
 
     /**
      * Tolerant parse for read paths: a stored value that's somehow invalid

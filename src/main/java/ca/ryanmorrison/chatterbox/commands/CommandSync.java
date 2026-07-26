@@ -35,8 +35,11 @@ public final class CommandSync extends ListenerAdapter {
     public void syncAll(JDA jda) {
         if (devMode) {
             log.info("Dev mode: registering {} command(s) per-guild and clearing globals.", commands.size());
+            // No addCommands: this clears every global command. The count of
+            // commands we're about to register per-guild is unrelated to how
+            // many globals were removed, so don't report it as if it were.
             jda.updateCommands().queue(
-                    ok -> log.debug("Cleared {} global command(s).", commands.size()),
+                    ok -> log.debug("Cleared all global commands."),
                     err -> log.warn("Failed to clear global commands: {}", err.toString()));
             for (Guild g : jda.getGuilds()) {
                 pushToGuild(g);

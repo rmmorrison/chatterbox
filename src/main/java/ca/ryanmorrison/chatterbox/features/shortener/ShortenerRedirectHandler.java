@@ -51,6 +51,16 @@ final class ShortenerRedirectHandler implements Handler {
     public void handle(Context ctx) {
         String token = ctx.pathParam(PATH_PARAM).toLowerCase(Locale.ROOT);
 
+        // This route sits at the web root and is internet-facing, so it absorbs
+        // every background scanner probing /wp-login.php, /.env and friends.
+        // Rejecting anything that can't be a token keeps that traffic off the
+        // database entirely — which matters because SQLite runs a single
+        // connection shared with the bot's message handling.
+        if (!isPlausibleToken(token)) {
+            ctx.status(HttpStatus.NOT_FOUND).result("Not found.");
+            return;
+        }
+
         Optional<ShortenedUrl> match = repository.findByTokenIncludingDeleted(token);
         if (match.isEmpty()) {
             ctx.status(HttpStatus.NOT_FOUND).result("Not found.");
@@ -71,10 +81,35 @@ final class ShortenerRedirectHandler implements Handler {
         }
 
         String url = entry.url();
+        // Re-check the scheme on the way out, not just on the way in. Both
+        // current write paths validate, so this can't fire today — but the
+        // stored value lands in a Location header and an href, and a new insert
+        // path or a hand-edited row would otherwise turn it straight into
+        // javascript: in an anchor. Cheap enough to not depend on that.
+        if (!UrlValidator.isValidHttpUrl(url)) {
+            log.error("Refusing to redirect token {}: stored URL is not http(s).", entry.token());
+            ctx.status(HttpStatus.NOT_FOUND).result("Not found.");
+            return;
+        }
+
         ctx.status(HttpStatus.MOVED_PERMANENTLY)
                 .header("Location", url)
                 .contentType("text/html; charset=utf-8")
                 .result("<html>\n<body><a href=\"" + escapeAttr(url) + "\">moved here</a></body>\n");
+    }
+
+    /**
+     * Shape check only — matches the generator's base36 alphabet and length.
+     * A real lookup still decides whether the token exists.
+     */
+    private static boolean isPlausibleToken(String token) {
+        if (token.length() != TokenGenerator.LENGTH) return false;
+        for (int i = 0; i < token.length(); i++) {
+            char c = token.charAt(i);
+            boolean base36 = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+            if (!base36) return false;
+        }
+        return true;
     }
 
     static String escapeAttr(String s) {

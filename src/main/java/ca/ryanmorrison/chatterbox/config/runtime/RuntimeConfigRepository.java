@@ -5,7 +5,6 @@ import org.jooq.DSLContext;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 import static ca.ryanmorrison.chatterbox.db.generated.Tables.RUNTIME_CONFIG;
 
@@ -24,15 +23,6 @@ public final class RuntimeConfigRepository {
 
     public RuntimeConfigRepository(DSLContext dsl) {
         this.dsl = dsl;
-    }
-
-    /** Raw stored value for {@code (guildId, key)}, or empty if none. */
-    public Optional<String> findValue(long guildId, String key) {
-        return dsl.select(RUNTIME_CONFIG.VALUE)
-                .from(RUNTIME_CONFIG)
-                .where(RUNTIME_CONFIG.GUILD_ID.eq(guildId))
-                .and(RUNTIME_CONFIG.KEY.eq(key))
-                .fetchOptional(RUNTIME_CONFIG.VALUE);
     }
 
     /** Every override for {@code guildId} as a {key → raw value} map; empty if none. */

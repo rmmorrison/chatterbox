@@ -137,6 +137,14 @@ services:
       CHATTERBOX_AUTOSHORTEN_THRESHOLD: ${CHATTERBOX_AUTOSHORTEN_THRESHOLD:-160}
       CHATTERBOX_SHORTENER_BASE_URL: ${CHATTERBOX_SHORTENER_BASE_URL:-}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75.0
+    # /health answers 503 until JDA is connected, so this only reports healthy
+    # once the bot can actually serve. start_period covers the gateway handshake.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${CHATTERBOX_HTTP_PORT:-8080}/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
     networks:
       - internal
       - web

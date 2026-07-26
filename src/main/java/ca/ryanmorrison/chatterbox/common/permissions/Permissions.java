@@ -38,6 +38,9 @@ public final class Permissions {
      * button handler entry points.
      */
     public static boolean canManageMessages(IReplyCallback event) {
+        // getGuildChannel() throws outside a guild rather than returning null,
+        // so the guild check has to come first.
+        if (!event.isFromGuild()) return false;
         return canManageMessages(event.getMember(), event.getGuildChannel());
     }
 
@@ -51,6 +54,14 @@ public final class Permissions {
      * actually tells the user why.
      */
     public static boolean requireManageMessages(IReplyCallback event) {
+        // isFromGuild() first: getGuildChannel() throws IllegalStateException in
+        // a DM rather than returning null, so reading it up front made the
+        // rejection below unreachable and let the exception escape the listener
+        // instead.
+        if (!event.isFromGuild()) {
+            event.reply(NOT_A_GUILD_MESSAGE).setEphemeral(true).queue();
+            return false;
+        }
         Member member = event.getMember();
         GuildChannel channel = event.getGuildChannel();
         if (member == null || channel == null) {

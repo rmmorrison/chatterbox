@@ -35,4 +35,32 @@ class DecideModuleTest {
         assertFalse(rendered.length() > 2000,
                 "rendered message must remain under Discord's 2000 char cap");
     }
+
+    @Test
+    void oversizedSingleOptionIsTruncatedToDiscordsLimit() {
+        // One whitespace-free option means options.size() == 1, which skips the
+        // truncated "from" line -- nothing else used to bound the output.
+        String huge = "x".repeat(6000);
+        String out = DecideModule.renderResult(huge, java.util.List.of(huge));
+        assertTrue(out.length() <= DecideModule.MAX_MESSAGE_LENGTH,
+                () -> "rendered " + out.length() + " chars");
+    }
+
+    @Test
+    void oversizedManyOptionsAreTruncatedToDiscordsLimit() {
+        java.util.List<String> many = new java.util.ArrayList<>();
+        for (int i = 0; i < 400; i++) many.add("option-" + i + "-" + "y".repeat(20));
+        String out = DecideModule.renderResult(many.get(0), many);
+        assertTrue(out.length() <= DecideModule.MAX_MESSAGE_LENGTH,
+                () -> "rendered " + out.length() + " chars");
+    }
+
+    @Test
+    void truncationNeverSplitsASurrogatePair() {
+        String emoji = "\uD83C\uDF89".repeat(2000); // party popper
+        String out = DecideModule.renderResult(emoji, java.util.List.of(emoji));
+        assertTrue(out.length() <= DecideModule.MAX_MESSAGE_LENGTH);
+        assertFalse(Character.isHighSurrogate(out.charAt(out.length() - 2)),
+                "a lone high surrogate would render as a replacement char");
+    }
 }

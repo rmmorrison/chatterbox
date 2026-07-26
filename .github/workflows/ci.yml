@@ -5,6 +5,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Lets the deploy workflow depend on this job instead of racing it.
+  workflow_call:
 
 permissions:
   contents: read
@@ -29,9 +31,38 @@ jobs:
           java-version: '25'
           cache: maven
 
-      - name: Run unit tests
-        run: mvn --batch-mode --no-transfer-progress test
+      # verify, not test: this is the only thing that exercises the shade
+      # plugin, including the ServicesResourceTransformer the whole
+      # ServiceLoader module system depends on. With only `test`, a broken
+      # META-INF/services merge would first surface in production.
+      - name: Build and run tests
+        run: mvn --batch-mode --no-transfer-progress verify
 
+      # Surfaces failing tests as annotations and a run summary, so a red build
+      # is readable from the run page instead of by downloading XML.
+      #
+      # report_mode: workflow, not the default auto. auto publishes via the
+      # Checks API, which needs checks: write -- and Dependabot-triggered runs
+      # get a read-only GITHUB_TOKEN no matter what the workflow requests, so
+      # auto would 403 and fail CI on every Dependabot PR. workflow mode uses
+      # native annotations plus the step summary, needs no extra permission,
+      # and behaves the same whether the run came from a PR, a push, or the
+      # deploy workflow calling this one.
+      - name: Publish test report
+        if: always()
+        uses: ScalableCapital/action-surefire-report@v2.0.4
+        with:
+          report_mode: workflow
+          # Belt and braces. mvn verify already fails on a test failure, so
+          # this only matters if surefire is ever set to ignore failures --
+          # in which case the gate would otherwise disappear silently.
+          fail_on_test_failures: true
+          # Default, but load-bearing enough to be explicit: a suite that
+          # silently stops running is exactly what a test gate must catch.
+          fail_if_no_tests: true
+
+      # Kept alongside the report: the annotations are for reading, the
+      # artifact is for when you need the raw XML.
       - name: Upload Surefire reports
         if: always()
         uses: actions/upload-artifact@v7

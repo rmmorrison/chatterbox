@@ -1,5 +1,7 @@
 package ca.ryanmorrison.chatterbox.features.stock;
 
+import ca.ryanmorrison.chatterbox.common.net.HttpClients;
+import ca.ryanmorrison.chatterbox.common.net.BoundedBody;
 import ca.ryanmorrison.chatterbox.features.stock.dto.ChartMeta;
 import ca.ryanmorrison.chatterbox.features.stock.dto.ChartResponse;
 import tools.jackson.core.JacksonException;
@@ -8,6 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -97,9 +100,9 @@ final class StockClient {
                 .header("Accept", "application/json")
                 .GET()
                 .build();
-        HttpResponse<byte[]> resp;
+        HttpResponse<InputStream> resp;
         try {
-            resp = http.send(req, HttpResponse.BodyHandlers.ofByteArray());
+            resp = http.send(req, HttpResponse.BodyHandlers.ofInputStream());
         } catch (HttpTimeoutException e) {
             throw new StockException("Yahoo Finance didn't respond within "
                     + HTTP_TIMEOUT.toSeconds() + " seconds.");
@@ -110,9 +113,15 @@ final class StockClient {
             throw new StockException("Request was interrupted.");
         }
         int status = resp.statusCode();
-        byte[] body = resp.body() == null ? new byte[0] : resp.body();
-        if (body.length > MAX_RESPONSE_BYTES) {
+        // Cap while streaming: ofByteArray would buffer the whole response
+        // before any size check could run.
+        byte[] body;
+        try (InputStream in = resp.body()) {
+            body = BoundedBody.read(in, MAX_RESPONSE_BYTES);
+        } catch (BoundedBody.TooLargeException e) {
             throw new StockException("Yahoo Finance response was too large.");
+        } catch (IOException e) {
+            throw new StockException("Couldn't read the Yahoo Finance response.");
         }
 
         if (status == 429) {
@@ -167,4 +176,10 @@ final class StockClient {
     static final class StockException extends Exception {
         StockException(String message) { super(message); }
     }
+
+    /** Releases the HTTP client's selector thread and executor. */
+    void close() {
+        HttpClients.closeQuietly(http);
+    }
+
 }

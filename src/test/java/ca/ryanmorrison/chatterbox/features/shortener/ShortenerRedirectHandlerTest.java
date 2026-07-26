@@ -161,6 +161,37 @@ class ShortenerRedirectHandlerTest {
     }
 
     @Test
+    void implausibleTokensAreRejectedWithoutTouchingTheDatabase() throws Exception {
+        // Scanner traffic (/.env, /wp-login.php) must be turned away on shape
+        // alone — the DB is a single SQLite connection shared with the bot.
+        var rejected = new String[]{
+                "wp-login.php",   // wrong length, illegal chars
+                ".env",           // wrong length
+                "abcde",          // one char short
+                "abcdefg",        // one char long
+                "abc-12",         // hyphen isn't in the base36 alphabet
+        };
+        for (String token : rejected) {
+            assertEquals(404, get(token).statusCode(), () -> "expected 404 for " + token);
+        }
+    }
+
+    @Test
+    void storedNonHttpUrlIsRefusedRatherThanRedirectedTo() throws Exception {
+        // Defence in depth: both write paths validate, so this row can only
+        // appear via a new insert path or a hand-edited database. It must never
+        // reach a Location header or an href.
+        dsl.execute("INSERT INTO shortened_urls (token, url, created_by, created_at, click_count) "
+                + "VALUES ('evilaa', 'javascript:alert(1)', " + USER + ", '2026-05-09T20:00:00.000Z', 0)");
+
+        HttpResponse<String> res = get("evilaa");
+
+        assertEquals(404, res.statusCode());
+        assertTrue(res.headers().firstValue("Location").isEmpty(),
+                "a rejected target must not leak into the Location header");
+    }
+
+    @Test
     void uppercasePathIsNormalisedToLowercase() throws Exception {
         // Tokens are stored lowercase; the handler should be case-insensitive
         // so users typing the URL by hand still land on the destination AND

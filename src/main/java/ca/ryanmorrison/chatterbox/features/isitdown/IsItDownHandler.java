@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.isitdown;
 
+import ca.ryanmorrison.chatterbox.common.net.UrlGuard;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;

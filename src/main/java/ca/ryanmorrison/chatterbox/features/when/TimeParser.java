@@ -60,6 +60,13 @@ public final class TimeParser {
     private static final Pattern BARE_TIME =
             Pattern.compile("^(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?$", Pattern.CASE_INSENSITIVE);
 
+    /**
+     * Ceiling on "in N units" — a century. Well past any plausible use of
+     * {@code /when}, and far enough below {@code Instant}'s own range that the
+     * arithmetic can't get near an edge.
+     */
+    static final long MAX_RELATIVE_SECONDS = 100L * 365 * 86_400;
+
     /** "in 30m", "in 3 hours", "in 2 days". */
     private static final Pattern RELATIVE = Pattern.compile(
             "^in\\s+(\\d+)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)$",
@@ -140,15 +147,33 @@ public final class TimeParser {
         if (n <= 0) return new Result.Failed("Relative offset must be positive.");
 
         String unit = m.group(2).toLowerCase(Locale.ROOT);
-        long seconds = switch (unit) {
-            case "m", "min", "mins", "minute", "minutes" -> n * 60L;
-            case "h", "hr", "hrs", "hour", "hours"       -> n * 3_600L;
-            case "d", "day", "days"                      -> n * 86_400L;
-            case "w", "week", "weeks"                    -> n * 604_800L;
+        long perUnit = switch (unit) {
+            case "m", "min", "mins", "minute", "minutes" -> 60L;
+            case "h", "hr", "hrs", "hour", "hours"       -> 3_600L;
+            case "d", "day", "days"                      -> 86_400L;
+            case "w", "week", "weeks"                    -> 604_800L;
             default -> -1L;
         };
-        if (seconds < 0) return new Result.Failed("Unknown time unit `" + unit + "`.");
-        return new Result.Ok(clock.instant().plusSeconds(seconds));
+        if (perUnit < 0) return new Result.Failed("Unknown time unit `" + unit + "`.");
+
+        // The regex captures unbounded digits, so the multiply overflows long
+        // before parseLong would complain: "in 20000000000000 weeks" wrapped to
+        // a negative and blew up inside Instant, escaping the listener as an
+        // unhandled exception ("The application did not respond").
+        long seconds;
+        try {
+            seconds = Math.multiplyExact(n, perUnit);
+        } catch (ArithmeticException e) {
+            return new Result.Failed("Relative offset is too large.");
+        }
+        if (seconds > MAX_RELATIVE_SECONDS) {
+            return new Result.Failed("Relative offset is too large.");
+        }
+        try {
+            return new Result.Ok(clock.instant().plusSeconds(seconds));
+        } catch (ArithmeticException | java.time.DateTimeException e) {
+            return new Result.Failed("Relative offset is too large.");
+        }
     }
 
     private static Result tryIsoDateTime(String s, Optional<ZoneId> zoneOpt) {
