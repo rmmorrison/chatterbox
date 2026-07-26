@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.rss;
 
+import ca.ryanmorrison.chatterbox.common.net.BoundedBody;
 import ca.ryanmorrison.chatterbox.common.net.SafeHttp;
 import ca.ryanmorrison.chatterbox.common.net.UrlGuard;
 import com.rometools.rome.feed.synd.SyndEntry;
@@ -149,7 +150,9 @@ final class RssFetcher {
 
         byte[] body;
         try (InputStream in = resp.body()) {
-            body = readCapped(in);
+            body = BoundedBody.read(in, MAX_RESPONSE_BYTES);
+        } catch (BoundedBody.TooLargeException e) {
+            throw new FetchException("Feed is larger than the " + e.maxKilobytes() + " KB limit.");
         } catch (IOException e) {
             throw new FetchException("Couldn't read the feed: " + safeMessage(e));
         }
@@ -157,29 +160,6 @@ final class RssFetcher {
             throw new FetchException("Server returned an empty response.");
         }
         return body;
-    }
-
-    /**
-     * Reads the body, aborting as soon as it exceeds
-     * {@link #MAX_RESPONSE_BYTES}. Streaming the cap matters: buffering the
-     * whole response first and checking its size afterwards means a host that
-     * streams gigabytes exhausts our heap before the check ever runs — and
-     * this URL is user-supplied.
-     */
-    private static byte[] readCapped(InputStream in) throws IOException, FetchException {
-        byte[] buf = new byte[8192];
-        var out = new ByteArrayOutputStream();
-        int total = 0;
-        int n;
-        while ((n = in.read(buf)) >= 0) {
-            total += n;
-            if (total > MAX_RESPONSE_BYTES) {
-                throw new FetchException(
-                        "Feed is larger than the " + (MAX_RESPONSE_BYTES / 1024) + " KB limit.");
-            }
-            out.write(buf, 0, n);
-        }
-        return out.toByteArray();
     }
 
     private static SyndFeed parse(byte[] body) throws FetchException {

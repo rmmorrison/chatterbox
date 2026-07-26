@@ -1,5 +1,6 @@
 package ca.ryanmorrison.chatterbox.features.wiki;
 
+import ca.ryanmorrison.chatterbox.common.net.BoundedBody;
 import ca.ryanmorrison.chatterbox.features.wiki.dto.PageSummary;
 import ca.ryanmorrison.chatterbox.features.wiki.dto.SearchHit;
 import ca.ryanmorrison.chatterbox.features.wiki.dto.SearchResponse;
@@ -9,6 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -81,13 +83,9 @@ final class WikiClient {
         String encoded = URLEncoder.encode(title.trim(), StandardCharsets.UTF_8).replace("+", "%20");
         byte[] body;
         int status;
-        try {
-            HttpResponse<byte[]> resp = send("/api/rest_v1/page/summary/" + encoded);
-            body = resp.body() == null ? new byte[0] : resp.body();
-            status = resp.statusCode();
-        } catch (WikiException e) {
-            throw e;
-        }
+        Body resp = send("/api/rest_v1/page/summary/" + encoded);
+        body = resp.bytes();
+        status = resp.status();
 
         if (status == 404) return Optional.empty();
         if (status == 429) throw new WikiException("Wikipedia is rate-limiting us. Try again in a minute.");
@@ -109,14 +107,9 @@ final class WikiClient {
         String encoded = URLEncoder.encode(query.trim(), StandardCharsets.UTF_8);
         byte[] body;
         int status;
-        try {
-            HttpResponse<byte[]> resp =
-                    send("/w/rest.php/v1/search/page?q=" + encoded + "&limit=" + limit);
-            body = resp.body() == null ? new byte[0] : resp.body();
-            status = resp.statusCode();
-        } catch (WikiException e) {
-            throw e;
-        }
+        Body resp = send("/w/rest.php/v1/search/page?q=" + encoded + "&limit=" + limit);
+        body = resp.bytes();
+        status = resp.status();
 
         if (status == 429) throw new WikiException("Wikipedia is rate-limiting us. Try again in a minute.");
         if (status / 100 != 2) throw new WikiException("Wikipedia returned HTTP " + status + ".");
@@ -128,7 +121,10 @@ final class WikiClient {
         }
     }
 
-    private HttpResponse<byte[]> send(String path) throws WikiException {
+    /** Status plus the size-capped body bytes. */
+    private record Body(int status, byte[] bytes) {}
+
+    private Body send(String path) throws WikiException {
         URI uri;
         try {
             uri = URI.create(baseUrl + path);
@@ -142,12 +138,16 @@ final class WikiClient {
                 .GET()
                 .build();
         try {
-            HttpResponse<byte[]> resp = http.send(req, HttpResponse.BodyHandlers.ofByteArray());
-            byte[] body = resp.body();
-            if (body != null && body.length > MAX_RESPONSE_BYTES) {
+            HttpResponse<InputStream> resp = http.send(req, HttpResponse.BodyHandlers.ofInputStream());
+            // Cap while streaming: ofByteArray would buffer the whole response
+            // before any size check could run.
+            byte[] body;
+            try (InputStream in = resp.body()) {
+                body = BoundedBody.read(in, MAX_RESPONSE_BYTES);
+            } catch (BoundedBody.TooLargeException e) {
                 throw new WikiException("Wikipedia response was too large.");
             }
-            return resp;
+            return new Body(resp.statusCode(), body);
         } catch (HttpTimeoutException e) {
             throw new WikiException("Wikipedia didn't respond within " + HTTP_TIMEOUT.toSeconds() + " seconds.");
         } catch (IOException e) {
