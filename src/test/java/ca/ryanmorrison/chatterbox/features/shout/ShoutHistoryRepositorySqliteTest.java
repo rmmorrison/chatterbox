@@ -1,18 +1,9 @@
 package ca.ryanmorrison.chatterbox.features.shout;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
-import org.flywaydb.core.Flyway;
-import org.jooq.DSLContext;
-import org.jooq.SQLDialect;
-import org.jooq.conf.Settings;
-import org.jooq.impl.DSL;
-import org.junit.jupiter.api.AfterEach;
+import ca.ryanmorrison.chatterbox.db.SqliteRepositoryTestBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
@@ -27,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Hikari's connection-init {@code PRAGMA foreign_keys = ON} actually applies
  * — without it, SQLite silently ignores the constraint.
  */
-class ShoutHistoryRepositorySqliteTest {
+class ShoutHistoryRepositorySqliteTest extends SqliteRepositoryTestBase {
 
     private static final OffsetDateTime AUTHORED_AT =
             OffsetDateTime.of(2026, 4, 30, 12, 0, 0, 0, ZoneOffset.UTC);
@@ -36,39 +27,20 @@ class ShoutHistoryRepositorySqliteTest {
     private static final boolean MOD = true;
     private static final boolean NON_MOD = false;
 
-    private Path dbFile;
-    private HikariDataSource dataSource;
-    private DSLContext dsl;
     private ShoutRepository shouts;
     private ShoutHistoryRepository history;
 
+    @Override
+    protected String migrationLocation() {
+        return "classpath:db/migration/shout/sqlite";
+    }
+
     @BeforeEach
-    void setUp() throws Exception {
-        dbFile = Files.createTempFile("chatterbox-test", ".db");
-        Files.delete(dbFile);
-
-        var hc = new HikariConfig();
-        hc.setJdbcUrl("jdbc:sqlite:" + dbFile);
-        hc.setMaximumPoolSize(1);
-        hc.setConnectionInitSql("PRAGMA foreign_keys = ON");
-        dataSource = new HikariDataSource(hc);
-
-        Flyway.configure()
-                .dataSource(dataSource)
-                .locations("classpath:db/migration/shout/sqlite")
-                .load()
-                .migrate();
-
-        dsl = DSL.using(dataSource, SQLDialect.SQLITE, new Settings().withRenderSchema(false));
+    void createRepositories() {
         shouts = new ShoutRepository(dsl);
         history = new ShoutHistoryRepository(dsl);
     }
 
-    @AfterEach
-    void tearDown() throws Exception {
-        if (dataSource != null) dataSource.close();
-        if (dbFile != null) Files.deleteIfExists(dbFile);
-    }
 
     private long shout(long channelId, long messageId, String content) {
         shouts.tryInsert(channelId, messageId, content, AUTHOR, AUTHORED_AT);
