@@ -3,6 +3,8 @@ package ca.ryanmorrison.chatterbox.features.format;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TextStyleTest {
@@ -104,5 +106,27 @@ class TextStyleTest {
                     s.value() != null && !s.value().isBlank(),
                     "style " + s.name() + " missing a value");
         }
+    }
+
+    @Test
+    void clapExpansionIsTruncatedToDiscordsLimit() {
+        // clap replaces each whitespace run with " \uD83D\uDC4F " -- 4 UTF-16 units --
+        // so a 1500-char input of single-character words expands well past 2000.
+        String input = ("a ".repeat(750)).trim();
+        String expanded = TextStyle.CLAP.apply(input);
+        assertTrue(expanded.length() > FormatModule.MAX_MESSAGE_LENGTH,
+                "precondition: the style must actually overflow");
+
+        String out = FormatModule.truncate(expanded, FormatModule.MAX_MESSAGE_LENGTH);
+
+        assertTrue(out.length() <= FormatModule.MAX_MESSAGE_LENGTH,
+                () -> "truncated to " + out.length() + " chars");
+        assertFalse(Character.isHighSurrogate(out.charAt(out.length() - 2)),
+                "a lone high surrogate would render as a replacement char");
+    }
+
+    @Test
+    void truncateLeavesShortStringsAlone() {
+        assertEquals("hello", FormatModule.truncate("hello", FormatModule.MAX_MESSAGE_LENGTH));
     }
 }

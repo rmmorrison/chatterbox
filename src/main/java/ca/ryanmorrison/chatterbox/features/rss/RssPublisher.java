@@ -7,7 +7,7 @@ import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndPerson;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
-import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -35,7 +35,7 @@ final class RssPublisher {
      * is the total number of new items in this batch including {@code latest};
      * the footer shows the surplus when {@code newCount > 1}.
      */
-    static void post(TextChannel channel, Feed feed, SyndEntry latest, int newCount) {
+    static void post(GuildMessageChannel channel, Feed feed, SyndEntry latest, int newCount) {
         channel.sendMessageEmbeds(buildEmbed(feed, latest, newCount)).queue();
     }
 

@@ -3,7 +3,7 @@ package ca.ryanmorrison.chatterbox.features.rss;
 import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndFeed;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -144,8 +144,25 @@ final class RssScheduler {
 
     // ---- the actual refresh ----
 
-    /** Visible for tests. */
+    /**
+     * Visible for tests.
+     *
+     * <p>Catches everything: {@code scheduleAtFixedRate} cancels a task
+     * permanently the moment its runnable throws, so a single transient
+     * {@code DataAccessException} out of {@code repo.findById} used to kill
+     * that feed's refresh until the process restarted — silently, since
+     * nothing logged the throwable. Swallowing here is deliberate; the
+     * alternative is losing the schedule.
+     */
     void tick(long feedId) {
+        try {
+            refresh(feedId);
+        } catch (Throwable t) {
+            log.error("RSS tick for feed {} failed; keeping the schedule alive.", feedId, t);
+        }
+    }
+
+    private void refresh(long feedId) {
         Optional<Feed> opt = repo.findById(feedId);
         if (opt.isEmpty()) {
             cancel(feedId);
@@ -188,7 +205,13 @@ final class RssScheduler {
         }
 
         SyndEntry latest = fresh.get(0);
-        TextChannel channel = jda == null ? null : jda.getTextChannelById(feed.channelId());
+        // Resolve as GuildMessageChannel, not TextChannel: feeds registered in
+        // a thread, forum post, or announcement channel would otherwise never
+        // resolve, logging "unavailable" forever while markers still advanced
+        // below — silently dropping every item.
+        GuildMessageChannel channel = jda == null
+                ? null
+                : jda.getChannelById(GuildMessageChannel.class, feed.channelId());
         if (channel != null && channel.canTalk()) {
             try {
                 RssPublisher.post(channel, feed, latest, fresh.size());
@@ -247,8 +270,15 @@ final class RssScheduler {
     static final int MAX_NEW_PER_TICK = 25;
 
     /**
-     * Newest-first sort. Entries without a date are kept in source order at
-     * their original position (treated as newest if first in source).
+     * Newest-first sort by publish date.
+     *
+     * <p>Dateless entries sort <em>last</em>, and keep their source order
+     * relative to each other (the sort is stable). They used to sort first, on
+     * an "assume new" reading — but the head of this list becomes the stored
+     * marker, so on a feed that mixes dated and dateless items the marker was
+     * repeatedly overwritten with a null publish date, degrading the date-floor
+     * fallback in {@link #newSince}. A feed with no dates anywhere is
+     * unaffected: every comparison is 0, so source order survives intact.
      */
     static List<SyndEntry> sortNewestFirst(List<SyndEntry> entries) {
         List<SyndEntry> copy = new ArrayList<>(entries);
@@ -256,8 +286,8 @@ final class RssScheduler {
             OffsetDateTime da = publishedOf(a);
             OffsetDateTime db = publishedOf(b);
             if (da == null && db == null) return 0;
-            if (da == null) return -1; // unknown date wins (assume "new")
-            if (db == null) return 1;
+            if (da == null) return 1;
+            if (db == null) return -1;
             return db.compareTo(da);
         });
         return copy;

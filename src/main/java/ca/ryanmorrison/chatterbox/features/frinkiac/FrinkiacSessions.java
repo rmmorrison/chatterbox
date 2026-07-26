@@ -4,7 +4,6 @@ import ca.ryanmorrison.chatterbox.features.frinkiac.dto.SearchResult;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,8 +31,12 @@ final class FrinkiacSessions {
     UUID create(long requestedBy, long channelId, String query, List<SearchResult> hits) {
         evictExpired();
         UUID token = UUID.randomUUID();
+        // ConcurrentHashMap, not HashMap: writes go through computeIfPresent's
+        // bin lock, but captionFor() is reached via sessions.get() from the
+        // button handlers with no lock at all, so a read could race a resizing
+        // put and observe a torn table.
         sessions.put(token, new Session(requestedBy, channelId, query, hits,
-                /* index = */ 0, new HashMap<>(), Instant.now()));
+                /* index = */ 0, new ConcurrentHashMap<>(), Instant.now()));
         return token;
     }
 

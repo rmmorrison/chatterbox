@@ -9,6 +9,7 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 
 import java.util.EnumSet;
@@ -35,15 +36,27 @@ public final class DecideModule extends ListenerAdapter implements Module {
 
     private static final int MAX_FROM_LINE_LENGTH = 1500;
 
+    /** Discord rejects message bodies over this; exceeding it throws on reply. */
+    static final int MAX_MESSAGE_LENGTH = 2000;
+
+    /**
+     * Ceiling on the options string. Without it Discord's own 6000-char default
+     * applies, and a single whitespace-free option that long produced a reply
+     * of ~6009 chars: {@code options.size() == 1} skips the truncated "from"
+     * line entirely, so nothing else bounded the output.
+     */
+    static final int MAX_OPTIONS_LENGTH = 1000;
+
     @Override public String name() { return "decide"; }
 
     @Override
     public List<SlashCommandData> slashCommands(InitContext ctx) {
         return List.of(Commands.slash(COMMAND, "Pick one of several options at random.")
-                .addOption(OptionType.STRING, OPT_OPTIONS,
-                        "Options separated by whitespace, or use the word \"or\" between them.", true)
-                .addOption(OptionType.BOOLEAN, OPT_PRIVATE,
-                        "Show the result only to you instead of the channel.", false));
+                .addOptions(new OptionData(OptionType.STRING, OPT_OPTIONS,
+                                "Options separated by whitespace, or use the word \"or\" between them.", true)
+                                .setMaxLength(MAX_OPTIONS_LENGTH),
+                        new OptionData(OptionType.BOOLEAN, OPT_PRIVATE,
+                                "Show the result only to you instead of the channel.", false)));
     }
 
     @Override
@@ -88,6 +101,18 @@ public final class DecideModule extends ListenerAdapter implements Module {
             }
             sb.append("\n_(from: ").append(joined).append(")_");
         }
-        return sb.toString();
+        // Backstop on the rendered result, not just the input: the option cap
+        // bounds what a user can type, but this is what Discord actually
+        // measures, and it throws rather than truncating.
+        return truncate(sb.toString(), MAX_MESSAGE_LENGTH);
+    }
+
+    private static String truncate(String s, int max) {
+        if (s.length() <= max) return s;
+        // Never split a surrogate pair — emoji in an option would otherwise
+        // leave a lone surrogate and render as a replacement character.
+        int end = max - 1;
+        if (Character.isHighSurrogate(s.charAt(end - 1))) end--;
+        return s.substring(0, end) + "…";
     }
 }

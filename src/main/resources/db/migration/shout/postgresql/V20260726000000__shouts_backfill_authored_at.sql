@@ -1,0 +1,16 @@
+-- Paired with the SQLite migration of the same version, which repairs rows left
+-- with an empty-string authored_at.
+--
+-- On PostgreSQL there is nothing to repair. V20260430130000__shouts_add_author.sql
+-- added authored_at as TIMESTAMPTZ NOT NULL with no DEFAULT, which PostgreSQL
+-- rejects outright against a non-empty table -- so any database that got past
+-- that migration had no rows at the time, and the column has never been able to
+-- hold the empty string the SQLite variant backfilled.
+--
+-- The file exists so both dialect trees stay version-for-version aligned, which
+-- is the invariant the rest of this migration set maintains. Flyway runs zero
+-- statements here and records the version.
+--
+-- Note for future schema work: adding a NOT NULL column without a DEFAULT is
+-- what made V20260430130000 undeployable against an existing PostgreSQL
+-- database. Give NOT NULL additions a DEFAULT, or backfill in a separate step.

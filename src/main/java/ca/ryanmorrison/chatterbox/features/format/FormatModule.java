@@ -30,7 +30,15 @@ public final class FormatModule extends ListenerAdapter implements Module {
     static final String OPT_TEXT    = "text";
     static final String OPT_PRIVATE = "private";
 
-    /** Discord caps message bodies at 2000 chars; cap the input to leave headroom. */
+    /** Discord caps message bodies at 2000 chars; exceeding it throws on reply. */
+    static final int MAX_MESSAGE_LENGTH = 2000;
+
+    /**
+     * Input cap. Not sufficient on its own: styles expand, so the output is
+     * what actually has to be bounded — {@code clap} replaces every whitespace
+     * run with {@code " 👏 "} (4 UTF-16 units), turning 750 single-character
+     * words into ~3750 chars from a 1500-char input.
+     */
     static final int MAX_INPUT_LENGTH = 1500;
 
     @Override public String name() { return "format"; }
@@ -79,7 +87,7 @@ public final class FormatModule extends ListenerAdapter implements Module {
         if (text.length() > MAX_INPUT_LENGTH) {
             text = text.substring(0, MAX_INPUT_LENGTH);
         }
-        String formatted = style.apply(text);
+        String formatted = truncate(style.apply(text), MAX_MESSAGE_LENGTH);
         if (formatted.isEmpty()) {
             event.reply("Give me something with at least one character to work with.")
                     .setEphemeral(true).queue();
@@ -93,5 +101,15 @@ public final class FormatModule extends ListenerAdapter implements Module {
                 .setEphemeral(ephemeral)
                 .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
                 .queue();
+    }
+
+    static String truncate(String s, int max) {
+        if (s.length() <= max) return s;
+        // Styles emit emoji (clap) and astral-plane characters (fullwidth), so
+        // a blind substring can split a surrogate pair and leave a lone
+        // surrogate that renders as a replacement character.
+        int end = max - 1;
+        if (Character.isHighSurrogate(s.charAt(end - 1))) end--;
+        return s.substring(0, end) + "…";
     }
 }

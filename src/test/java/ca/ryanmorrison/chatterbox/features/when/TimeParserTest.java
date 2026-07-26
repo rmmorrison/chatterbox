@@ -314,4 +314,34 @@ class TimeParserTest {
         Instant got = parseOk("2026-03-08 02:30", ZoneId.of("America/New_York"));
         assertEquals(Instant.parse("2026-03-08T07:30:00Z"), got);
     }
+
+    // ---- relative offset overflow ----
+
+    @Test
+    void hugeRelativeOffsetFailsCleanlyInsteadOfOverflowing() {
+        // 2e13 weeks * 604800 wraps a long to a negative, which used to blow up
+        // inside Instant.plusSeconds and escape the listener as an unhandled
+        // exception -- the user saw "The application did not respond".
+        assertEquals("Relative offset is too large.",
+                parseFailReason("in 20000000000000 weeks", UTC));
+    }
+
+    @Test
+    void relativeOffsetsBeyondTheCenturyCapAreRejected() {
+        assertEquals("Relative offset is too large.",
+                parseFailReason("in 999999 days", UTC));
+    }
+
+    @Test
+    void digitStringTooLongForALongStillFailsCleanly() {
+        assertEquals("Relative offset is too large.",
+                parseFailReason("in 99999999999999999999999 weeks", UTC));
+    }
+
+    @Test
+    void ordinaryRelativeOffsetsStillWork() {
+        assertEquals(NOW.plusSeconds(30 * 60), parseOk("in 30m", UTC));
+        assertEquals(NOW.plusSeconds(2 * 86_400), parseOk("in 2 days", UTC));
+        assertEquals(NOW.plusSeconds(604_800), parseOk("in 1 week", UTC));
+    }
 }
