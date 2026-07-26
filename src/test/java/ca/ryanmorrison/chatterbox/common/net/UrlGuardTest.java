@@ -1,4 +1,4 @@
-package ca.ryanmorrison.chatterbox.features.isitdown;
+package ca.ryanmorrison.chatterbox.common.net;
 
 import org.junit.jupiter.api.Test;
 
@@ -129,6 +129,45 @@ class UrlGuardTest {
         // Cloud-metadata service — the canonical SSRF target.
         assertEquals("link-local address",
                 UrlGuard.denyReason(InetAddress.getByName("169.254.169.254")));
+    }
+
+    @Test
+    void carrierGradeNatRejected() throws Exception {
+        // 100.64.0.0/10 (RFC 6598) routes inside ISP and cloud networks but
+        // isn't covered by any of InetAddress's built-in predicates.
+        assertEquals("carrier-grade NAT address",
+                UrlGuard.denyReason(InetAddress.getByName("100.64.0.1")));
+        assertEquals("carrier-grade NAT address",
+                UrlGuard.denyReason(InetAddress.getByName("100.127.255.254")));
+        // Boundaries: 100.63.x and 100.128.x are outside the /10 and stay allowed.
+        assertNull(UrlGuard.denyReason(InetAddress.getByName("100.63.255.255")));
+        assertNull(UrlGuard.denyReason(InetAddress.getByName("100.128.0.1")));
+    }
+
+    @Test
+    void ietfProtocolAssignmentRejected() throws Exception {
+        assertEquals("IETF protocol assignment address",
+                UrlGuard.denyReason(InetAddress.getByName("192.0.0.1")));
+        // 192.0.1.x is outside the /24.
+        assertNull(UrlGuard.denyReason(InetAddress.getByName("192.0.1.1")));
+    }
+
+    @Test
+    void benchmarkingRangeRejected() throws Exception {
+        assertEquals("benchmarking address",
+                UrlGuard.denyReason(InetAddress.getByName("198.18.0.1")));
+        assertEquals("benchmarking address",
+                UrlGuard.denyReason(InetAddress.getByName("198.19.255.254")));
+        assertNull(UrlGuard.denyReason(InetAddress.getByName("198.20.0.1")));
+    }
+
+    @Test
+    void ipv4MappedIpv6IsNormalisedBeforeTheDenyCheck() throws Exception {
+        // Both spellings must reach the same verdict; if InetAddress ever stops
+        // normalising these, the mapped form would otherwise skip every IPv4 range.
+        assertEquals("loopback address",
+                UrlGuard.denyReason(InetAddress.getByName("::ffff:127.0.0.1")));
+        assertNotNull(UrlGuard.denyReason(InetAddress.getByName("::ffff:100.64.0.1")));
     }
 
     @Test

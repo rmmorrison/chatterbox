@@ -8,9 +8,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
@@ -35,9 +37,24 @@ class IsItDownCheckerTest {
         // Tight timeouts on the test client so timeout cases don't drag.
         HttpClient http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(2))
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
-        checker = new IsItDownChecker(http, 5);
+        // The test server is on loopback, which UrlGuard denies — so redirect
+        // hops are vetted through a resolver that reports a public address.
+        // Only redirect targets are resolved, so this is inert for every test
+        // that doesn't redirect. Deny-list behaviour is covered separately by
+        // redirectToBlockedAddressIsRefused and by UrlGuardTest.
+        checker = new IsItDownChecker(http, 5, IsItDownCheckerTest::publicAddress);
+    }
+
+    /** Pretends every host resolves to a routable public address (example.com's). */
+    private static InetAddress[] publicAddress(String host) {
+        try {
+            return new InetAddress[]{
+                    InetAddress.getByAddress(host, new byte[]{93, (byte) 184, (byte) 216, 34})};
+        } catch (UnknownHostException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @AfterEach
@@ -82,6 +99,53 @@ class IsItDownCheckerTest {
         });
         serve("/to", 200, new byte[0]);
         assertInstanceOf(CheckResult.Live.class, checker.check(url("/from")));
+    }
+
+    /**
+     * The SSRF regression test. Before redirects were re-validated, a public
+     * host could 302 to a denied address and the client would follow it,
+     * turning /isitdown into an internal-service oracle. Uses the real
+     * resolver, so the loopback redirect target is genuinely denied.
+     */
+    @Test
+    void redirectToBlockedAddressIsRefused() {
+        serve("/evil", ex -> {
+            ex.getResponseHeaders().add("Location", "http://127.0.0.1:1/secret");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+        });
+        IsItDownChecker guarded = new IsItDownChecker(HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(2))
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build(), 5);
+
+        var result = guarded.check(url("/evil"));
+
+        var disallowed = assertInstanceOf(CheckResult.Disallowed.class, result);
+        assertTrue(disallowed.reason().contains("loopback"),
+                () -> "expected the loopback deny reason, got: " + disallowed.reason());
+    }
+
+    @Test
+    void redirectWithoutLocationIsRefused() {
+        serve("/nowhere", ex -> {
+            ex.sendResponseHeaders(301, -1);
+            ex.close();
+        });
+        assertInstanceOf(CheckResult.Disallowed.class, checker.check(url("/nowhere")));
+    }
+
+    @Test
+    void redirectLoopStopsAtTheHopLimit() {
+        serve("/loop", ex -> {
+            ex.getResponseHeaders().add("Location", "/loop");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+        });
+        var result = checker.check(url("/loop"));
+        var disallowed = assertInstanceOf(CheckResult.Disallowed.class, result);
+        assertTrue(disallowed.reason().contains("too many redirects"),
+                () -> "got: " + disallowed.reason());
     }
 
     @Test
@@ -136,7 +200,7 @@ class IsItDownCheckerTest {
         });
         IsItDownChecker fast = new IsItDownChecker(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(1))
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .build(), 1);
         var result = fast.check(url("/slow"));
         var timeout = assertInstanceOf(CheckResult.Timeout.class, result);

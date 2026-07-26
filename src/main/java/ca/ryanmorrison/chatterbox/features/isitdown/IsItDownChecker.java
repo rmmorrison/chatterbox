@@ -1,5 +1,7 @@
 package ca.ryanmorrison.chatterbox.features.isitdown;
 
+import ca.ryanmorrison.chatterbox.common.net.SafeHttp;
+import ca.ryanmorrison.chatterbox.common.net.UrlGuard;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -7,6 +9,7 @@ import javax.net.ssl.SSLException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ConnectException;
+import java.net.InetAddress;
 import java.net.NoRouteToHostException;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -16,6 +19,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.function.Function;
 
 /**
  * Probes a URL and classifies the outcome into a {@link CheckResult}.
@@ -27,7 +31,7 @@ import java.util.Locale;
  *   <li>{@code Range: bytes=0-1023} on the GET so well-behaved servers send
  *       only 1 KB; for servers that ignore the header, the body stream is
  *       read up to {@link #MAX_RESPONSE_BYTES} client-side and then closed.</li>
- *   <li>Redirects followed by the underlying client (so a typical
+ *   <li>Redirects followed by {@link SafeHttp} (so a typical
  *       {@code http → https} 301 still reports as live).</li>
  * </ul>
  *
@@ -37,9 +41,13 @@ import java.util.Locale;
  * the caller, so user-facing messages can be rendered safely.
  *
  * <h2>SSRF</h2>
- * The constructor expects a URI that has already passed {@link UrlGuard}'s
- * resolve check. The class itself does no extra deny-listing — keeping the
- * security check in one place avoids drift.
+ * The caller must hand us a URI that has already passed {@link UrlGuard}'s
+ * resolve check — that covers the first hop only. Redirects are <em>not</em>
+ * delegated to the HTTP client, because {@link HttpClient.Redirect#NORMAL}
+ * would follow a {@code 302} to a denied address without re-checking and
+ * defeat the guard outright. Instead the client is built with
+ * {@link HttpClient.Redirect#NEVER} and {@link SafeHttp} walks the chain,
+ * re-running the guard on every hop.
  */
 final class IsItDownChecker {
 
@@ -67,25 +75,40 @@ final class IsItDownChecker {
 
     private final HttpClient http;
     private final int requestTimeoutSeconds;
+    private final Function<String, InetAddress[]> resolver;
 
     IsItDownChecker() {
+        // NEVER, not NORMAL: SafeHttp follows redirects itself so each hop can
+        // be re-checked against UrlGuard.
         this(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT))
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .build(),
                 REQUEST_TIMEOUT);
     }
 
     /** Test seam — lets tests pass a client pointed at a local server and shorten the timeout. */
     IsItDownChecker(HttpClient http, int requestTimeoutSeconds) {
+        this(http, requestTimeoutSeconds, UrlGuard::systemResolver);
+    }
+
+    /**
+     * Test seam — additionally substitutes the resolver used to vet redirect
+     * targets, so tests can follow redirects on a loopback server without the
+     * deny-list rejecting every hop.
+     */
+    IsItDownChecker(HttpClient http, int requestTimeoutSeconds,
+                    Function<String, InetAddress[]> resolver) {
         this.http = http;
         this.requestTimeoutSeconds = requestTimeoutSeconds;
+        this.resolver = resolver;
     }
 
     /**
      * Probes {@code uri}. Pre-condition: {@code uri} must be syntactically
-     * valid and have already passed {@link UrlGuard#resolve}. Always returns
-     * a result; never throws checked exceptions to the caller.
+     * valid and have already passed {@link UrlGuard#resolve} — that covers the
+     * first hop; {@link SafeHttp} re-checks any redirect targets. Always
+     * returns a result; never throws checked exceptions to the caller.
      */
     CheckResult check(URI uri) {
         String host = uri.getHost();
@@ -113,7 +136,11 @@ final class IsItDownChecker {
         long startNs = System.nanoTime();
         HttpResponse<InputStream> resp;
         try {
-            resp = http.send(req, HttpResponse.BodyHandlers.ofInputStream());
+            resp = SafeHttp.send(http, req, HttpResponse.BodyHandlers.ofInputStream(), resolver);
+        } catch (SafeHttp.BlockedException e) {
+            // A redirect pointed somewhere the guard refuses. Report it the same
+            // way a blocked first hop is reported rather than as a generic error.
+            return new CheckResult.Disallowed(e.getMessage());
         } catch (HttpTimeoutException e) {
             return new CheckResult.Timeout(requestTimeoutSeconds);
         } catch (UnknownHostException e) {
