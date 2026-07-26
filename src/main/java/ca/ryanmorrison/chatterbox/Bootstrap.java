@@ -111,11 +111,9 @@ public final class Bootstrap {
         log.info("Aggregated {} intent(s), {} command(s), {} listener(s) across {} module(s).",
                 intents.size(), commands.size(), listeners.size(), modules.size());
 
-        if (httpServer.hasRoutes()) {
-            httpServer.start();
-        } else {
-            log.info("No modules registered HTTP routes; skipping HTTP server bind.");
-        }
+        // Always start: the server owns /health, which has to answer before
+        // JDA is up (with 503) for a container healthcheck to mean anything.
+        httpServer.start();
 
         CommandSync commandSync = new CommandSync(commands, config.devMode());
 
@@ -129,6 +127,9 @@ public final class Bootstrap {
         jda.awaitReady();
         log.info("JDA ready. Connected as {} in {} guild(s).",
                 jda.getSelfUser().getName(), jda.getGuilds().size());
+
+        // Only now does the bot actually work, so only now does /health say so.
+        httpServer.setReadiness(() -> jda.getStatus() == JDA.Status.CONNECTED);
 
         commandSync.syncAll(jda);
 

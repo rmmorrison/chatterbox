@@ -24,7 +24,7 @@ deployment.
 | `CHATTERBOX_DB_PASSWORD`   | no       | —       | DB password (Postgres). Unused for SQLite. |
 | `CHATTERBOX_DEV_MODE`      | no       | `false` | When `true`, slash commands register per-guild for instant updates. When `false`, they register globally. The opposite scope is cleared on each startup, so switching modes never leaves duplicates. |
 | `CHATTERBOX_LOG_LEVEL`     | no       | `INFO`  | Root logger level. |
-| `CHATTERBOX_HTTP_PORT`     | no       | `8080`  | Port the bot's internal HTTP server binds to. The server only starts when at least one module registers a route. |
+| `CHATTERBOX_HTTP_PORT`     | no       | `8080`  | Port the bot's internal HTTP server binds to. Always bound, since the server serves `/health`. |
 | `CHATTERBOX_SHORTENER_BASE_URL` | no  | —       | Public-facing prefix for the URL shortener (e.g. `https://example.com`). Required only when `/shorten` is invoked or `CHATTERBOX_AUTOSHORTEN_ENABLED=true`; the bot can run without it set. |
 | `CHATTERBOX_AUTOSHORTEN_ENABLED` | no | `true` | Auto-shorten long URLs in guild messages by replacing the originals. Requires the bot to have **Manage Messages** in each channel. See [Auto-shortener](#auto-shortener). |
 | `CHATTERBOX_AUTOSHORTEN_THRESHOLD` | no | `160` | Minimum URL length (characters) that triggers auto-shortening. |
@@ -254,13 +254,28 @@ The dialect is selected from the JDBC URL (`postgresql` → `POSTGRES`,
 
 A bot-wide [Javalin](https://javalin.io) instance is available to modules that
 want to expose HTTP endpoints alongside their Discord behaviour. Modules
-register routes via `registerHttpRoutes(HttpRouter, InitContext)`; the server
-only binds its port when at least one module has registered a route, so a
-deployment without HTTP-using modules pays no port cost.
+register routes via `registerHttpRoutes(HttpRouter, InitContext)`.
 
 The server listens on `CHATTERBOX_HTTP_PORT` (default `8080`). In the
 default `docker-compose.yml`, traffic reaches it through Traefik — see
 [Reverse proxy and TLS](#reverse-proxy-and-tls) below.
+
+### Health endpoint
+
+`GET /health` is owned by the server itself rather than by a module, so it is
+always available:
+
+- **`200 ok`** — JDA is connected and the bot can serve.
+- **`503 starting`** — the port is bound but the gateway isn't up yet.
+
+The port binds before JDA connects, which is why the distinction matters: a
+healthcheck that answered `200` during that window would report a bot as ready
+before it could do anything. Both the Dockerfile `HEALTHCHECK` and the
+`docker-compose.yml` healthcheck probe this endpoint, so a container only
+reports healthy once the bot is genuinely usable.
+
+The route is registered ahead of module routes so it wins over the URL
+shortener's `GET /{token}`, for which `health` is a syntactically valid token.
 
 ### Logging
 

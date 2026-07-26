@@ -18,7 +18,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate: previously this workflow ran in parallel with CI with no dependency
+  # between them, and the image is built with -DskipTests -- so a commit with
+  # failing tests deployed to production anyway.
+  test:
+    uses: ./.github/workflows/ci.yml
+
   build-and-deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 20

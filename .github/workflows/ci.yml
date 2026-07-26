@@ -5,6 +5,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Lets the deploy workflow depend on this job instead of racing it.
+  workflow_call:
 
 permissions:
   contents: read
@@ -29,8 +31,12 @@ jobs:
           java-version: '25'
           cache: maven
 
-      - name: Run unit tests
-        run: mvn --batch-mode --no-transfer-progress test
+      # verify, not test: this is the only thing that exercises the shade
+      # plugin, including the ServicesResourceTransformer the whole
+      # ServiceLoader module system depends on. With only `test`, a broken
+      # META-INF/services merge would first surface in production.
+      - name: Build and run tests
+        run: mvn --batch-mode --no-transfer-progress verify
 
       - name: Upload Surefire reports
         if: always()
