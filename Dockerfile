@@ -2,7 +2,7 @@
 # Build JDK matches the runtime JRE and the JDK that CI tests on. They had
 # drifted (build on 26, run on 25, test on 25), which meant the jar shipped to
 # production was produced by a compiler no test run ever exercised.
-FROM maven:3-eclipse-temurin-25 AS build
+FROM maven:3-eclipse-temurin-26 AS build
 WORKDIR /src
 
 # Cache dependencies first.
