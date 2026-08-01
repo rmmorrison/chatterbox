@@ -22,7 +22,7 @@
 
         <jda.version>6.5.0</jda.version>
         <jooq.version>3.21.6</jooq.version>
-        <flyway.version>12.10.0</flyway.version>
+        <flyway.version>13.0.0</flyway.version>
         <hikari.version>7.1.0</hikari.version>
         <postgres.version>42.7.13</postgres.version>
         <sqlite.version>3.53.2.0</sqlite.version>
