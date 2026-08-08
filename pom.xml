@@ -29,7 +29,7 @@
         <slf4j.version>2.0.18</slf4j.version>
         <logback.version>1.6.0</logback.version>
         <rome.version>2.1.0</rome.version>
-        <jsoup.version>1.22.2</jsoup.version>
+        <jsoup.version>1.23.1</jsoup.version>
         <jackson.version>3.2.1</jackson.version>
         <javalin.version>7.2.2</javalin.version>
         <junit.version>6.1.2</junit.version>
