@@ -50,7 +50,7 @@ jobs:
       # deploy workflow calling this one.
       - name: Publish test report
         if: always()
-        uses: ScalableCapital/action-surefire-report@v2.0.4
+        uses: ScalableCapital/action-surefire-report@v2.0.5
         with:
           report_mode: workflow
           # Belt and braces. mvn verify already fails on a test failure, so
